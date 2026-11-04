@@ -52,15 +52,18 @@ if [ -n "$H200_TESTS" ]; then
   echo "H200-only tests: $(tail -1 "$HOME/vaidyx/deploy_vm/logs/h200_tests.log")"
 fi
 
-# The gate runs from the pinned checkout too: restart it when gate.py changed (ensure starts it again).
-restart_gate() { P=$(ss -Hltnp 'sport = :7301' 2>/dev/null | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2); [ -n "$P" ] && kill "$P"; sleep 1; }
-if [ -n "$PREV" ] && ! git -C "$APP" diff --quiet "$PREV" "$SHA" -- deploy/h200/gate.py; then echo "gate.py changed: restarting the gate"; restart_gate; fi
+# The gate and the link run from the pinned checkout too. A changed gate.py restarts the gate at once (its port is never left
+# empty for the app's restart); a changed vx.sh (for example the link's port) restarts the link.
+VX="$APP/deploy/h200/vx.sh"
+changed() { [ -n "$PREV" ] && ! git -C "$APP" diff --quiet "$PREV" "$SHA" -- "$1"; }
+if changed deploy/h200/gate.py; then echo "gate.py changed: restarting the gate"; "$VX" restart-gate || echo "gate restart failed"; fi
+if changed deploy/h200/vx.sh; then echo "vx.sh changed: restarting the link"; "$VX" restart-link || echo "link restart failed"; fi
 
-if "$APP/deploy/h200/vx.sh" restart-app && "$APP/deploy/h200/vx.sh" ensure; then
-  note "deployed ${SHA:0:7} (from ${PREV:0:7}) ci=${CI:-skipped} · $("$APP/deploy/h200/vx.sh" status | tr '\n' ' ')"
+if "$VX" restart-app && "$VX" ensure; then
+  note "deployed ${SHA:0:7} (from ${PREV:0:7}) ci=${CI:-skipped} · $("$VX" status | tr '\n' ' ')"
 else
   echo "start failed: putting ${PREV:0:7} back"
-  [ -n "$PREV" ] && git -C "$APP" checkout -q --detach "$PREV" && restart_gate && "$APP/deploy/h200/vx.sh" restart-app && "$APP/deploy/h200/vx.sh" ensure
+  [ -n "$PREV" ] && git -C "$APP" checkout -q --detach "$PREV" && "$VX" restart-gate && "$VX" restart-app && "$VX" restart-link && "$VX" ensure
   note "FAILED ${SHA:0:7}, rolled back to ${PREV:0:7}"
   exit 1
 fi

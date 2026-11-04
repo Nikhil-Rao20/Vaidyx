@@ -9,6 +9,6 @@ table inet vaidyx {
         # Only a NEW connection (the opening SYN, always sent from a socket with its owner) is checked. Packets the kernel
         # sends without an owner (the last ACK after nginx closes) must pass, or the link's end is left half-closed and
         # later connections time out (seen 4 Nov: 503s while a page loaded its scripts).
-        ip daddr 127.0.0.1 tcp dport { 17000, 17999 } tcp flags & (syn | ack) == syn meta skuid != { 0, @WWW_UID@ } counter reject with tcp reset
+        ip daddr 127.0.0.1 tcp dport { 970, 17999 } tcp flags & (syn | ack) == syn meta skuid != { 0, @WWW_UID@ } counter reject with tcp reset
     }
 }

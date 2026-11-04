@@ -36,7 +36,6 @@ from starlette.routing import Route, WebSocketRoute
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
 UPSTREAM = os.getenv("VX_UPSTREAM", "http://127.0.0.1:7300")
-HIS_UPSTREAM = os.getenv("VX_HIS_UPSTREAM", "http://127.0.0.1:7130")
 SECRET_HEADER = "x-vaidyx-gate"
 
 
@@ -50,13 +49,13 @@ def _load_secret() -> bytes:
 
 SECRET = _load_secret()
 
-ANY_METHOD = re.compile(r"^(/api/tb(/.*)?|/tb-nik/api/enquiry|/his(/.*)?|/desk(/.*)?)$")
+# The demo hospital (HIS, RIS / LIS desk, report views) is NOT public: the website never links to it, and the app reads it
+# server-side (tumour_board/his_client.py). Security review 4 Nov.
+ANY_METHOD = re.compile(r"^(/api/tb(/.*)?|/tb-nik/api/enquiry)$")
 GET_ONLY = re.compile(r"^(/tb(/.*)?|/tb-nik(/.*)?|/static/.+|/login|/favicon\.ico|/api/version"
-                      r"|/api/auth/(status|policy|features|settings|2fa/status)|/api/prefs/(theme|custom-themes)"
-                      r"|/view/reports/.+|/documents/.+)$")
+                      r"|/api/auth/(status|policy|features|settings|2fa/status)|/api/prefs/(theme|custom-themes))$")
 POST_ONLY = {"/api/auth/login", "/api/auth/logout", "/api/auth/2fa/setup", "/api/auth/2fa/confirm",
              "/api/auth/2fa/disable"}  # the website's sign-in and two-factor set-up (password change is /api/tb/me/password)
-HIS_PATHS = re.compile(r"^(/his|/desk|/view/reports|/documents)(/.*)?$")
 WS_PATHS = re.compile(r"^/api/tb/(meetings/[A-Za-z0-9_-]{1,64}|messages)/ws$")
 NOT_FORWARDED = {"/api/tb/admin"}  # never, even under /api/tb (none exists today; kept as a guard)
 
@@ -69,7 +68,6 @@ HOP_RESP = {"connection", "keep-alive", "transfer-encoding", "upgrade", "trailer
 _NO_COOKIES = http.cookiejar.CookieJar(policy=http.cookiejar.DefaultCookiePolicy(allowed_domains=[]))
 _TIMEOUT = httpx.Timeout(connect=10.0, read=900.0, write=900.0, pool=30.0)
 client = httpx.AsyncClient(base_url=UPSTREAM, follow_redirects=False, cookies=_NO_COOKIES, timeout=_TIMEOUT)
-his_client = httpx.AsyncClient(base_url=HIS_UPSTREAM, follow_redirects=False, cookies=_NO_COOKIES, timeout=_TIMEOUT)
 
 
 def has_secret(headers) -> bool:
@@ -81,6 +79,14 @@ def path_safe(path: str) -> bool:
     low = path.lower()
     return not (".." in path or "//" in path or "\\" in path or "%2e" in low or "%2f" in low or "%5c" in low
                 or "\x00" in path or any(path == p or path.startswith(p + "/") for p in NOT_FORWARDED))
+
+
+def same_path(scope, path: str) -> bool:
+    """The decoded path must be plain: no control characters (a TAB is kept by nginx's location match but dropped when Starlette
+    re-parses the URL, so /api/auth/log%09in slipped past nginx's login limit), no '%' left after decoding (double encoding
+    such as %2561), and the same string Starlette routes on. Security review 4 Nov."""
+    raw = scope.get("path") or ""
+    return raw == path and "%" not in raw and not any(ord(ch) < 0x20 or ord(ch) == 0x7F for ch in raw)
 
 
 def allowed(method: str, path: str) -> bool:
@@ -102,6 +108,8 @@ async def handle(request: Request):
     if not has_secret(request.headers):
         return PlainTextResponse("Forbidden.", status_code=403)
     path = request.url.path
+    if not same_path(request.scope, path):
+        return PlainTextResponse("Not available.", status_code=404)
     if path == "/_gate/health":
         try:
             r = await client.get("/login", timeout=5.0)
@@ -123,7 +131,7 @@ async def handle(request: Request):
         headers.append(("x-forwarded-proto", request.url.scheme))
 
     body = request.stream() if request.method not in ("GET", "HEAD", "OPTIONS") else None
-    target = his_client if HIS_PATHS.match(path) else client
+    target = client
     upstream = target.build_request(request.method, path, params=request.url.query or None, headers=headers, content=body)
     try:
         r = await target.send(upstream, stream=True)
@@ -144,7 +152,7 @@ def origin_matches_host(headers) -> bool:
 
 async def ws_handle(ws: WebSocket):
     path = ws.url.path
-    if not has_secret(ws.headers) or not path_safe(path) or not WS_PATHS.match(path) or not origin_matches_host(ws.headers):
+    if not has_secret(ws.headers) or not same_path(ws.scope, path) or not path_safe(path) or not WS_PATHS.match(path) or not origin_matches_host(ws.headers):
         await ws.close(code=1008)
         return
     peer = ws.client.host if ws.client else "unknown"
@@ -196,7 +204,6 @@ METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
 async def lifespan(_app):
     yield
     await client.aclose()
-    await his_client.aclose()
 
 
 app = Starlette(routes=[WebSocketRoute("/{path:path}", ws_handle), Route("/{path:path}", handle, methods=METHODS)],

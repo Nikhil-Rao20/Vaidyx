@@ -5,7 +5,7 @@ The website is reached on the shared GCP VM; the app, the data and the AI stay o
 ```
 Doctor ─HTTPS─► VM nginx (vaidyx-tb-8-231-83-210.sslip.io)
                   ├─ /vx-link ◄══ secure link opened BY the H200 over 443 (chisel: password + pinned server key)
-                  └─ everything else ─► 127.0.0.1:17000 (the link's end) ─► H200 gate :7301 ─► doctors' instance :7300
+                  └─ everything else ─► 127.0.0.1:970 (the link's end, privileged port) ─► H200 gate :7301 ─► doctors' instance :7300
 ```
 
 | Where | What | Files |
