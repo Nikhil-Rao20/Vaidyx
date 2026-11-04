@@ -29,7 +29,7 @@ if [ -n "$end" ]; then
 else problems+=("certificate unreadable"); fi
 
 # 3. the protections still hold (each must be refused)
-for p in /_gate/health "/_ga%09te/health" /his /desk "/api/tb/%2561dmin/x" /admin /docs; do
+for p in /_gate/health "/_ga%09te/health" /his /desk "/api/tb/%2561dmin/x" /api/admin/users /openapi.json /api/chat; do
   c=$(code "https://$HOST$p"); [ "$c" = 404 ] || problems+=("$p answered $c (expected 404)")
 done
 c=$(code "https://$HOST/api/tb/cases"); [ "$c" = 401 ] || problems+=("case list without a session answered $c (expected 401)")

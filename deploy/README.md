@@ -68,7 +68,7 @@ While the watchdog runs, `vx.sh stop` lasts at most 5 minutes: to keep the insta
 ## Daily check
 
 `deploy/h200/daily_check.sh` (cron, every morning) checks app, gate, link and the public address, the certificate's days
-left, that the protections still refuse (`/_gate/`, path tricks, the demo hospital, admin pages), one HSTS header, alerts from
+left, that the protections still refuse (`/_gate/`, path tricks, the demo hospital, the main app's admin and API pages), one HSTS header, alerts from
 `vx.sh` and disk space. It changes nothing. One line per run in `~/vaidyx/deploy_vm/logs/daily_check.log`: `OK` or `PROBLEM`.
 
 ## Reaching the VM
