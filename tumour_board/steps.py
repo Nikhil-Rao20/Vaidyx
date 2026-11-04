@@ -11,7 +11,7 @@ open_count() is the one count of what is left before the board; the Case File, t
 import logging
 import re
 
-from . import access, after_send, dates, dept_requests, discord, his_case, org, proposals, protocol, rules, slots, store
+from . import access, after_send, config, dates, dept_requests, discord, his_case, org, proposals, protocol, rules, slots, store
 
 log = logging.getLogger("tumour_board")
 
@@ -613,6 +613,10 @@ def build(case_id, roles=None) -> dict:
         dep = g["department"]
         what = ", ".join(i["label"] for i in g["items"][:2]) + (f" and {n - 2} more" if n > 2 else "")
         unsigned = all(i.get("draft") for i in g["items"])  # the reports have it, but not final and signed (2 Nov 2026)
+        if config.is_private(case_id):  # a guest reviewer's private Case File asks no department: the reviewer adds the file
+            todo.append({"id": f"request:{dep['label']}", "section": "reports", "label": what,
+                         "why": "In a file not signed yet" if unsigned else "Not found in the files", "action": {"kind": "go", "label": "Add the file"}})
+            continue
         todo.append({"id": f"request:{dep['label']}", "section": "pre_authorization", "label": what,
                      "why": "In a report not signed yet" if unsigned else "Not found in the reports",
                      "action": {"kind": "ask_department", "label": f"Send request to {dep['label']}", "department": dep, "slot_ids": [i["slot_id"] for i in g["items"]]}})

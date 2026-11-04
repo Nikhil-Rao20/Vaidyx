@@ -108,7 +108,7 @@ export function CaseHeader({ cf, team, steps, onSend, onPanel, onPrint, boardPdf
             <span className="text-base font-normal text-muted-foreground whitespace-nowrap">{p.agesex}</span>
           </h1>
           <p className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-sm text-muted-foreground">
-            <span>UHID <span className="id text-foreground">{p.mrn}</span></span>
+            {p.mrn ? <span>UHID <span className="id text-foreground">{p.mrn}</span></span> : c.private ? <span>No hospital number (private Case File)</span> : <span>UHID <span className="id text-foreground">{p.mrn}</span></span>}
             {ids.map((v) => <span key={v} className="id">{v}</span>)}
           </p>
           {(cf.access?.scope ?? "").toLowerCase() !== "requests" ? <SummaryLineRow caseId={c.case_id} line={c.summary_line} canEdit={!!steps?.summary?.case_summary?.can?.edit} /> : null}
@@ -128,7 +128,7 @@ export function CaseHeader({ cf, team, steps, onSend, onPanel, onPrint, boardPdf
         <div className="flex shrink-0 flex-wrap items-center gap-2 print:hidden">
           {sent ? <StatusChip kind="ok" icon={Send}>Sent to the board{c.board_ready?.at ? `, ${fmtDate(c.board_ready.at)}` : ""}</StatusChip> : null}
           {withdrawn ? <StatusChip kind="warn" icon={CalendarMinus} title={c.board_send?.withdrawn?.reason ? `Reason: ${c.board_send.withdrawn.reason}` : undefined}>Taken off the agenda{c.board_send?.withdrawn?.at ? `, ${fmtDate(c.board_send.withdrawn.at)}` : ""}</StatusChip> : null}
-          {prepare && !sent ? (
+          {prepare && !sent && !c.private ? (  /* a guest reviewer's private Case File does not go to a board */
             <Button onClick={onSend} data-testid="send-to-board" title={steps?.left ? `${steps.left} still open: you will be asked why the board should discuss it anyway` : "Send this Case File to the board"}>
               <Send className="size-4" />{resident ? `Send to ${consultantTitle(consultantName)} for sign-off` : "Send to the board"}
             </Button>

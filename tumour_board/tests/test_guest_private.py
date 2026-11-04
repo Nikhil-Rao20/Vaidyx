@@ -366,3 +366,17 @@ def test_office_company_and_comment_authors_are_removed():
     c = upload_safety.check("r.docx", b.getvalue())
     z = zipfile.ZipFile(io.BytesIO(c.data))
     assert b"Sunrise" not in z.read("docProps/app.xml") and b"Dr Somebody" not in z.read("word/comments.xml")
+
+
+@pytest.mark.parametrize("path", ["/ready", "/requests", "/meeting/move", "/team/code"])
+def test_a_private_case_file_brings_nobody_in(app, path):
+    cid = create_private(app)["case_id"]
+    r = app.as_(GR).post(f"/cases/{cid}{path}", json={})
+    assert r.status_code == 403 and r.json()["detail"]["code"] == "guest_scope", (path, r.text)
+
+
+def test_a_private_case_file_offers_no_sharing_actions(app):
+    cid = create_private(app)["case_id"]
+    p = app.as_(GR).get(f"/cases/{cid}").json()["permissions"]
+    assert not any(p.get(k) for k in ("send_request", "create_request", "refer", "mark_ready", "manage_participants", "remind"))
+    assert p["upload"] is True and p["delete_case"] is True

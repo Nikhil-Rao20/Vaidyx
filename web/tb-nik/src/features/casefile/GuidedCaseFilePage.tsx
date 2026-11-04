@@ -376,7 +376,7 @@ export default function GuidedCaseFilePage() {
     } else if (section === "check") {
       body = <CheckStep steps={steps} caseId={id} docs={cf.documents} h={checkH} canConfirm={canConfirm} consultantName={consultantName} target={target} onNext={() => go("pre_authorization")} />;
     } else if (section === "pre_authorization") {
-      body = <PreAuthStep steps={steps} h={preAuthH} canAct={prepare} resident={resident} consultantName={consultantName} onNext={() => go("summary")} />;
+      body = <PreAuthStep steps={steps} h={preAuthH} canAct={prepare && !cf.case.private} resident={resident} consultantName={consultantName} onNext={() => go("summary")} />;
     } else {
       body = <SummaryStep steps={steps} docs={cf.documents} onBoard={() => setSide({ kind: "panel", panel: "board" })} h={slotHandlers} canWrite={!!canWrite} canRead={!resident && !!cf.permissions?.review} busy={writing} reading={reading} resident={resident} consultantName={consultantName}
         onWrite={() => void (async () => { setWriting(true); try { await buildSummary(id, true); await refresh(); } catch (e) { notify.error("Could not write the summary", errorText(e)); } finally { setWriting(false); } })()}

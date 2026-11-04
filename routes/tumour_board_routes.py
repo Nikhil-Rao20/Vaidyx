@@ -52,6 +52,8 @@ _TWO_FACTOR_FIRST_OK = _re.compile(r"^/api/tb/(me|me/password|me/profile|health)
 # What a guest reviewer never reaches: intake (department uploads and new Case Files from them), demo imports, referrals and the
 # hospital system of a Case File (5 Nov 2026 review: these made ordinary, visible Case Files or showed a private one to others).
 _GUEST_NEVER = _re.compile(r"^/api/tb/(intake|demo|his)(/|$)|^/api/tb/cases/[^/]+/(referrals|his)(/|$)")
+# ... and on a private Case File nothing that brings other people in: requests to departments, Send to the board, meetings, team codes
+_GUEST_NO_WRITE = _re.compile(r"^/api/tb/cases/[^/]+/(ready|requests|meeting|team)(/|$)")
 _CASE_ID_OK = _re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$")
 
 
@@ -183,7 +185,8 @@ class _ModelErrorRoute(APIRoute):
                     if (mgr is not None and callable(getattr(mgr, "must_change_password", None)) and mgr.must_change_password(u)
                             and not _PASSWORD_FIRST_OK.match(request.url.path)):  # a first or reset password works only to choose a new one
                         return JSONResponse({"detail": {"message": "Choose your own password first.", "code": "password_change_required"}}, status_code=409)
-                    if rl.get("real_data") and _GUEST_NEVER.match(request.url.path):
+                    if rl.get("real_data") and (_GUEST_NEVER.match(request.url.path)
+                                                or (request.method != "GET" and _GUEST_NO_WRITE.match(request.url.path))):
                         return JSONResponse({"detail": {"message": "A guest reviewer works only in their own private Case Files.", "code": "guest_scope"}}, status_code=403)
                     if _needs_two_factor(rl, mgr, u) and not _TWO_FACTOR_FIRST_OK.match(request.url.path):
                         return JSONResponse({"detail": {"message": "Turn on two-factor sign-in first (Settings, Security): this account works with real, anonymized files.",
@@ -350,7 +353,7 @@ def _private_upload_check(case_id, data, user, anonymized, confirm, reason):
     return [(stored[i], c.data) for i, c in enumerate(checked)], meta, None
 
 
-def _case_permissions(r, c, st, docs):
+def _case_permissions_all(r, c, st, docs):
     """What this user may do on this Case File, so the UI can hide forbidden actions (the routes still enforce them)."""
     prot = protocol.get(c["protocol"]) if c.get("protocol") else {"mandatory": []}
     own = access.may(r, "upload_to_case", c)  # the owner's doctors (any treating doctor on a Case File without an owner), V2 item 5.1
@@ -372,6 +375,18 @@ def _case_permissions(r, c, st, docs):
             "answer_request": {a["id"]: _can_answer(r, a) for a in st.get("actions", []) if a.get("source") == "pre_authorization"},  # V2 item 4.3
             "undo_confirmation": {x["id"]: _can_confirm(r, c, st, x["type"], x["key"]) for x in st.get("confirmations", []) if not x.get("undone")},
             "correct_board_record": {b["id"]: _may_correct_record(r, c, b) for b in st.get("board_records", []) if isinstance(b, dict) and b.get("id")}}  # night-v3 item 3.2
+
+
+def _case_permissions(r, c, st, docs):
+    """_case_permissions_all, with a private Case File (guest reviewer) offering nothing that brings other people in: no requests to
+    departments, no referral, no participants, no Send to the board, no reminders (the routes refuse them too, _GUEST_NO_WRITE)."""
+    p = _case_permissions_all(r, c, st, docs)
+    if config.is_private(c.get("case_id")):
+        for k in ("send_request", "create_request", "close_request", "refer", "manage_participants", "withdraw_referral", "mark_ready",
+                  "remind", "refetch", "link_registration", "set_owner"):
+            if k in p:
+                p[k] = False
+    return p
 
 
 def _correct_refusal(r, c, rec) -> str:
