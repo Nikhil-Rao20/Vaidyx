@@ -63,7 +63,6 @@ def test_paths_outside_the_allow_list_are_refused(client, method, path):
     ("GET", "/tb-nik"), ("GET", "/tb-nik/casefiles"), ("GET", "/static/tb-nik/assets/a.js"), ("GET", "/login"),
     ("POST", "/api/auth/login"), ("POST", "/api/auth/logout"), ("GET", "/api/auth/2fa/status"),
     ("POST", "/api/auth/2fa/setup"), ("GET", "/api/tb/cases"), ("POST", "/api/tb/cases/TB-001/ask"),
-    ("GET", "/his/patients"), ("GET", "/desk"),
 ])
 def test_allowed_paths_are_forwarded(client, method, path):
     r = client.request(method, path, headers=OK)
@@ -117,3 +116,26 @@ def test_short_secret_refuses_to_start(tmp_path, monkeypatch):
     finally:
         sys.path.remove(str(GATE_DIR))
         sys.modules.pop("gate", None)
+
+
+@pytest.mark.parametrize("method,path", [
+    ("GET", "/his/patients"), ("GET", "/desk"), ("POST", "/his/login"), ("GET", "/view/reports/x"), ("GET", "/documents/x"),
+])
+def test_demo_hospital_is_not_public(client, method, path):
+    r = client.request(method, path, headers=OK)
+    assert r.status_code == 404, (method, path, r.status_code)
+
+
+@pytest.mark.parametrize("method,path", [
+    ("POST", "/api/auth/log%09in"), ("GET", "/_ga%09te/health"), ("GET", "/tb-%0Anik"), ("GET", "/api/tb/%2561dmin/x"),
+    ("GET", "/api/tb/cases%7f"), ("GET", "/static/tb-nik/a%00.js"),
+])
+def test_control_characters_and_double_encoding_are_refused(client, method, path):
+    r = client.request(method, path, headers=OK)
+    assert r.status_code == 404, (method, path, r.status_code)
+
+
+def test_same_path_rules(gate):
+    assert gate.same_path({"path": "/api/tb/cases"}, "/api/tb/cases")
+    assert not gate.same_path({"path": "/api/auth/log\tin"}, "/api/auth/login")
+    assert not gate.same_path({"path": "/api/tb/%61dmin"}, "/api/tb/%61dmin")

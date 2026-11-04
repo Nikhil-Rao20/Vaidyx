@@ -13,10 +13,11 @@ ExecStart=/mnt/data/vaidyx-tb/bin/chisel server --host 127.0.0.1 --port 17999 --
 Restart=always
 RestartSec=5
 
-# Sandbox: no privileges, read-only system, no access to the neighbours' files.
+# Sandbox: no other privileges, read-only system, no access to the neighbours' files.
 NoNewPrivileges=yes
-CapabilityBoundingSet=
-AmbientCapabilities=
+# Only to listen on the link's privileged port 970 (below 1024: no other VM user can take it while the link is down).
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_BIND_SERVICE
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes

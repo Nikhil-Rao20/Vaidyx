@@ -17,15 +17,15 @@ found=0
 case "${1:---tree}" in
   --staged)
     out=$(git diff --cached --no-color -U0 --diff-filter=ACMR | grep -nE '^\+' | grep -E -- "$PATTERNS")
-    files=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '(^|/)(\.env|.*\.pem|.*\.key|id_rsa|id_ed25519|.*_logins?)$' | grep -v '\.env\.example$')
+    files=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '(^|/)(\.env|.*\.pem|.*\.key|id_rsa|id_ed25519|.*_logins?|.*logins?\.tsv|gate_secret|link_password|chisel-users\.json)$' | grep -v '\.env\.example$')
     ;;
   --tree)
     out=$(git ls-files -z | grep -zvE "$SKIP" | xargs -0 grep -nIE -- "$PATTERNS" 2>/dev/null)
-    files=$(git ls-files | grep -E '(^|/)(\.env|.*\.pem|.*\.key|id_rsa|id_ed25519)$' | grep -v '\.env\.example$')
+    files=$(git ls-files | grep -E '(^|/)(\.env|.*\.pem|.*\.key|id_rsa|id_ed25519|.*_logins?|.*logins?\.tsv|gate_secret|link_password|chisel-users\.json)$' | grep -v '\.env\.example$')
     ;;
   --range)
     out=$(git log -p --no-color -U0 "${2:?usage: --range A..B}" -- . ':(exclude)scripts/secret_scan.sh' ':(exclude)deploy/tests' | grep -E '^\+' | grep -E -- "$PATTERNS")
-    files=$(git diff --name-only "$2" | grep -E '(^|/)(\.env|.*\.pem|.*\.key|id_rsa|id_ed25519)$' | grep -v '\.env\.example$')
+    files=$(git diff --name-only "$2" | grep -E '(^|/)(\.env|.*\.pem|.*\.key|id_rsa|id_ed25519|.*_logins?|.*logins?\.tsv|gate_secret|link_password|chisel-users\.json)$' | grep -v '\.env\.example$')
     ;;
   *) sed -n '2,10p' "$0"; exit 2 ;;
 esac

@@ -49,7 +49,7 @@ secrets() {
   python3 - "$src/link_password" "$ETC/chisel-users.json" <<'EOF'
 import json, sys
 pw = open(sys.argv[1]).read().strip()
-json.dump({f"vxlink:{pw}": ["^R:127\\.0\\.0\\.1:17000$"]}, open(sys.argv[2], "w"))
+json.dump({f"vxlink:{pw}": ["^R:127\\.0\\.0\\.1:970$"]}, open(sys.argv[2], "w"))
 EOF
   printf 'proxy_set_header X-Vaidyx-Gate "%s";\n' "$(tr -d '\n' < "$src/gate_secret")" > "$ETC/gate-header.conf"
   chmod 0600 "$ETC/chisel-users.json" "$ETC/gate-header.conf"
@@ -67,8 +67,16 @@ install_units() {
   install -m 0644 "$HERE/vaidyx-link.service" /etc/systemd/system/vaidyx-link.service
   install -m 0644 "$HERE/vaidyx-proxy.conf" "$ETC/nginx/vaidyx-proxy.conf"
   systemd-analyze verify /etc/systemd/system/vaidyx-link.service /etc/systemd/system/vaidyx-firewall.service
+  # the link's allowed reverse port, kept in step with this copy (the password in the file stays as it is)
+  python3 - "$ETC/chisel-users.json" <<'PYEOF'
+import json, sys
+p = sys.argv[1]; d = json.load(open(p))
+json.dump({k: ["^R:127\\.0\\.0\\.1:970$"] for k in d}, open(p, "w"))
+PYEOF
+  chmod 0600 "$ETC/chisel-users.json"
   systemctl daemon-reload
   systemctl enable --now $UNITS
+  systemctl restart vaidyx-link.service   # picks up a changed unit or allow rule; the H200 reconnects by itself
   sleep 2
   systemctl is-active $UNITS
   say "link server listening: $(ss -Hltn 'sport = :17999' | awk '{print $4}')"
@@ -82,7 +90,7 @@ cert() {
   say "stopping nginx for the TLS-ALPN challenge (about 12 seconds)"
   systemctl stop nginx
   trap 'systemctl start nginx' EXIT
-  lego --path "$ETC/lego" --email "$email" --domains "$HOSTNAME_TB" --accept-tos --tls run
+  timeout 180 lego --path "$ETC/lego" --email "$email" --domains "$HOSTNAME_TB" --accept-tos --tls run
   systemctl start nginx; trap - EXIT
   systemctl is-active nginx
   say "after: $(neighbours)"
@@ -95,7 +103,7 @@ renew() {
   left=$(( ( $(date -d "$end" +%s) - $(date +%s) ) / 86400 ))
   [ "$left" -ge 30 ] && { say "certificate has $left days left: no renewal needed"; return 0; }
   say "before: $(neighbours)"; systemctl stop nginx; trap 'systemctl start nginx' EXIT
-  lego --path "$ETC/lego" --email "$email" --domains "$HOSTNAME_TB" --accept-tos --tls renew --days 30
+  timeout 180 lego --path "$ETC/lego" --email "$email" --domains "$HOSTNAME_TB" --accept-tos --tls renew --days 30
   systemctl start nginx; trap - EXIT; say "after: $(neighbours)"
 }
 
@@ -123,8 +131,8 @@ check() {
   echo "$CHISEL_SHA256  $DATA/bin/chisel" | sha256sum -c --quiet - || bad=1
   echo "units: $(systemctl is-active $UNITS | tr '\n' ' ')"
   /usr/sbin/nft list table inet vaidyx >/dev/null 2>&1 && echo "firewall table: present" || { echo "firewall table: MISSING"; bad=1; }
-  echo "our ports: $(ss -Hltn '( sport = :17000 or sport = :17999 )' | awk '{print $4}' | tr '\n' ' ')"
-  if ss -Hltn '( sport = :17000 or sport = :17999 )' | awk '{print $4}' | grep -qv '^127\.0\.0\.1:'; then echo "A LINK PORT IS NOT LOCALHOST-ONLY"; bad=1; fi
+  echo "our ports: $(ss -Hltn '( sport = :970 or sport = :17999 )' | awk '{print $4}' | tr '\n' ' ')"
+  if ss -Hltn '( sport = :970 or sport = :17999 )' | awk '{print $4}' | grep -qv '^127\.0\.0\.1:'; then echo "A LINK PORT IS NOT LOCALHOST-ONLY"; bad=1; fi
   for f in chisel_server_key.pem chisel-users.json gate-header.conf; do
     [ "$(stat -c '%a %U' "$ETC/$f" 2>/dev/null)" = "600 root" ] || { echo "WRONG MODE/OWNER: $ETC/$f"; bad=1; }
   done
