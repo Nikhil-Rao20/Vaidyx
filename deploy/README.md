@@ -26,10 +26,20 @@ read, restart or edit their units, files, certificates or nginx sites. Every VM 
 ## Everyday commands (H200)
 
 ```bash
-~/vaidyx/Vaidyx-deploy/deploy/h200/vx.sh status      # app, gate, link, public address
+/data/vaidyx/tb_deploy/app/deploy/h200/vx.sh status  # app, gate, link, public address
 /data/vaidyx/tb_deploy/app/deploy/h200/vx.sh ensure  # start whatever is down (cron runs this every 5 minutes)
 /data/vaidyx/tb_deploy/app/deploy/h200/vx.sh stop    # stop the doctors' instance, gate and link (the VM shows maintenance)
 ```
+
+The watchdog (`crontab -l` on the H200):
+
+```
+PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+@reboot sleep 180 && /data/vaidyx/tb_deploy/app/deploy/h200/vx.sh ensure >> /data/vaidyx/tb_deploy/logs/watchdog.log 2>&1
+*/5 * * * * /data/vaidyx/tb_deploy/app/deploy/h200/vx.sh ensure >> /data/vaidyx/tb_deploy/logs/watchdog.log 2>&1
+```
+
+While the watchdog runs, `vx.sh stop` lasts at most 5 minutes: to keep the instance down, comment out the two lines first.
 
 ## Releasing a new version
 

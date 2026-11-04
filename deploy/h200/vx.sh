@@ -7,6 +7,7 @@
 # ensure = start whatever is down (run by cron every 5 minutes and @reboot). Secrets come from ~/vaidyx/deploy_vm/secrets
 # (mode 600) and are passed through the environment, never on a command line (other users of the H200 can read those).
 set -u
+export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH   # cron's PATH has no /usr/sbin (ss), so 'up' saw nothing
 ROOT=${VX_DEPLOY_ROOT:-/data/vaidyx/tb_deploy}
 APP=$ROOT/app
 SEC=${VX_SECRETS:-$HOME/vaidyx/deploy_vm/secrets}
