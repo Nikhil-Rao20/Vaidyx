@@ -47,6 +47,7 @@ The watchdog (`crontab -l` on the H200):
 PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 @reboot sleep 180 && /data/vaidyx/tb_deploy/app/deploy/h200/vx.sh ensure >> /data/vaidyx/tb_deploy/logs/watchdog.log 2>&1
 */5 * * * * /data/vaidyx/tb_deploy/app/deploy/h200/vx.sh ensure >> /data/vaidyx/tb_deploy/logs/watchdog.log 2>&1
+30 8 * * * /data/vaidyx/tb_deploy/app/deploy/h200/daily_check.sh > /dev/null 2>&1
 ```
 
 While the watchdog runs, `vx.sh stop` lasts at most 5 minutes: to keep the instance down, comment out the two lines first.
@@ -61,6 +62,14 @@ While the watchdog runs, `vx.sh stop` lasts at most 5 minutes: to keep the insta
    commit back on failure; writes one line to `~/vaidyx/deploy_vm/DEPLOY_LOG.md`.
 4. Only if `deploy/vm/` changed: copy `deploy/vm/` to the VM and run `sudo ./setup-vm.sh install` / `site` (Manual mode,
    Eswar approving each command), then `sudo ./setup-vm.sh check`.
+5. When the release changes `deploy_h200.sh` itself, the previous copy of it runs that one time: afterwards run
+   `vx.sh restart-gate` and `vx.sh restart-link` by hand (seen 4 Nov, release d0983f2).
+
+## Daily check
+
+`deploy/h200/daily_check.sh` (cron, every morning) checks app, gate, link and the public address, the certificate's days
+left, that the protections still refuse (`/_gate/`, path tricks, the demo hospital, admin pages), one HSTS header, alerts from
+`vx.sh` and disk space. It changes nothing. One line per run in `~/vaidyx/deploy_vm/logs/daily_check.log`: `OK` or `PROBLEM`.
 
 ## Reaching the VM
 
