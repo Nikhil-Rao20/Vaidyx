@@ -178,10 +178,12 @@ def test_the_stored_copy_is_the_cleaned_one(app):
 
 def test_the_guest_deletes_their_own_private_case_file_and_a_receipt_stays(app):
     cid = create_private(app)["case_id"]
+    assert upload(app.as_(GR), cid, [CLEAN_TXT], anonymized="1").status_code == 200   # leaves a job record
     assert app.as_(RAO).delete(f"/cases/{cid}").status_code in (403, 404)
     r = app.as_(GR).delete(f"/cases/{cid}")
     assert r.status_code == 200, r.text
     assert not store.case_dir(cid).exists()
+    assert not any(cid in p.read_text() for p in (config.DATA_ROOT / "jobs").glob("*.json"))      # no job record left either
     rec = [json.loads(x) for x in (config.DATA_ROOT / "private_deletions.jsonl").read_text().splitlines()]
     assert rec[-1]["case_id"] == cid and rec[-1]["by"] == GR and "Case A" not in json.dumps(rec)
 

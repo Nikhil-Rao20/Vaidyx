@@ -1101,6 +1101,7 @@ def setup_tumour_board_routes():
         grants = pacs.revoke(case_id)  # the image viewer grants opened from it end with it (V2 item 6.3)
         store.audit(case_id, {"kind": "case_deleted", "by": u, "notifications_removed": n, "unlinked": linked, "image_grants_revoked": grants}); store.delete_case(case_id)
         if private:  # the Case File's own audit goes with it: a receipt without patient details stays (who, when, how many records)
+            service.forget_jobs(case_id)
             store.private_receipt({"kind": "private_case_deleted", "case_id": case_id, "by": u, "how": "by the creator"})
         log.info("case %s deleted by %s; %d notification(s) removed", case_id, u, n)
         return {"ok": True, "notifications_removed": n}

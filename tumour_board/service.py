@@ -27,6 +27,20 @@ def _save_job(job):
         log.exception("could not save job %s", job.get("id"))
 
 
+def forget_jobs(case_id) -> int:
+    """A deleted private Case File leaves no job record behind (they carry its id and record ids): jobs/<id>.json and the memory copy."""
+    n = 0
+    for p in _jobs_dir().glob("*.json"):
+        try:
+            if json.loads(p.read_text()).get("case_id") == case_id:
+                p.unlink(); n += 1
+        except Exception:
+            continue
+    for k in [k for k, j in list(JOBS.items()) if isinstance(j, dict) and j.get("case_id") == case_id]:
+        JOBS.pop(k, None)
+    return n
+
+
 def _read_job_file(p: Path):
     try:
         return json.loads(p.read_text())

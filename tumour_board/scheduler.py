@@ -296,6 +296,11 @@ def private_retention_job(now: datetime) -> dict:
             store.private_receipt({"kind": "private_case_deleted", "case_id": cid, "by": "scheduler", "how": f"after {days} days", "age_days": age,
                                    "records": len(list((d / "docs").iterdir())) if (d / "docs").exists() else 0})
             store.delete_case(cid)
+            try:
+                from . import service
+                service.forget_jobs(cid)
+            except Exception:
+                pass
             gone.append(cid)
     except Exception as e:
         return {"error": f"{e.__class__.__name__}: {str(e)[:200]}", "deleted": gone}
