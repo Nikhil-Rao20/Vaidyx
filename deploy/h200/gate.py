@@ -60,6 +60,15 @@ GET_ONLY = re.compile(r"^(/tb(/.*)?|/tb-nik(/.*)?|/static/.+|/login|/favicon\.ic
 POST_ONLY = {"/api/auth/login", "/api/auth/logout", "/api/auth/2fa/setup", "/api/auth/2fa/confirm",
              "/api/auth/2fa/disable"}  # the website's sign-in and two-factor set-up (password change is /api/tb/me/password)
 WS_PATHS = re.compile(r"^/api/tb/(meetings/[A-Za-z0-9_-]{1,64}|messages)/ws$")
+# Document upload on the public site is paused until the switch file exists (Eswar's go after the SEC-5 report):
+#   touch /data/vaidyx/tb_deploy/upload_enabled      (on)        rm /data/vaidyx/tb_deploy/upload_enabled     (off)
+# Read on every upload request, so no restart is needed.
+UPLOAD_PATHS = re.compile(r"^/api/tb/(cases/[^/]+|intake)/documents$")
+UPLOAD_SWITCH = Path(os.getenv("VX_UPLOAD_SWITCH", "/data/vaidyx/tb_deploy/upload_enabled"))
+
+
+def upload_paused(method: str, path: str) -> bool:
+    return method == "POST" and bool(UPLOAD_PATHS.match(path)) and not UPLOAD_SWITCH.exists()
 # The website's own pages, at the root of the public address (no /tb-nik in anyone's address bar). The app serves the website
 # under /tb-nik, so the gate adds the prefix on the way in; old /tb-nik/... links are redirected to the plain form.
 SITE_PAGES = re.compile(r"^/(about|activity|admin|cases|contact|docs|first-login|home|meetings|messages|people|pubmed|requests"
@@ -151,6 +160,8 @@ async def handle(request: Request):
         site = site_upstream(path)
         if site is not None:
             path = site          # forwarded as the app's /tb-nik page; the browser keeps the plain address
+    if upload_paused(request.method, path):
+        return JSONResponse({"detail": {"message": "Upload is paused on this site for now.", "code": "upload_paused"}}, status_code=503)
     if not allowed(request.method, path):
         if path.startswith("/api/"):
             return JSONResponse({"detail": "Not available."}, status_code=404)

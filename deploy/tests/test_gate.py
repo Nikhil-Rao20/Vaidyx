@@ -170,3 +170,14 @@ def test_old_tb_nik_links_redirect_to_the_plain_address(client, old, new):
 def test_enquiry_api_keeps_its_path(client):
     r = client.post("/tb-nik/api/enquiry", headers=OK, json={})
     assert r.status_code == 502  # forwarded unchanged (not redirected)
+
+
+def test_upload_is_paused_until_the_switch_exists(client, gate, tmp_path, monkeypatch):
+    monkeypatch.setattr(gate, "UPLOAD_SWITCH", tmp_path / "upload_enabled")
+    for path in ("/api/tb/cases/TB-002/documents", "/api/tb/intake/documents"):
+        r = client.post(path, headers=OK, files={"files": ("a.pdf", b"%PDF-1.4")})
+        assert r.status_code == 503 and r.json()["detail"]["code"] == "upload_paused", path
+    assert client.get("/api/tb/cases/TB-002/documents", headers=OK).status_code == 502      # reading is not paused
+    (tmp_path / "upload_enabled").touch()
+    r = client.post("/api/tb/cases/TB-002/documents", headers=OK, files={"files": ("a.pdf", b"%PDF-1.4")})
+    assert r.status_code == 502                                                             # switched on: forwarded
