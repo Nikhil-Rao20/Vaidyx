@@ -87,15 +87,16 @@ export function StepLogistics({ form, onChange, settingLabel, protocolLabel }: {
   const p = form.lookup?.patient;
   const generic = isGeneric(form.protocol);
   const meName = me?.display_name ? drName(me.display_name) : me?.user ?? "you";
+  const guest = Boolean(me?.real_data);  // a guest reviewer: a private Case File from their own files (no fetch, no team, no outside experts)
   return (
     <div className="grid gap-5">
       <div className="grid gap-5 md:grid-cols-2">
-        <Field id="window" label="Records to fetch" hint="Older reports can be fetched later from the Case File.">
+        {guest ? null : <Field id="window" label="Records to fetch" hint="Older reports can be fetched later from the Case File.">
           <Select value={String(form.windowMonths)} onValueChange={(v) => onChange({ windowMonths: v === "all" ? "all" : Number(v) })}>
             <SelectTrigger className="w-full" id="window" aria-label="Records to fetch"><SelectValue /></SelectTrigger>
             <SelectContent>{WINDOW_CHOICES.map((w) => <SelectItem key={String(w.value)} value={String(w.value)}>{w.label}</SelectItem>)}</SelectContent>
           </Select>
-        </Field>
+        </Field>}
         <Field id="board-date" label="Board date" optional hint={nextMeeting ? `Next planned meeting: ${formatDate(nextMeeting.date)}. Change it if needed.` : "Leave empty if not known; the coordinator schedules it."}>
           <DateInput value={form.boardDate} min={isoDay(today)} onChange={(v) => onChange({ boardDate: v })} />
         </Field>
@@ -150,15 +151,17 @@ export function StepLogistics({ form, onChange, settingLabel, protocolLabel }: {
 
       <div className="surface-inner grid gap-1 p-4">
         <p className="flex items-center gap-2 text-sm"><UserRound className="size-4 text-muted-foreground" aria-hidden /> Presenter: <span className="font-medium text-foreground">{meName} (you)</span></p>
+        {guest ? null : <>
         <SwitchRow id="join-code" label="Make a join code for residents" hint="A 6-digit code you can give your residents; one from your department joins at once." checked={form.joinCode} onCheckedChange={(v) => onChange({ joinCode: v })} />
         <SwitchRow id="consent" label="Patient consents to discussion with outside experts" hint="Without it, outside experts see initials, age and sex only." checked={form.outsideConsent} onCheckedChange={(v) => onChange({ outsideConsent: v })} />
+        </>}
       </div>
 
       <section className="rounded-md border border-tint-line bg-muted p-4" aria-label="Read-back">
         <p className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground"><ShieldCheck className="size-4" aria-hidden /> What will be created</p>
         <KeyValueList>
-          <KeyValue label="Patient" value={p ? `${p.name ?? ""}, ${ageSex(p.age, p.sex)}` : form.identifier} />
-          <KeyValue label="UHID" value={p?.uhid} mono />
+          <KeyValue label="Patient" value={guest ? [form.manualLabel.trim(), ageSex(Number(form.manualAge), form.manualSex)].filter(Boolean).join(", ") : p ? `${p.name ?? ""}, ${ageSex(p.age, p.sex)}` : form.identifier} />
+          <KeyValue label="UHID" value={guest ? "none (private Case File)" : p?.uhid} mono={!guest} />
           <KeyValue label="Cancer" value={cancerWords(form, protocolLabel)} />
           {generic ? (
             <KeyValue label="Checked" value={<span className="inline-flex items-start gap-1" data-testid="generic-readback"><ClipboardList className="mt-0.5 size-3.5 shrink-0" aria-hidden /> {genericRule(form.protocol)}</span>}
@@ -166,10 +169,11 @@ export function StepLogistics({ form, onChange, settingLabel, protocolLabel }: {
           ) : (
             <KeyValue label="Setting" value={form.setting === NOT_RECORDED ? "not recorded yet" : settingLabel} fallback="none" />
           )}
-          <KeyValue label="Records" value={form.windowMonths === "all" ? "everything on record" : `last ${form.windowMonths} months`} />
+          <KeyValue label="Records" value={guest ? "you add the files after Create" : form.windowMonths === "all" ? "everything on record" : `last ${form.windowMonths} months`} />
           <KeyValue label="Board date" value={form.boardDate ? <span className="inline-flex items-center gap-1"><CalendarDays className="size-3.5" aria-hidden /> {formatDate(form.boardDate)}</span> : ""} fallback="not set" />
           <KeyValue label="Urgency" value={form.urgency ? String(form.urgency) : ""} fallback="choose one above" />
-          <KeyValue label="Join code" value={form.joinCode ? <span className="inline-flex items-center gap-1"><KeyRound className="size-3.5" aria-hidden /> made after creation</span> : "no"} />
+          {guest ? <KeyValue label="Who sees it" value="only you (private)" /> : null}
+          {guest ? null : <KeyValue label="Join code" value={form.joinCode ? <span className="inline-flex items-center gap-1"><KeyRound className="size-3.5" aria-hidden /> made after creation</span> : "no"} />}
         </KeyValueList>
       </section>
     </div>
