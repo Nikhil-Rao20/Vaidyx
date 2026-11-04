@@ -44,12 +44,12 @@ def test_no_or_wrong_secret_is_refused(client):
 def test_secret_needed_even_for_health_and_root(client):
     assert client.get("/", follow_redirects=False).status_code == 403
     r = client.get("/", headers=OK, follow_redirects=False)
-    assert r.status_code == 302 and r.headers["location"] == "/tb-nik"
+    assert r.status_code == 502  # the website's start page, forwarded to the (absent) upstream as /tb-nik
 
 
 @pytest.mark.parametrize("method,path", [
     ("GET", "/api/chat"), ("POST", "/api/chat"), ("GET", "/api/admin/users"), ("GET", "/api/tools"),
-    ("POST", "/api/upload"), ("GET", "/settings"), ("GET", "/api/memory"), ("POST", "/api/auth/signup"),
+    ("POST", "/api/upload"), ("POST", "/settings"), ("GET", "/api/memory"), ("POST", "/api/auth/signup"),
     ("POST", "/api/auth/setup"), ("GET", "/fhir/Patient"), ("POST", "/tb-nik"), ("DELETE", "/static/x.js"),
     ("GET", "/api/tb/../chat"), ("GET", "/api/tb/%2e%2e/chat"), ("GET", "/api/tb//x"), ("GET", "/api/tb/%2fx"),
     ("GET", "/api/tb\\..\\chat"), ("GET", "/api/tb/admin"), ("GET", "/api/tb/admin/x"),
@@ -60,7 +60,7 @@ def test_paths_outside_the_allow_list_are_refused(client, method, path):
 
 
 @pytest.mark.parametrize("method,path", [
-    ("GET", "/tb-nik"), ("GET", "/tb-nik/casefiles"), ("GET", "/static/tb-nik/assets/a.js"), ("GET", "/login"),
+    ("GET", "/"), ("GET", "/cases"), ("GET", "/cases/TB-002/records"), ("GET", "/sign-in"), ("GET", "/settings"), ("GET", "/static/tb-nik/assets/a.js"), ("GET", "/login"),
     ("POST", "/api/auth/login"), ("POST", "/api/auth/logout"), ("GET", "/api/auth/2fa/status"),
     ("POST", "/api/auth/2fa/setup"), ("GET", "/api/tb/cases"), ("POST", "/api/tb/cases/TB-001/ask"),
 ])
@@ -139,3 +139,23 @@ def test_same_path_rules(gate):
     assert gate.same_path({"path": "/api/tb/cases"}, "/api/tb/cases")
     assert not gate.same_path({"path": "/api/auth/log\tin"}, "/api/auth/login")
     assert not gate.same_path({"path": "/api/tb/%61dmin"}, "/api/tb/%61dmin")
+
+
+def test_website_at_the_root(gate):
+    assert gate.site_upstream("/") == "/tb-nik"
+    assert gate.site_upstream("/cases/TB-002") == "/tb-nik/cases/TB-002"
+    assert gate.site_upstream("/meetings/S1/room") == "/tb-nik/meetings/S1/room"
+    assert gate.site_upstream("/api/tb/cases") is None and gate.site_upstream("/static/x.js") is None
+    assert gate.site_upstream("/casesX") is None and gate.site_upstream("/openapi.json") is None
+
+
+@pytest.mark.parametrize("old,new", [("/tb-nik", "/"), ("/tb-nik/", "/"), ("/tb-nik/cases/TB-002", "/cases/TB-002"),
+                                     ("/tb-nik/sign-in?next=x", "/sign-in?next=x")])
+def test_old_tb_nik_links_redirect_to_the_plain_address(client, old, new):
+    r = client.get(old, headers=OK, follow_redirects=False)
+    assert r.status_code == 301 and r.headers["location"] == new, (old, r.status_code, r.headers.get("location"))
+
+
+def test_enquiry_api_keeps_its_path(client):
+    r = client.post("/tb-nik/api/enquiry", headers=OK, json={})
+    assert r.status_code == 502  # forwarded unchanged (not redirected)
