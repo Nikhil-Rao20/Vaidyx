@@ -1,0 +1,13 @@
+[Unit]
+Description=Vaidyx-TB nftables table (only nginx and root reach the link's localhost ports)
+Before=vaidyx-link.service
+After=network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f /etc/vaidyx-tb/vaidyx.nft
+ExecStop=/usr/sbin/nft delete table inet vaidyx
+
+[Install]
+WantedBy=multi-user.target
