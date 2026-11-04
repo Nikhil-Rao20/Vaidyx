@@ -241,7 +241,7 @@ def find_by_code(code: str) -> dict | None:
     if not base.exists():
         return None
     for d in sorted(base.iterdir()):
-        if not d.is_dir() or d.name in config.PROTECTED_CASES:
+        if not d.is_dir() or d.name in config.HIDDEN_CASES:
             continue
         try:
             c = store.get_case(d.name)

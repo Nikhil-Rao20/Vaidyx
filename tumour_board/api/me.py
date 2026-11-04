@@ -127,7 +127,21 @@ async def me(request: Request):
             "hospital": {"name": h.get("name") or "", "level": h.get("level") or "", "pmjay_empanelled": bool(h.get("pmjay_empanelled", True))},
             "features": features(), "departments": [{"id": d["id"], "name": d["name"], "group": d.get("group"), "role": d.get("role")} for d in org.my_departments(r)]
             if not r.get("admin") else [],
-            "break_glass": break_glass_mine(r), "messages": _may_message(r)}
+            "break_glass": break_glass_mine(r), "messages": _may_message(r),
+            # guest reviewers (5 Nov 2026): private Case Files, two-factor sign-in first; the site's upload rule
+            "real_data": bool(r.get("real_data")), "two_factor_required": _two_factor_required(r, mgr, u),
+            "upload_policy": "private_only" if os.getenv("TB_UPLOAD_POLICY", "all").strip().lower() == "private_only" else "all"}
+
+
+def _two_factor_required(r: dict, mgr, u: str) -> bool:
+    """A guest reviewer (real_data) without two-factor sign-in yet: every Tumour Board page waits for it (TB_REAL_DATA_2FA=0 turns it off)."""
+    if not r.get("real_data") or os.getenv("TB_REAL_DATA_2FA", "1").strip() == "0":
+        return False
+    fn = getattr(mgr, "totp_enabled", None) if mgr is not None else None
+    try:
+        return not (callable(fn) and fn(u))
+    except Exception:
+        return True
 
 
 def break_glass_mine(r: dict) -> list:
@@ -231,7 +245,7 @@ def _events(user: str | None = None, case_id: str | None = None, per_file: int =
     base = Path(config.CASES_DIR)
     dirs = []
     if base.exists():
-        dirs = [d for d in sorted(base.iterdir()) if d.is_dir() and d.name not in config.PROTECTED_CASES and (case_id is None or d.name == case_id)]
+        dirs = [d for d in sorted(base.iterdir()) if d.is_dir() and d.name not in config.HIDDEN_CASES and (case_id is None or d.name == case_id)]
     for d in dirs:
         try:
             evs = store.read_audit(d.name, per_file)

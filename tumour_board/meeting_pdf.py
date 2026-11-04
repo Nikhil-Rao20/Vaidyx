@@ -155,7 +155,7 @@ def _is_synthetic(hospital: dict, cases: list) -> bool:
 
 def _case(cid) -> dict | None:
     """The Case File, or None (missing, a bad id, or protected: real patient data is never printed)."""
-    if not cid or cid in config.PROTECTED_CASES:
+    if not cid or cid in config.HIDDEN_CASES:
         return None
     try:
         c = store.get_case(cid)
@@ -225,7 +225,7 @@ def discussion_notes(meeting: dict, case_id: str, r: dict | None = None) -> list
 
     The section prints NOTES_HEADING ("Discussion notes (AI draft, not reviewed)", or reviewed by whom), each line with its "said" words
     and speaker beneath."""
-    if not isinstance(meeting, dict) or not case_id or case_id in config.PROTECTED_CASES:
+    if not isinstance(meeting, dict) or not case_id or case_id in config.HIDDEN_CASES:
         return []
     e = (meeting.get("notes") or {}).get(case_id) if isinstance(meeting.get("notes"), dict) else None
     if not isinstance(e, dict) or not e.get("lines"):

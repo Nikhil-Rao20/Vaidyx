@@ -119,7 +119,7 @@ def is_protected(case) -> bool:
     """A Case File holding real patient data (config.PROTECTED_CASES): never listed or opened for anyone but the login that created it
     and a Vaidyx admin inside a break-glass window on it (security review finding 0)."""
     cid = case.get("case_id") if isinstance(case, dict) else case
-    return bool(cid) and str(cid) in config.PROTECTED_CASES
+    return bool(cid) and str(cid) in config.HIDDEN_CASES
 
 
 def is_creator(r: dict, case: dict) -> bool:
@@ -491,7 +491,7 @@ def _meeting_floors() -> dict:
         from . import board, meetings  # lazy: both import this module
         for s in board.running_sessions():
             cid = s.get("current")
-            if not cid or str(cid) in config.PROTECTED_CASES:
+            if not cid or str(cid) in config.HIDDEN_CASES:
                 continue
             for u, p in (s.get("people") or {}).items():
                 if isinstance(p, dict) and p.get("status") in meetings.ADMITTED and not p.get("outside_expert"):
@@ -751,7 +751,7 @@ def check_not_archived(case: dict) -> None:
 
 def set_owner(case_id: str, department, user: str, reason: str = "", roles: dict | None = None) -> dict:
     """Record the owning treating department of a Case File that has none yet (a manual creation by a treating doctor). Audited."""
-    if case_id in config.PROTECTED_CASES:
+    if case_id in config.HIDDEN_CASES:
         raise AccessError("That Case File is protected; its owner is not set here", 409)
     case = store.get_case(case_id)
     if not case:

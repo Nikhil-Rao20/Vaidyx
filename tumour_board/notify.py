@@ -190,7 +190,7 @@ def for_roles(r: dict, limit: int = 100, unread_only: bool = False) -> list[dict
         if not _mine(rec, r):
             continue
         cid = rec.get("case_id")
-        if cid and cid in config.PROTECTED_CASES:  # a protected Case File is never named to anyone but who may open it (finding 0)
+        if cid and cid in config.HIDDEN_CASES:  # a protected Case File is never named to anyone but who may open it (finding 0)
             if cid not in hidden:
                 from . import access
                 hidden[cid] = access.hidden(r, cid)

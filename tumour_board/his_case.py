@@ -171,7 +171,7 @@ def same_patient_cases(uhids, exclude: str = "", his=None) -> list:
     out = []
     for c in store.list_cases():
         cid = c.get("case_id")
-        if not cid or cid == exclude or cid in config.PROTECTED_CASES or access.is_archived(c):
+        if not cid or cid == exclude or cid in config.HIDDEN_CASES or access.is_archived(c):
             continue
         h = c.get("his") if isinstance(c.get("his"), dict) else None
         if his and h and (h.get("kind"), str(h.get("label") or "")) != (his[0], str(his[1] or "")):
@@ -724,7 +724,7 @@ def active_his_cases(today: str = "") -> list[str]:
     out = []
     for c in store.list_cases():
         cid = c.get("case_id")
-        if not cid or cid in config.PROTECTED_CASES or not c.get("his") or _archived(c):
+        if not cid or cid in config.HIDDEN_CASES or not c.get("his") or _archived(c):
             continue
         if _decided(c, store.get_state(cid), today):
             continue

@@ -139,7 +139,7 @@ DEPT_ROLES = ("member", "head")  # the consultant placements: a treating or a su
 PLACEMENTS = ("member", "head", "resident")  # every placement value, residents included (V3)
 RESIDENT = "resident"
 ROLE_SYNONYMS = {"doctor": "member", "consultant": "member", "pg": "resident", "fellow": "resident", "senior_resident": "resident"}  # the UI says "doctor"; the stored role stays "member" (V1 files)
-USER_FLAGS = ("coordinator", "disabled", "auditor", "outside_expert")
+USER_FLAGS = ("coordinator", "disabled", "auditor", "outside_expert", "real_data")  # real_data: a guest reviewer whose Case Files are private (config.is_private)
 FETCH_WINDOW_RANGE = (1, 120)  # months
 MESSAGE_RETENTION_RANGE = (0, 3650)  # days; 0 keeps every message (Phase 8)
 
@@ -785,6 +785,7 @@ def validate(org: dict) -> dict:
         u["departments"], u["admin_of"] = clean_map, list(dict.fromkeys(clean_adm))
         u["coordinator"], u["disabled"] = u.get("coordinator", False), u.get("disabled", False)
         u["auditor"], u["outside_expert"], u["end_date"] = u.get("auditor", False), u.get("outside_expert", False), ed
+        u["real_data"] = u.get("real_data", False)
         u["display_name"] = str(u.get("display_name") or "").strip()
         users[uname.strip()] = u
     out["users"] = users
@@ -990,6 +991,7 @@ def roles(username: str, vaidyx_admin: bool = False) -> dict:
     coordinator = u.get("coordinator") is True
     auditor = u.get("auditor") is True
     outside_expert = u.get("outside_expert") is True
+    real_data = u.get("real_data") is True  # a guest reviewer with anonymized real files: every Case File it creates is private
     disabled = u.get("disabled") is True and not admin  # the Tumour Board flag never locks out the Vaidyx admin (review M3)
     consult = {k: v for k, v in placed.items() if v in DEPT_ROLES}
     resident = {k: v for k, v in placed.items() if v == RESIDENT}
@@ -998,7 +1000,7 @@ def roles(username: str, vaidyx_admin: bool = False) -> dict:
          "treating": {k: v for k, v in consult.items() if groups.get(k) == "treating"},
          "supporting": {k: v for k, v in consult.items() if groups.get(k) == "supporting"},
          "resident": resident, "resident_treating": {k: v for k, v in resident.items() if groups.get(k) == "treating"},
-         "auditor": auditor, "outside_expert": outside_expert, "end_date": end_date, "expired": expired,
+         "auditor": auditor, "outside_expert": outside_expert, "real_data": real_data, "end_date": end_date, "expired": expired,
          "display_name": str(u.get("display_name") or "").strip(),
          "disabled": disabled, "known": (admin or coordinator or bool(placed)) and not disabled}
     return r

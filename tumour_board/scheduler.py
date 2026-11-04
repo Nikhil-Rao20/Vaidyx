@@ -152,7 +152,7 @@ def job_reminders(now: datetime) -> dict:
     sent = []
     for c in store.list_cases():
         cid = c.get("case_id")
-        if not cid or cid in config.PROTECTED_CASES or c.get("archived") or (c.get("listing") or {}).get("status") == "archived":
+        if not cid or cid in config.HIDDEN_CASES or c.get("archived") or (c.get("listing") or {}).get("status") == "archived":
             continue
         try:
             st = store.get_state(cid)
@@ -266,10 +266,47 @@ def messages_job(now: datetime) -> dict:
         return {"error": f"{e.__class__.__name__}: {str(e)[:200]}"}
 
 
+def private_retention_job(now: datetime) -> dict:
+    """Private Case Files (guest reviewers' anonymized real files) are deleted TB_PRIVATE_RETENTION_DAYS (default 90; 0 keeps them)
+    after they were created: the folder, its notifications and image grants; a receipt without patient details stays in
+    private_deletions.jsonl. Only folders with the PRIVATE marker are ever touched. Never raises."""
+    import os
+    try:
+        days = int(os.getenv("TB_PRIVATE_RETENTION_DAYS", "90"))
+    except ValueError:
+        days = 90
+    if days <= 0:
+        return {"kept": "retention off"}
+    from . import notify, pacs, store
+    gone = []
+    try:
+        for d in sorted(config.CASES_DIR.iterdir()) if config.CASES_DIR.exists() else []:
+            cid = d.name
+            if not (d / config.PRIVATE_MARKER).is_file() or cid in config.PROTECTED_CASES:
+                continue
+            c = store.get_case(cid) or {}
+            try:
+                created = datetime.fromisoformat(str(c.get("created") or "")[:19])
+            except ValueError:
+                continue                              # no readable creation time: never deleted automatically
+            age = (now - created).days
+            if age < days:
+                continue
+            notify.purge_case(cid); pacs.revoke(cid)
+            store.private_receipt({"kind": "private_case_deleted", "case_id": cid, "by": "scheduler", "how": f"after {days} days", "age_days": age,
+                                   "records": len(list((d / "docs").iterdir())) if (d / "docs").exists() else 0})
+            store.delete_case(cid)
+            gone.append(cid)
+    except Exception as e:
+        return {"error": f"{e.__class__.__name__}: {str(e)[:200]}", "deleted": gone}
+    return {"deleted": gone}
+
+
 QUICK = ("codes", "break_glass", "meeting_starting", "series", "reminders", "digests", "prune")
 JOBS = (("codes", job_codes, 0), ("break_glass", job_break_glass, 0), ("meeting_starting", job_meeting_starting, 0), ("series", job_series, SERIES_EVERY),
         ("reminders", job_reminders, REMINDERS_EVERY), ("digests", job_digests, 0), ("prune", job_prune, PRUNE_EVERY),
-        ("refetch", job_refetch, REFETCH_EVERY), ("similar", similar_job, 1800), ("messages_retention", messages_job, PRUNE_EVERY))
+        ("refetch", job_refetch, REFETCH_EVERY), ("similar", similar_job, 1800), ("messages_retention", messages_job, PRUNE_EVERY),
+        ("private_retention", private_retention_job, 3600))
 
 
 def tick(now: datetime | None = None, force: bool = False, only=None, refetch: bool = True) -> dict:

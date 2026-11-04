@@ -382,7 +382,7 @@ def full_cases(r: dict, s: dict) -> set | None:
     for k in LISTS:
         for it in (s.get("agenda_lists") or {}).get(k) or []:
             cid = it.get("case_id")
-            c = store.get_case(cid) if cid and cid not in config.PROTECTED_CASES else None
+            c = store.get_case(cid) if cid and cid not in config.HIDDEN_CASES else None
             try:
                 if c and access.scope(r, c) == access.FULL:
                     out.add(cid)
@@ -395,7 +395,7 @@ def row(s: dict, it: dict, order: int, r: dict | None = None, restricted: bool =
     """One agenda row for the meeting screens. Restricted (a viewer not admitted who may not read this Case File in full): initials, age
     and sex, no board question."""
     cid = it.get("case_id")
-    c = store.get_case(cid) if cid and cid not in config.PROTECTED_CASES else None
+    c = store.get_case(cid) if cid and cid not in config.HIDDEN_CASES else None
     if not c:
         return {"case_id": cid, "missing": True, "order": order, "reason": it.get("reason") or "", "patient_line": "", "owner_name": "", "presenter_name": "",
                 "board_question": "", "left_before_board": None, "minutes": _minutes_for(s, it)}
@@ -479,7 +479,7 @@ def _elapsed(lv) -> int:
 def presenter_view(s: dict) -> dict | None:
     """The presenter of the Case File on the floor (night-v3 5.4): the one chosen when it was sent to the board, else the owner."""
     cid = s.get("current")
-    c = store.get_case(cid) if cid and cid not in config.PROTECTED_CASES else None
+    c = store.get_case(cid) if cid and cid not in config.HIDDEN_CASES else None
     if not c:
         return None
     u = presenter_of(c)
@@ -545,7 +545,7 @@ def active_roles(s: dict, cid: str | None) -> list[str]:
     """The agents active for a Case File (owner decision D2, night-v3 6.1): by default every head not present and every specialty
     marked absent (board.absent_roles, the Surgical Oncology seat rule included), overridden by the coordinator's additions and
     removals kept in the session (agents_active[case][role] = {on, by, by_name, at}). In the roles' order. Never on a protected file."""
-    if not cid or cid in config.PROTECTED_CASES:
+    if not cid or cid in config.HIDDEN_CASES:
         return []
     try:
         default = set(board.absent_roles(s, cid))
@@ -658,7 +658,7 @@ def agents_view(s: dict) -> list[dict]:
     member and never counted. Each with its true state, why it is here (standing in for a head not present, a specialty marked
     absent, or added by the coordinator), its brief and points, and the voice. Empty outside a session or on a protected Case File."""
     cur = s.get("current")
-    if s.get("status") != "in_session" or not cur or cur in config.PROTECTED_CASES:
+    if s.get("status") != "in_session" or not cur or cur in config.HIDDEN_CASES:
         return []
     try:
         default = set(board.absent_roles(s, cur))
@@ -728,7 +728,7 @@ def _chat_lines(s: dict, r: dict | None, lines) -> list[dict]:
     for k in LISTS:
         for it in (s.get("agenda_lists") or {}).get(k) or []:
             cid = it.get("case_id")
-            if cid and cid not in config.PROTECTED_CASES and cid not in cases:
+            if cid and cid not in config.HIDDEN_CASES and cid not in cases:
                 cases[cid] = store.get_case(cid)
     out = []
     for m in lines:
@@ -811,7 +811,7 @@ def quorum_view(s: dict) -> dict:
         ok, by = present(h["id"])
         heads.append({"id": h["id"], "name": h["name"], "present": ok, "by": by, "role": h.get("role")})
     agents = []  # the agents standing in for a head or a specialty not here (an agent the coordinator called is not standing in)
-    if s.get("status") == "in_session" and s.get("current") and s["current"] not in config.PROTECTED_CASES:
+    if s.get("status") == "in_session" and s.get("current") and s["current"] not in config.HIDDEN_CASES:
         try:
             absent = set(board.absent_roles(s, s["current"]))
         except Exception:
@@ -822,7 +822,7 @@ def quorum_view(s: dict) -> dict:
         pm = {"not_applicable": True, "present": 0, "total": len(PMJAY_DEPARTMENTS), "note": postboard.NOT_EMPANELLED}
     else:  # the same seat rule as the decision record's composition check (postboard.pmjay_seat: a listed surgeon, or one of the case's own)
         cur = s.get("current")
-        c = store.get_case(cur) if cur and cur not in config.PROTECTED_CASES else None
+        c = store.get_case(cur) if cur and cur not in config.HIDDEN_CASES else None
         own = board._case_surgical(c) if c else None
         got = postboard.pmjay_present(depts, own)
         seat = postboard.pmjay_seat(depts, own)
@@ -847,7 +847,7 @@ def may_present(s: dict, r: dict) -> bool:
     if user in present_allowed_view(s):
         return True
     cid = s.get("current")
-    c = store.get_case(cid) if cid and cid not in config.PROTECTED_CASES else None
+    c = store.get_case(cid) if cid and cid not in config.HIDDEN_CASES else None
     return bool(c) and presenter_of(c) == user
 
 
@@ -1056,7 +1056,7 @@ def _rehome_plan(s: dict) -> dict:
     nxt = next_open_meeting(after=s, exclude={s["id"]})
     for k, it in entries:
         cid = it["case_id"]
-        c = store.get_case(cid) if cid not in config.PROTECTED_CASES else None
+        c = store.get_case(cid) if cid not in config.HIDDEN_CASES else None
         if not c or access.is_archived(c) or not board._listed(c):
             continue
         out["entries"][cid] = (k, it)
@@ -1182,7 +1182,7 @@ def _sent_time(c: dict | None) -> str:
 
 
 def _urgency_level(cid) -> int:
-    c = store.get_case(cid) if cid and cid not in config.PROTECTED_CASES else None
+    c = store.get_case(cid) if cid and cid not in config.HIDDEN_CASES else None
     u = c.get("urgency") if isinstance(c, dict) and isinstance(c.get("urgency"), dict) else {}
     try:
         return int(u.get("level") or 0)
@@ -1231,7 +1231,7 @@ def waiting_cases() -> list[dict]:
     out = []
     for c in store.list_cases():
         cid = c.get("case_id")
-        if not cid or cid in config.PROTECTED_CASES or not isinstance(c.get("board_waiting"), dict):
+        if not cid or cid in config.HIDDEN_CASES or not isinstance(c.get("board_waiting"), dict):
             continue
         if access.is_archived(c) or not board._listed(c):
             continue
@@ -1322,7 +1322,7 @@ def _entry(old: dict, cid: str, by: str, reason=None) -> dict:
     order rule); a new one takes the Case File's send time, else now. The "new" mark is not carried (the coordinator saw the list)."""
     o = old.get(cid) or {}
     now = _now()
-    sent = o.get("sent_at") or (None if o else _sent_time(store.get_case(cid) if cid not in config.PROTECTED_CASES else None)) or o.get("added_at") or now
+    sent = o.get("sent_at") or (None if o else _sent_time(store.get_case(cid) if cid not in config.HIDDEN_CASES else None)) or o.get("added_at") or now
     return {"case_id": cid, "reason": (o.get("reason") or "") if reason is None else reason, "minutes": o.get("minutes"),
             "added_at": o.get("added_at") or now, "added_by": o.get("added_by") or by, "sent_at": sent}
 
@@ -1347,7 +1347,7 @@ def _after_agenda_change(s, by, kind, **extra):
 
 
 def _link_case(cid, s, by) -> None:
-    if not cid or cid in config.PROTECTED_CASES:
+    if not cid or cid in config.HIDDEN_CASES:
         return
     c = store.get_case(cid)
     if not c or access.is_archived(c):  # nothing changes in an archived Case File (security review #8)
@@ -1440,7 +1440,7 @@ def _one_agenda(cid: str, s: dict, by: str) -> None:
     planned meeting's lists (take_off_agendas, audited why="coordinator") and a withdraw recorded on it is cleared (the history keeps the
     withdraw and gets a line for the put back), so it counts as sent again (after_send.is_sent) and the chip no longer says Taken off.
     Nothing changes in a protected or archived Case File."""
-    if not cid or cid in config.PROTECTED_CASES:
+    if not cid or cid in config.HIDDEN_CASES:
         return
     c = store.get_case(cid)
     if not c or access.is_archived(c):
@@ -1489,7 +1489,7 @@ def _sent_case(case_id: str) -> dict:
     """The Case File the owner moves or withdraws: it exists, is not protected or archived, was sent to the board (the ready mark) and
     its current meeting is not running right now. A Case File left on a meeting that ended (not discussed there) or on one left in session
     from an earlier day can be moved or withdrawn; that meeting's own lists stay as they were (meetings-v2 review finding 3)."""
-    if case_id in config.PROTECTED_CASES:
+    if case_id in config.HIDDEN_CASES:
         raise MeetingError("That Case File is protected.", 400, "protected")
     c = store.get_case(case_id)
     if not c:
@@ -2262,7 +2262,7 @@ def may_drive(r: dict, s: dict, user: str = "") -> bool:
     if not user or not is_member(r, s):
         return False
     cid = s.get("current")
-    c = store.get_case(cid) if cid and cid not in config.PROTECTED_CASES else None
+    c = store.get_case(cid) if cid and cid not in config.HIDDEN_CASES else None
     return bool(c) and presenter_of(c) == user
 
 
@@ -2534,7 +2534,7 @@ def _warm_agents(s: dict, roles: list | None = None) -> int:
     """Pre-load each active agent's context when a Case File comes on the floor, or an agent is added (night-v3 6.4): background tasks
     on the running loop (agents.warm), never awaited, nothing when there is no loop (tests) or no Case File."""
     cid = s.get("current")
-    if not cid or cid in config.PROTECTED_CASES:
+    if not cid or cid in config.HIDDEN_CASES:
         return 0
     try:
         loop = asyncio.get_running_loop()
@@ -3182,7 +3182,7 @@ async def record_decision(mid: str, cid: str, body: dict, user: str) -> dict:
         raise MeetingError("This meeting was cancelled.", 409, "meeting_over")
     if not _on_lists(s, cid, ("discussion", "noting")) and cid not in {a.get("case_id") for a in s.get("agenda") or []}:
         raise MeetingError("This Case File is not on the meeting's agenda.", 404, "not_on_agenda")
-    c = store.get_case(cid) if cid not in config.PROTECTED_CASES else None
+    c = store.get_case(cid) if cid not in config.HIDDEN_CASES else None
     if not c:
         raise MeetingError("Case File not found.", 404, "no_case")
     if access.is_archived(c):  # security review #8: said first, whatever the meeting's state
@@ -3315,7 +3315,7 @@ def end_case(mid: str, cid: str, by: str) -> dict:
     s = need(mid); _in_session(s)
     if not _on_lists(s, cid, ("discussion", "noting")):
         raise MeetingError("This Case File is not on the meeting's agenda.", 404, "not_on_agenda")
-    c = store.get_case(cid) if cid not in config.PROTECTED_CASES else None
+    c = store.get_case(cid) if cid not in config.HIDDEN_CASES else None
     if not c:
         raise MeetingError("Case File not found.", 404, "no_case")
     lv = s.get("live") or {}
@@ -3395,7 +3395,7 @@ def cards(mid: str, r: dict) -> dict:
     out, visible = {}, []
     ids = [it["case_id"] for k in ("discussion", "noting") for it in (s.get("agenda_lists") or {}).get(k) or [] if it.get("case_id")]
     for cid in ids:
-        c = store.get_case(cid) if cid not in config.PROTECTED_CASES else None
+        c = store.get_case(cid) if cid not in config.HIDDEN_CASES else None
         if not c:
             continue
         if not (manage(r) or in_owner_team(r, c)):
@@ -3486,7 +3486,7 @@ def slides(cid: str, r: dict | None = None) -> list[dict]:
     """Summary first, then the values with their sources, the gaps and waivers, the imaging records (with viewer availability), the pathology
     records, the points for review from the briefs and the summary, and the published cases when the doctor picked any. No model call.
     `r` the viewer: an outside expert without the owner's consent sees the patient as initials, age and sex."""
-    c = store.get_case(cid) if cid not in config.PROTECTED_CASES else None
+    c = store.get_case(cid) if cid not in config.HIDDEN_CASES else None
     if not c:
         raise MeetingError("Case File not found.", 404, "no_case")
     st = store.get_state(cid)

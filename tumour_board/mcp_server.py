@@ -61,7 +61,7 @@ def include_protected() -> bool:
 
 
 def _visible(case_id: str) -> bool:
-    return include_protected() or case_id not in config.PROTECTED_CASES
+    return include_protected() or case_id not in config.HIDDEN_CASES
 
 
 def _audit(tool: str, args: dict, client: str = ""):

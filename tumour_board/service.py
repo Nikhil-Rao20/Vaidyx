@@ -97,6 +97,8 @@ async def process_docs(case_id, doc_ids, job, from_stored=False):
         for d in store.list_docs(case_id):  # identifiers learned from other records may settle a document that printed only a CR No.
             if d.get("state") == "ready" and d.get("identity") in ("id_differs", "name_match"):
                 extract.refresh_identity(case_id, d["doc_id"], (store.get_case(case_id) or case).get("patient"))
+        if config.is_private(case_id):  # a guest reviewer's files: the read text (scans included) gets the identifier check too
+            _identifiers_after_reading(case_id, doc_ids)
         async with store.lock(case_id):
             gate = rules.evaluate(case_id)  # None while the Case File is not listed (V1 item 2.5)
             rules.sync_actions(case_id, gate)
@@ -161,7 +163,27 @@ def attach_warnings(job_id, warnings):
     return warnings
 
 
-def add_files(case_id, files, user="", warn=True, outside=False):
+def _identifiers_after_reading(case_id, doc_ids):
+    """Private Case Files (upload_safety): after reading, each record's page text is searched for likely identifiers; the record
+    carries identifiers_after_reading [{kind, where, sample (masked)}] for the Records list, and the audit the kinds only."""
+    from . import upload_safety
+    for doc_id in doc_ids:
+        d = store.get_doc(case_id, doc_id)
+        if not d or d.get("state") != "ready":
+            continue
+        found = []
+        for i, pg in enumerate(d.get("pages") or []):
+            text = pg.get("text") if isinstance(pg, dict) else str(pg or "")
+            found += upload_safety.scan_text(text or "", f"page {i + 1}")
+            if len(found) >= 12:
+                break
+        d["identifiers_after_reading"] = found[:12]
+        store.save_doc(case_id, d)
+        if found:
+            store.audit(case_id, {"kind": "private_read_identifiers", "doc_id": doc_id, "found": [{"kind": f["kind"], "where": f["where"]} for f in found[:12]]})
+
+
+def add_files(case_id, files, user="", warn=True, outside=False, meta=None):
     """files: list of (relative_path, bytes). Identical files already in the Case File are skipped (SHA-256); files that cannot be
     read are refused (job["unsupported"]: file + reason, audited) and never stored. Returns a job (processing runs in the background).
     warn=False leaves the big-scan warnings to the caller (scan_warnings in a thread, attach_warnings).
@@ -169,6 +191,7 @@ def add_files(case_id, files, user="", warn=True, outside=False):
     HIS-connected Case File; filed under outside/ and labelled so."""
     ids, skipped, unsupported, warnings = [], [], [], []
     for rel, data in files:
+        orig = rel
         if outside and not str(rel).startswith("outside/"):
             rel = "outside/" + str(rel).lstrip("/")
         reason = ingest.reject_reason(rel)  # .doc / .rtf / .odt without LibreOffice: refused with a clear message (V1 item 1.4)
@@ -185,6 +208,8 @@ def add_files(case_id, files, user="", warn=True, outside=False):
         if outside:
             d["outside"] = {"by": user, "at": store.now_iso()}
             store.save_doc(case_id, d)
+        if meta and isinstance(meta.get(orig), dict):  # a private Case File's upload record (upload_safety): written before reading starts
+            d.update(meta[orig]); store.save_doc(case_id, d)
         ids.append(d["doc_id"])
         store.audit(case_id, {"kind": "document_added", "doc_id": d["doc_id"], "file": rel, "by": user, **({"outside": True} if outside else {})})
     if warn:
@@ -577,7 +602,7 @@ def prepare_session_agents(sid, user, roles=None, case_ids=None, refresh=False):
     from . import board
     s = board.get(sid)
     wanted = [r for r in roles if r in board.ROLE_DEPARTMENT] if roles else None  # explicit roles: also an on-demand agent (V2 item 6.2)
-    cases = [a["case_id"] for a in s["agenda"] if (case_ids is None or a["case_id"] in case_ids) and a["case_id"] not in config.PROTECTED_CASES]
+    cases = [a["case_id"] for a in s["agenda"] if (case_ids is None or a["case_id"] in case_ids) and a["case_id"] not in config.HIDDEN_CASES]
     busy = {(c, r) for c, by_role in (s.get("agents") or {}).items() for r, x in by_role.items()
             if x.get("status") in AGENT_WAITING and SESSION_TASKS.get(sid)}
     # the roles active per Case File: a head not recorded present, a specialty marked absent, the Surgical Oncology agent only where no

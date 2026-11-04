@@ -46,6 +46,27 @@ _LIMITED_OK = ((("GET",), _re.compile(r"^$")), (("GET",), _re.compile(r"^/docume
 
 # What an account that still carries its first (or reset) password may call: who am I, and change the password.
 _PASSWORD_FIRST_OK = _re.compile(r"^/api/tb/(me|me/password|health)$")
+# Guest reviewers (org.json real_data, 5 Nov 2026) work with anonymized real files: two-factor sign-in first (TB_REAL_DATA_2FA=0
+# turns the rule off for tests), and on a site with TB_UPLOAD_POLICY=private_only only they upload, into their own private Case Files.
+_TWO_FACTOR_FIRST_OK = _re.compile(r"^/api/tb/(me|me/password|me/profile|health)$")
+
+
+def _upload_policy() -> str:
+    return "private_only" if __import__("os").getenv("TB_UPLOAD_POLICY", "all").strip().lower() == "private_only" else "all"
+
+
+def _upload_allowed(rl, c) -> bool:
+    """Under private_only: a guest reviewer, into a private Case File it created. Otherwise no extra rule (the route's own checks apply)."""
+    if _upload_policy() != "private_only":
+        return True
+    return bool(rl.get("real_data")) and config.is_private((c or {}).get("case_id")) and access.is_creator(rl, c or {})
+
+
+def _needs_two_factor(rl, mgr, u) -> bool:
+    if not rl.get("real_data") or __import__("os").getenv("TB_REAL_DATA_2FA", "1").strip() == "0":
+        return False
+    fn = getattr(mgr, "totp_enabled", None) if mgr is not None else None
+    return not (callable(fn) and fn(u))
 
 # What a Vaidyx admin, or a doctor who opened the Case File with a reason (scope READ, night-v3 item 1.9), may send inside a window
 # besides reading (security review #6): questions that change nothing and opening the images of a record (viewing). Everything else
@@ -152,6 +173,9 @@ class _ModelErrorRoute(APIRoute):
                     if (mgr is not None and callable(getattr(mgr, "must_change_password", None)) and mgr.must_change_password(u)
                             and not _PASSWORD_FIRST_OK.match(request.url.path)):  # a first or reset password works only to choose a new one
                         return JSONResponse({"detail": {"message": "Choose your own password first.", "code": "password_change_required"}}, status_code=409)
+                    if _needs_two_factor(rl, mgr, u) and not _TWO_FACTOR_FIRST_OK.match(request.url.path):
+                        return JSONResponse({"detail": {"message": "Turn on two-factor sign-in first (Settings, Security): this account works with real, anonymized files.",
+                                                        "code": "two_factor_required"}}, status_code=409)
                     if _READ_CASE.match(request.url.path) and not org.can(rl, "read_case"):  # patient data only for placed accounts (review M6)
                         return JSONResponse({"detail": "Your account is not placed in any department yet, so it cannot open Case Files. Ask a Tumour Board admin."}, status_code=403)
                     m = _CASE_PATH.match(request.url.path)
@@ -277,11 +301,43 @@ def _doc_department(d):
     return None if d.get("his") else d.get("department")
 
 
+def _private_upload_check(case_id, data, user, anonymized, confirm, reason):
+    """(cleaned data, per-file upload record, None) or (.., .., JSONResponse refusal) for an upload into a private Case File.
+    The uploader confirms the files are anonymized; refused types and dangerous files stop the whole upload; likely identifiers
+    stop it until the uploader chooses "upload anyway" with a reason (both audited, the values never: masked samples only)."""
+    from tumour_board import upload_safety
+    if str(anonymized).strip() != "1":
+        return data, None, JSONResponse({"detail": {"message": "Confirm that these files are anonymized (no name, phone, Aadhaar, address or hospital id).",
+                                                    "code": "confirm_anonymized"}}, status_code=400)
+    checked = [upload_safety.check(rel, b) for rel, b in data]
+    refused = [{"file": c.name, "reason": c.refused} for c in checked if c.refused]
+    if refused:
+        store.audit(case_id, {"kind": "private_upload_refused", "by": user, "files": refused})
+        return data, None, JSONResponse({"detail": {"message": "Some files cannot be uploaded.", "code": "upload_refused", "files": refused}}, status_code=415)
+    findings = [{"file": c.name, **f} for c in checked for f in c.findings]
+    why = str(reason or "").strip()[:500]
+    if findings and str(confirm).strip() != "1":
+        store.audit(case_id, {"kind": "private_upload_identifiers", "by": user, "found": [{"file": x["file"], "kind": x["kind"], "where": x["where"]} for x in findings]})
+        return data, None, JSONResponse({"detail": {"message": "These files may still identify the patient.", "code": "possible_identifiers",
+                                                    "findings": findings}}, status_code=409)
+    if findings and len(why) < 5:
+        return data, None, JSONResponse({"detail": {"message": "Give a short reason for uploading anyway.", "code": "reason_required"}}, status_code=400)
+    now = store.now_iso()
+    meta = {c.name: {"uploaded": {"by": user, "at": now, "anonymized_by_uploader": True, "cleaned": c.notes,
+                                  "text_checked": c.text_checked,
+                                  "identifiers_at_upload": [{"kind": f["kind"], "where": f["where"]} for f in c.findings],
+                                  **({"upload_anyway_reason": why} if c.findings else {})}} for c in checked}
+    store.audit(case_id, {"kind": "private_upload", "by": user, "files": len(checked), "anonymized_confirmed": True,
+                          **({"upload_anyway": True, "reason": why, "kinds": sorted({x["kind"] for x in findings})} if findings else {})})
+    return [(c.name, c.data) for c in checked], meta, None
+
+
 def _case_permissions(r, c, st, docs):
     """What this user may do on this Case File, so the UI can hide forbidden actions (the routes still enforce them)."""
     prot = protocol.get(c["protocol"]) if c.get("protocol") else {"mandatory": []}
     own = access.may(r, "upload_to_case", c)  # the owner's doctors (any treating doctor on a Case File without an owner), V2 item 5.1
-    return {"upload": own, "reprocess": own, "delete_case": org.can(r, "delete_case"),
+    mine_private = config.is_private(c.get("case_id")) and access.is_creator(r, c)  # a guest reviewer's own private Case File
+    return {"upload": own and _upload_allowed(r, c), "reprocess": own, "delete_case": org.can(r, "delete_case") or mine_private,
             "refetch": bool(c.get("his")) and own, "link_registration": bool(c.get("his")) and own,  # V2 items 3.2 / 3.5
             "board_record": org.can(r, "board_record"), "review": org.can(r, "review"), "list_case": access.may_list(r, c),
             "waive": {q["id"]: access.may(r, "waive", c, q.get("department") or None) for q in prot.get("mandatory", [])},
@@ -881,6 +937,8 @@ def setup_tumour_board_routes():
         or the caller is an admin), "case_id"?, "cancer_name"? (the cancer as picked or typed, 2 to 80 characters; required with protocol
         "generic", the four core records of a cancer with no checklist yet)}. The first fetch runs as a job."""
         u = _user(request); rl = _roles(request); _need(rl, "create_case"); b = await request.json()
+        if rl.get("real_data"):
+            raise HTTPException(403, "A guest reviewer creates a Case File from their own files (New Case File, without the hospital system).")
         if not isinstance(b, dict):
             raise HTTPException(400, "Send the identifier and the protocol")
         try:
@@ -930,6 +988,11 @@ def setup_tumour_board_routes():
     @r.post("/cases")
     async def create(request: Request):
         u = _user(request); rl = _roles(request); _need(rl, "create_case"); b = await request.json()
+        if not isinstance(b, dict):
+            raise HTTPException(400, "Send the Case File details")
+        private = bool(rl.get("real_data"))  # a guest reviewer: always a new private Case File with an id the server picks
+        if private:
+            b["case_id"] = "PRV-" + __import__("secrets").token_hex(4).upper()
         prot = b.get("protocol") or ""
         owner_dept = None  # the owning treating department (V2 item 5.1): named in the request, else the creator's own; the coordinator may leave it open (V1 path)
         if b.get("department") or (rl.get("treating") and not rl.get("admin") and not rl.get("coordinator")):
@@ -953,17 +1016,26 @@ def setup_tumour_board_routes():
             his_case.refuse_duplicate(his_case.case_uhids({"patient": pat}), prot, cancer_name, u, rl, via="manual")
         except his_case.DuplicateCaseFile as e:
             return JSONResponse(e.body(), status_code=409)
+        if private:  # the marker goes in before case.json, so there is no moment in which the Case File is visible to others
+            d = store.case_dir(b["case_id"])
+            if d.exists():
+                raise HTTPException(409, "Please try again.")
+            d.mkdir(parents=True)
+            (d / config.PRIVATE_MARKER).write_text(json.dumps({"by": u, "at": store.now_iso()}))
         try:
             c = store.create_case(store.safe_id(b["case_id"]), b.get("patient", {}), prot, b.get("board_date", ""), u, b.get("setting", ""), level or "")
         except FileExistsError:
             raise HTTPException(409, "Case already exists")
-        if owner_dept or cancer_name:
+        if owner_dept or cancer_name or private:
             if owner_dept:
                 c["department"] = owner_dept
             if cancer_name:
                 c["cancer_name"] = cancer_name
+            if private:
+                c["private"] = True
             store.save_case(c)
         store.audit(c["case_id"], {"kind": "case_created", "by": u, "listing": c["listing"]["status"], "protocol": prot, "setting": c.get("setting"), "owner": owner_dept,
+                                   **({"private": True} if private else {}),
                                    **({"cancer_name": cancer_name} if cancer_name else {})})
         return c
 
@@ -987,11 +1059,16 @@ def setup_tumour_board_routes():
 
     @r.delete("/cases/{case_id}")
     async def delete(case_id: str, request: Request):
-        u = _user(request); _need(_roles(request), "delete_case"); _case(case_id)
+        u = _user(request); rl = _roles(request); c = _case(case_id)
+        private = config.is_private(case_id)
+        if not (private and access.is_creator(rl, c)):  # a guest reviewer deletes their own private Case File; others need delete_case
+            _need(rl, "delete_case")
         n = notify.purge_case(case_id)  # its notifications carry the patient's name: they go with the Case File (V1 item 4.4)
         linked = his_case.unlink_cases(case_id, u)  # the same patient's other Case Files forget the link (V2 item 5.3)
         grants = pacs.revoke(case_id)  # the image viewer grants opened from it end with it (V2 item 6.3)
         store.audit(case_id, {"kind": "case_deleted", "by": u, "notifications_removed": n, "unlinked": linked, "image_grants_revoked": grants}); store.delete_case(case_id)
+        if private:  # the Case File's own audit goes with it: a receipt without patient details stays (who, when, how many records)
+            store.private_receipt({"kind": "private_case_deleted", "case_id": case_id, "by": u, "how": "by the creator"})
         log.info("case %s deleted by %s; %d notification(s) removed", case_id, u, n)
         return {"ok": True, "notifications_removed": n}
 
@@ -1054,10 +1131,13 @@ def setup_tumour_board_routes():
                 "referral": referral.public(c)}  # the open referral, the history, the hospital system's suggestions (V2 item 5.2)
 
     @r.post("/cases/{case_id}/documents")
-    async def upload(case_id: str, request: Request, files: list[UploadFile] = File(...), paths: str = Form("[]"), outside: str = Form("")):
+    async def upload(case_id: str, request: Request, files: list[UploadFile] = File(...), paths: str = Form("[]"), outside: str = Form(""),
+                     anonymized: str = Form(""), confirm: str = Form(""), reason: str = Form("")):
         """Upload into a Case File. Into an HIS-connected Case File every upload is an outside report (another hospital, a private
         laboratory; V2 item 3.6) unless `outside` is "0"; elsewhere `outside=1` labels it so."""
-        u = _user(request); c = _case(case_id); _need_case(_roles(request), "upload_to_case", c)
+        u = _user(request); rl = _roles(request); c = _case(case_id); _need_case(rl, "upload_to_case", c)
+        if not _upload_allowed(rl, c):
+            return JSONResponse({"detail": {"message": "On this site, uploading is for guest reviewers, into their own private Case Files.", "code": "upload_private_only"}}, status_code=403)
         rels = json.loads(paths or "[]")
         data = []
         for i, f in enumerate(files):
@@ -1066,7 +1146,12 @@ def setup_tumour_board_routes():
                 raise HTTPException(413, f"{f.filename} is larger than 60 MB")
             data.append((rels[i] if i < len(rels) and rels[i] else f.filename, b))
         is_outside = (str(outside).strip().lower() in ("1", "true", "yes")) or (bool(c.get("his")) and str(outside).strip().lower() not in ("0", "false", "no"))
-        job = service.add_files(case_id, data, u, warn=False, outside=is_outside)
+        meta = None
+        if config.is_private(case_id):  # a guest reviewer's anonymized real files (upload_safety): checked, cleaned, scanned first
+            data, meta, refusal = await asyncio.to_thread(_private_upload_check, case_id, data, u, anonymized, confirm, reason)
+            if refusal is not None:
+                return refusal
+        job = service.add_files(case_id, data, u, warn=False, outside=is_outside, meta=meta)
         warnings = service.attach_warnings(job["id"], await asyncio.to_thread(service.scan_warnings, case_id, job["doc_ids"], u))  # page count off the event loop
         return {"job": job["id"], "total": job["total"], "warnings": warnings}
 
@@ -1089,6 +1174,8 @@ def setup_tumour_board_routes():
         """Upload for a department without choosing a Case File. The files are read, classified and identified in the intake area, then
         matched to a patient (filed automatically on an exact identifier, otherwise queued for a person)."""
         u = _user(request); rl = _roles(request)
+        if _upload_policy() == "private_only":
+            return JSONResponse({"detail": {"message": "On this site, uploading is for guest reviewers, into their own private Case Files.", "code": "upload_private_only"}}, status_code=403)
         dept = org.department_id(department) if department else None
         if not dept:
             raise HTTPException(400, "Choose the department you are uploading for")

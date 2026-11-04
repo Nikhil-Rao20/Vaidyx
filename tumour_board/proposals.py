@@ -496,7 +496,7 @@ def execute_pending(case_id: str, user: str = "", roles: dict | None = None) -> 
 
 def _cases():
     for c in store.list_cases():
-        if c.get("case_id") in __import__("tumour_board.config", fromlist=["config"]).PROTECTED_CASES:
+        if c.get("case_id") in __import__("tumour_board.config", fromlist=["config"]).HIDDEN_CASES:
             continue
         yield c
 

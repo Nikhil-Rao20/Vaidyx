@@ -77,6 +77,39 @@ OCR_MAX_SIDE = int(os.getenv("TB_OCR_MAX_SIDE", "1800"))
 # skips them and no identifier is ever learned into them. Comma-separated ids; the default is the real case on this server.
 PROTECTED_CASES = {c.strip() for c in os.getenv("TB_PROTECTED_CASES", "TB-2026-bharath").split(",") if c.strip()}
 
+# Private Case Files (guest reviewers' own anonymized files, 5 Nov 2026): created by a login with the real_data flag; its folder holds
+# the PRIVATE marker. HIDDEN_CASES = PROTECTED_CASES + every private Case File: never listed, named, shown in a meeting, matched,
+# counted or suggested to anyone but the login that created it (the visibility checks use HIDDEN_CASES). PROTECTED_CASES alone
+# keeps its second meaning: no AI processing (summary, helper briefs, preparation), which a private Case File does get.
+PRIVATE_MARKER = "PRIVATE"
+_PRIVATE_ID = __import__("re").compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$")
+
+
+def is_private(case_id) -> bool:
+    cid = str(case_id or "")
+    return bool(_PRIVATE_ID.match(cid)) and (globals()["CASES_DIR"] / cid / PRIVATE_MARKER).is_file()
+
+
+class _HiddenCases:
+    """`cid in HIDDEN_CASES`: a protected (real) Case File or a private one. Read on every check (a marker file), so it is never stale."""
+
+    def __contains__(self, cid) -> bool:
+        return (cid in globals()["PROTECTED_CASES"]) or is_private(cid)
+
+    def __iter__(self):
+        ids = set(globals()["PROTECTED_CASES"])
+        try:
+            ids |= {d.name for d in globals()["CASES_DIR"].iterdir() if (d / PRIVATE_MARKER).is_file()}
+        except OSError:
+            pass
+        return iter(sorted(ids))
+
+    def __len__(self) -> int:
+        return len(list(iter(self)))
+
+
+HIDDEN_CASES = _HiddenCases()
+
 
 def near_match() -> bool:
     """V1 item 6.5: keep items whose quote matches the source only approximately in briefs and the summary, flagged "approximate source

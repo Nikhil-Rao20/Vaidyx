@@ -249,7 +249,7 @@ async def meetings_remind(mid: str, request: Request):
     Case File (the coordinator, the owner's consultants); never on an archived Case File (security review #7)."""
     u, rl = _who(request); common.need(rl, "remind"); b = await common.body(request); s = _meeting(mid); _viewer(rl, s)
     cid = _case_id(b.get("case_id"))
-    c = store.get_case(cid) if cid not in config.PROTECTED_CASES else None
+    c = store.get_case(cid) if cid not in config.HIDDEN_CASES else None
     if c and access.is_archived(c):
         common.fail(409, access.ARCHIVED_MESSAGE + ". Take it out of the archive first.", "archived")
     if c and not access.may_remind(rl, c):
@@ -498,7 +498,7 @@ async def meetings_slides(mid: str, cid: str, request: Request):
         common.fail(404, "This Case File is not on the meeting's agenda.", "not_on_agenda")
     if not meetings.manage(rl):  # this summary is the outside expert's view now (meetings-v2 2.6): anyone without the whole Case File sees
         # only the Case File on the floor, while the meeting is in session (the API check: members read every agenda case, also after the end)
-        c = store.get_case(cid) if cid not in config.PROTECTED_CASES else None
+        c = store.get_case(cid) if cid not in config.HIDDEN_CASES else None
         if not (c and access.scope(rl, c) == access.FULL) and (s.get("status") != "in_session" or s.get("current") != cid):
             common.fail(403, "Only the Case File on the floor is shown here, while the meeting is in session.", "not_current")
     from .. import board

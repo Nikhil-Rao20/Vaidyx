@@ -54,7 +54,7 @@ def read_identity(doc, known_ids=None):
 def patients_for_matching(exclude=()):
     """Every Case File's registered patient, for the matcher."""
     return [{"case_id": c["case_id"], "patient": c.get("patient") or {}, "listed": (c.get("listing") or {}).get("status") != "awaiting_listing"}
-            for c in store.list_cases() if c["case_id"] not in exclude and c["case_id"] not in config.PROTECTED_CASES
+            for c in store.list_cases() if c["case_id"] not in exclude and c["case_id"] not in config.HIDDEN_CASES
             and not (isinstance(c.get("archived"), dict) and c["archived"].get("at"))]  # an archived Case File receives no record (review #8)
 
 
@@ -92,7 +92,7 @@ def learn_ids(case_id, idr, by, doc_id=None):
     UHID / MRN / CR No. / IP / OP No. / ABHA are added to case.patient.ids when new, audited, so a later record carrying only the
     CR No. still auto-links. Never Aadhaar, never from a name-only match."""
     case = store.get_case(case_id)
-    if not case or case_id in config.PROTECTED_CASES:
+    if not case or case_id in config.HIDDEN_CASES:
         return []
     pat = case.setdefault("patient", {})
     have = identity.patient_record(pat)["ids"]

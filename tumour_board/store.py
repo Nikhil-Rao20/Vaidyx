@@ -116,6 +116,15 @@ def delete_case(case_id):
     _docs_cache.pop(case_id, None)
 
 
+def private_receipt(ev: dict) -> None:
+    """One line in <DATA_ROOT>/private_deletions.jsonl for a deleted private Case File (its own audit is deleted with it): ids, who,
+    when, never patient details."""
+    p = config.DATA_ROOT / "private_deletions.jsonl"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    with open(p, "a", encoding="utf-8") as f:
+        f.write(json.dumps({"at": now_iso(), **{k: v for k, v in ev.items() if k in ("kind", "case_id", "by", "how", "age_days", "records")}}) + "\n")
+
+
 def get_case(case_id):
     return _read_json(case_dir(case_id) / "case.json")
 
