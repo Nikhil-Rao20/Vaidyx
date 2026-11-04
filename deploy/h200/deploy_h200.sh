@@ -40,7 +40,7 @@ else
 fi
 
 # The tests CI cannot run (they need files kept only on the H200, deploy/ci/h200_only_tests.txt), on the new checkout.
-PY=${VX_PY:-/data/vaidyx/venv/app/bin/python}
+PY=${VX_PY:-/data/vaidyx/venv/tb_deploy/bin/python}   # the doctors' site's own environment (vx.sh)
 H200_TESTS=$(grep -v '^#' "$APP/deploy/ci/h200_only_tests.txt" 2>/dev/null | grep .)
 if [ -n "$H200_TESTS" ]; then
   if ! (cd "$APP" && "$PY" -m pytest -q -p no:cacheprovider $H200_TESTS > "$HOME/vaidyx/deploy_vm/logs/h200_tests.log" 2>&1); then

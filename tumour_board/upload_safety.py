@@ -115,13 +115,13 @@ def _pdf(c: Checked) -> None:
 def _image(c: Checked) -> None:
     from PIL import Image
     Image.MAX_IMAGE_PIXELS = MAX_PIXELS
-    try:
-        im = Image.open(io.BytesIO(c.data))
+    fmt = {".jpg": "JPEG", ".jpeg": "JPEG", ".png": "PNG", ".tif": "TIFF", ".tiff": "TIFF", ".bmp": "BMP", ".webp": "WEBP"}[c.ext]
+    try:  # only the decoder of the file's own type (pillow's other decoders, where most advisories are, are never reached)
+        im = Image.open(io.BytesIO(c.data), formats=[fmt])
         im.load()
     except Exception as e:  # includes Image.DecompressionBombError
         c.refused = f"the image could not be opened safely ({type(e).__name__})"
         return
-    fmt = {".jpg": "JPEG", ".jpeg": "JPEG", ".png": "PNG", ".tif": "TIFF", ".tiff": "TIFF", ".bmp": "BMP", ".webp": "WEBP"}[c.ext]
     frames = []
     try:
         n = getattr(im, "n_frames", 1)

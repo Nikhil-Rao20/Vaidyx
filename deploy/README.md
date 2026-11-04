@@ -26,8 +26,8 @@ read, restart or edit their units, files, certificates or nginx sites. Every VM 
 ## Setting up the doctors' instance (H200, once)
 
 ```bash
-/data/vaidyx/venv/app/bin/python deploy/h200/setup_instance.py --app /data/vaidyx/tb_deploy/app   # synthetic cases, logins
-/data/vaidyx/venv/app/bin/python deploy/h200/demo_owners.py   # after the app and gate run: TB-001..TB-008 get their department
+/data/vaidyx/venv/tb_deploy/bin/python deploy/h200/setup_instance.py --app /data/vaidyx/tb_deploy/app   # synthetic cases, logins
+/data/vaidyx/venv/tb_deploy/bin/python deploy/h200/demo_owners.py   # after the app and gate run: TB-001..TB-008 get their department
 ```
 
 `demo_owners.py` signs in as the MDT Coordinator and uses the app's own audited route, so each doctor finds the practice Case
@@ -42,6 +42,14 @@ Visitors reach its screens at `/his` and `/desk`; its data API (`/fhir`) is not 
 staff logins (reception, OPD and ward doctors, lab, radiology, pathology, admin) are in
 `/data/vaidyx/tb_deploy/his_mock/logins.tsv` (mode 600); new passwords: `TB_HIS_MOCK_DATA=/data/vaidyx/tb_deploy/his_mock
 python -m his_mock.auth --reset`, run from the pinned checkout.
+
+## Python environment
+
+The doctors' site (app, gate, HIMS copy, release tests) runs on its own environment `/data/vaidyx/venv/tb_deploy`, built from
+`requirements-ci.lock` (the pins CI tests, with the security upgrades). Rebuild: create it from the base Python 3.10
+(`/opt/miniforge3/envs/mlenv/bin/python3.10 -m venv`), `pip install pip==26.2.1`, `pip install -r requirements-ci.lock`. The shared
+`/data/vaidyx/venv/app` (internal app, public demo) is separate. Still open: pillow, filelock and dnspython fixes need Python 3.11+
+(and a newer fastembed); upload_safety opens images only with the decoder of their own type meanwhile.
 
 ## Everyday commands (H200)
 

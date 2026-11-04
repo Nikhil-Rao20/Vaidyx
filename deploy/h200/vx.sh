@@ -20,7 +20,9 @@ ROOT=${VX_DEPLOY_ROOT:-/data/vaidyx/tb_deploy}
 APP=$ROOT/app
 SEC=${VX_SECRETS:-$HOME/vaidyx/deploy_vm/secrets}
 LOG=$ROOT/logs
-PY=/data/vaidyx/venv/app/bin/python
+# The doctors' site has its own environment (5 Nov 2026): requirements-ci.lock with the security upgrades, the same pins CI tests.
+# The shared /data/vaidyx/venv/app (internal app, public demo) is not touched by it.
+PY=${VX_PY:-/data/vaidyx/venv/tb_deploy/bin/python}
 CHISEL=${VX_CHISEL:-/data/vaidyx/tools/chisel-1.13.0/chisel}
 HOST=${VX_PUBLIC_HOST:-vaidyx-tb-8-231-83-210.sslip.io}
 APP_PORT=7300; GATE_PORT=7301; HIS_PORT=7330; LINK_REMOTE="R:127.0.0.1:970:127.0.0.1:$GATE_PORT"   # 970: below 1024, so no other VM user can listen there
