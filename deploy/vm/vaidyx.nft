@@ -1,0 +1,12 @@
+# Our own nftables table (never a flush of the ruleset; RHV and TQC rules untouched). Installed by setup-vm.sh as
+# /etc/vaidyx-tb/vaidyx.nft (@WWW_UID@ replaced with www-data's uid). Only nginx (www-data) and root may connect to the
+# link's two localhost ports; every other local user on the shared VM is refused.
+table inet vaidyx
+delete table inet vaidyx
+table inet vaidyx {
+    chain output {
+        type filter hook output priority 0; policy accept;
+        ip daddr 127.0.0.1 tcp dport { 17000, 17999 } meta skuid { 0, @WWW_UID@ } accept
+        ip daddr 127.0.0.1 tcp dport { 17000, 17999 } counter reject with tcp reset
+    }
+}

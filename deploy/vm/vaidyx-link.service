@@ -1,0 +1,44 @@
+[Unit]
+Description=Vaidyx-TB secure link server (chisel, localhost only; the H200 connects through nginx /vx-link)
+After=network-online.target vaidyx-firewall.service
+Wants=network-online.target
+Requires=vaidyx-firewall.service
+
+[Service]
+User=vaidyx-link
+Group=vaidyx-link
+LoadCredential=key:/etc/vaidyx-tb/chisel_server_key.pem
+LoadCredential=users:/etc/vaidyx-tb/chisel-users.json
+ExecStart=/mnt/data/vaidyx-tb/bin/chisel server --host 127.0.0.1 --port 17999 --reverse --keepalive 25s --keyfile %d/key --authfile %d/users
+Restart=always
+RestartSec=5
+
+# Sandbox: no privileges, read-only system, no access to the neighbours' files.
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+InaccessiblePaths=-/mnt/data/tanuh -/mnt/data/tqc -/etc/tqc -/etc/lego -/var/www
+MemoryMax=512M
+CPUQuota=100%
+TasksMax=256
+
+[Install]
+WantedBy=multi-user.target
