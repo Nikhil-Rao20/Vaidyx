@@ -1,6 +1,6 @@
 // The 2 to 5 items of the top bar and the Dock, per role: Case Files and Meetings for everyone clinical, plus the role items. Several roles give the union, in a fixed order.
 import type { LucideIcon } from "lucide-react";
-import { Activity, CalendarDays, FolderOpen, Inbox, MessageSquare, Settings2, Users } from "lucide-react";
+import { Activity, BookOpen, CalendarDays, FolderOpen, Inbox, MessageSquare, Settings2, Users } from "lucide-react";
 import type { Me } from "@/lib/session";
 
 export interface NavItem {
@@ -49,6 +49,8 @@ export function navItems(me: Me, messagesUnread?: number): NavItem[] {
   }
   if (clinical || r.outside_expert) {
     items.push({ key: "meetings", label: "Meetings", to: "/meetings", icon: CalendarDays, match: startsWith("/meetings") });
+    // Ask PubMed (3 Nov 2026): general questions answered from PubMed abstracts, for the same clinical logins and outside experts.
+    items.push({ key: "pubmed", label: "PubMed", to: "/pubmed", icon: BookOpen, match: startsWith("/pubmed") });
   }
   // Messages (Phase 8): every placed login and the MDT Coordinator; the badge is the unread count.
   if (me.messages) {
@@ -68,11 +70,13 @@ export function navItems(me: Me, messagesUnread?: number): NavItem[] {
 }
 
 /** Five fit the top bar and the Dock. When there are more, Messages steps out first: its icon with the badge stays in the top bar
- * beside the bell on every screen, so nothing is lost. */
+ * beside the bell on every screen, so nothing is lost. Still more (a clinical login who is also an admin): PubMed steps out next,
+ * as the Case Files page keeps its Ask PubMed card. */
 export function fitNav(items: NavItem[]): NavItem[] {
   if (items.length <= 5) return items;
-  const without = items.filter((it) => it.key !== "messages");
-  return without.slice(0, 5);
+  let out = items.filter((it) => it.key !== "messages");
+  if (out.length > 5) out = out.filter((it) => it.key !== "pubmed");
+  return out.slice(0, 5);
 }
 
 /** Where "Home" goes for this person. */

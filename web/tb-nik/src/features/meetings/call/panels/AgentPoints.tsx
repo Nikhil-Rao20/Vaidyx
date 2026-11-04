@@ -135,13 +135,14 @@ export function chipText(c: Pick<AgentCitation, "doc_title" | "date" | "page">):
   return parts.join(", ");
 }
 
-/** True when this person may put a record on the stage: the coordinator, or the presenter of the Case File on the floor. */
-export function mayOpenRecords(ctx: Pick<CallCtx, "canManage" | "me" | "state" | "variant">): boolean {
-  if (ctx.variant === "room") return false;
-  return ctx.canManage || (!!ctx.me && ctx.state.current?.presenter?.user === ctx.me);
+/** True when this screen leads the Board view (the coordinator, or the presenter of the Case File on the floor, meetings-v2 2.4): a
+ *  source chip then opens its report in the Board view for everyone, at its page with the line highlighted. */
+export function mayOpenRecords(ctx: Pick<CallCtx, "variant" | "follow">): boolean {
+  return ctx.variant !== "room" && ctx.follow.mode === "drive";
 }
 
-/** One source chip. For the coordinator and the presenter it opens the record on the stage; for others it shows the quote. */
+/** One source chip. For the screen that leads the Board view it opens the report there (everyone follows); for others it shows the
+ *  quote. */
 export function CitationChip({ c, onQuote }: { c: AgentCitation; onQuote?: () => void }) {
   const ctx = useCall();
   const text = chipText(c);
@@ -150,7 +151,7 @@ export function CitationChip({ c, onQuote }: { c: AgentCitation; onQuote?: () =>
   if (ctx.variant === "room") return <span className="quote-chip ml-1 align-middle" title={quote}><FileText className="size-3" aria-hidden />{text}</span>;
   const onClick = () => {
     if (open) {
-      void ctx.actions.open("record", c.doc_id).catch(() => undefined);
+      ctx.follow.navigate("reports", c.doc_id, typeof c.page === "number" ? c.page : 0, c.quote ?? "");
       if (ctx.phone) ctx.setPanel(null);  // the sheet covers the stage on a phone
       return;
     }
@@ -158,7 +159,7 @@ export function CitationChip({ c, onQuote }: { c: AgentCitation; onQuote?: () =>
   };
   return (
     <button type="button" className="quote-chip ml-1 align-middle hover:brightness-95" title={quote} onClick={onClick} data-testid="point-chip"
-      aria-label={open ? `${text}: open the record on the screen` : `${text}: show the quote`}>
+      aria-label={open ? `${text}: open the report in the Board view` : `${text}: show the quote`}>
       <FileText className="size-3" aria-hidden />{text}
     </button>
   );

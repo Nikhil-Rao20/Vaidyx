@@ -13,7 +13,12 @@ export type LiveEventType =
   | "agents" | "spotlight" | "reaction" | "chat" | "presenting" | "present_allowed"
   // night-v3 Phase 6: the agents speak by reference ({role, question, index, final}) and a stop for everyone ({role, question, by});
   // both leave the state as it is and reach the shell through lastEvent
-  | "agent_speech" | "agent_stop";
+  | "agent_speech" | "agent_stop"
+  // meetings-v2 2.2: the follow state of the Board view
+  | "view"
+  // meetings-v2 5.1 / 5.2: the recorder's state ({recording}) and the discussion notes of a Case File written or changed ({case_id,
+  // lines, generated_at, review}); the notes event leaves the state as it is and reaches the shell through its events
+  | "recording" | "notes";
 
 export interface LiveEvent { type: LiveEventType | string; [k: string]: unknown }
 
@@ -213,8 +218,31 @@ export interface Opened {
   viewer_url?: string;
   modality?: string | null;
   page?: number;
+  /** Images opened through the follow state: the admitted members granted the viewer on the study. */
+  granted?: string[];
   by?: string;
   at?: string;
+}
+
+/** The four tabs of the Board view (meetings-v2 D3). */
+export type BoardTab = "summary" | "reports" | "images" | "stage";
+export const BOARD_TABS: readonly BoardTab[] = ["summary", "reports", "images", "stage"];
+
+/** The follow state (meetings-v2 T1, item 2.2): what the room and every follower render in the Board view. Set by the coordinator or the
+ *  presenter of the Case File on the floor (POST /meetings/{mid}/view), reset to the Summary on Next; null when nothing is on the floor. */
+export interface BoardViewState {
+  case_id: string;
+  tab: BoardTab;
+  doc_id: string | null;
+  /** 0-based, only with a record. */
+  page: number | null;
+  /** The highlighted line (at most 300 characters). */
+  quote: string;
+  /** A record ({kind: "record", doc_id, title, url}) or the images ({kind: "images", doc_id, title, study_uid, url, modality, granted}). */
+  opened: Opened | null;
+  by: string;
+  by_name: string;
+  at: string;
 }
 
 export interface MeetingTimer { seconds_left: number; running: boolean; total?: number }
@@ -316,6 +344,47 @@ export interface MeetingInfo {
   /** A number the remote members may call (the room phone), when the hospital set one. */
   phone?: string;
   room_phone?: string;
+  /** The recorder's state on a summary row and the join answer (meetings-v2 5.2): off, on or paused. */
+  recording?: RecordingStateWord | string;
+}
+
+/** The meeting recorder (meetings-v2 5.1, D11): speech becomes text in memory, NO AUDIO IS EVER KEPT. off, on, or paused. */
+export type RecordingStateWord = "off" | "on" | "paused";
+
+/** The recorder's state as every screen gets it (meeting_notes.recording_view): who started it, the counters, the badge words. */
+export interface RecordingView {
+  state: RecordingStateWord;
+  by?: string | null;
+  by_name?: string;
+  started_at?: string | null;
+  paused_at?: string | null;
+  stopped_at?: string | null;
+  /** Chunks the server took, and the text segments stored from them (never the words). */
+  chunks?: number;
+  segments?: number;
+  /** "Recording: text only, no audio kept" (on), "Recording paused: text only, no audio kept" (paused), "" (off). */
+  label?: string;
+  /** The join page's words while on or paused. */
+  notice?: string;
+}
+
+/** A recorder state from the server, checked loosely: off when it says nothing usable. */
+export function asRecording(v: unknown): RecordingView {
+  if (!v || typeof v !== "object") return { state: "off" };
+  const o = v as Record<string, unknown>;
+  const state: RecordingStateWord = o.state === "on" || o.state === "paused" ? o.state : "off";
+  const str = (k: string) => (typeof o[k] === "string" ? (o[k] as string) : null);
+  return {
+    state, by: str("by"), by_name: str("by_name") ?? "", started_at: str("started_at"), paused_at: str("paused_at"), stopped_at: str("stopped_at"),
+    chunks: typeof o.chunks === "number" ? o.chunks : 0, segments: typeof o.segments === "number" ? o.segments : 0,
+    label: str("label") ?? "", notice: str("notice") ?? "",
+  };
+}
+
+/** The recorder is running or paused (the badge and the join notice show). */
+export function isRecording(r: { state?: string } | string | null | undefined): boolean {
+  const st = typeof r === "string" ? r : r?.state;
+  return st === "on" || st === "paused";
 }
 
 export interface MeetingOutcome { outcome: string; label?: string; record?: string; by?: string; at?: string; decision_text?: string; moved_to?: string | null; flagged?: boolean }
@@ -332,7 +401,9 @@ export interface MeetingState {
   agent?: AgentState | null;
   can?: { manage?: boolean; record?: boolean; ask?: boolean; card?: boolean; card_required?: boolean; video?: boolean; present?: boolean; chat?: boolean;
     /** I may ask the agents now (the coordinator always; members while "Members can ask the agents" is on). */
-    ask_agents?: boolean };
+    ask_agents?: boolean;
+    /** The coordinator's switch "Members can ask the agents" (the coordinator may always ask). */
+    members_ask?: boolean };
   /** Every absent head's stand-in agent (night-v3 5.1, D2); `agent` above stays for older readers. */
   agents?: AgentInfo[];
   /** The people the coordinator spotlighted for everyone (night-v3 5.1). */
@@ -350,9 +421,28 @@ export interface MeetingState {
   heads?: Array<{ id: string; name?: string; role?: string } | string>;
   absent_roles?: string[];
   status?: string;
+  /** The follow state of the Board view (meetings-v2 2.2): sent to the admitted members and the coordinator only; null otherwise. */
+  view?: BoardViewState | null;
+  /** The recorder (meetings-v2 5.1): every screen shows the badge while it is on or paused. */
+  recording?: RecordingView | null;
 }
 
 const EMPTY_CURRENT: NonNullable<MeetingState["current"]> = { case_id: null, slide: 0, opened: null, timer: null, presenter: null };
+
+/** A follow state from the server (GET /meetings/{mid} or the socket), checked loosely: null when it names no Case File. */
+export function asBoardView(v: unknown): BoardViewState | null {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  const cid = typeof o.case_id === "string" ? o.case_id : "";
+  if (!cid) return null;
+  const tab = (BOARD_TABS as readonly string[]).includes(String(o.tab)) ? (o.tab as BoardTab) : "summary";
+  const page = typeof o.page === "number" && Number.isFinite(o.page) && o.page >= 0 ? Math.floor(o.page) : null;
+  return {
+    case_id: cid, tab, doc_id: typeof o.doc_id === "string" && o.doc_id ? o.doc_id : null, page,
+    quote: typeof o.quote === "string" ? o.quote : "", opened: asOpened(o.opened),
+    by: typeof o.by === "string" ? o.by : "", by_name: typeof o.by_name === "string" ? o.by_name : "", at: typeof o.at === "string" ? o.at : "",
+  };
+}
 
 /** One agent's state event merged into the list by role (the event carries the state, who it concerns, the question and the time). */
 export function mergeAgent(list: AgentInfo[] | undefined, a: Partial<AgentInfo> & { role?: string | null }): AgentInfo[] | undefined {
@@ -398,8 +488,19 @@ export function applyLiveEvent(s: MeetingState | null, ev: LiveEvent): MeetingSt
       if (changed) { next.presenting = null; }
       if (ev.status === "in_session" && s.meeting.status !== "in_session") next.meeting = { ...s.meeting, status: "in_session" };
       if (changed) next.decision_live = null;
+      // another Case File on the floor: the followers start on its Summary until the server's "view" event names who moved it (2.2)
+      if (changed) next.view = cid ? { case_id: cid, tab: "summary", doc_id: null, page: null, quote: "", opened: null, by: "", by_name: "", at: "" } : null;
       return next;
     }
+    case "view": {
+      // the follow state (meetings-v2 2.2): {type: "view", view: {case_id, tab, doc_id, page, quote, opened, by, by_name, at}}
+      next.view = asBoardView(ev.view);
+      return next;
+    }
+    // the recorder (meetings-v2 5.1): {type: "recording", recording: {state, by, by_name, started_at, ..., label, notice}}
+    case "recording": next.recording = asRecording(ev.recording); return next;
+    // the notes of a Case File were written or changed: the shell tells the coordinator and the notes panel reads them again
+    case "notes": return s;
     case "open": {
       // live.py sends {case_id, opened}; an older shape put the fields at the top level.
       const opened = ev.opened !== undefined ? asOpened(ev.opened) : ev.kind ? asOpened({ kind: ev.kind, doc_id: ev.doc_id, study_uid: ev.study_uid, viewer_url: ev.viewer_url, url: ev.url, page: ev.page }) : null;
@@ -476,6 +577,8 @@ export function applyLiveEvent(s: MeetingState | null, ev: LiveEvent): MeetingSt
       const m = ev.meeting && typeof ev.meeting === "object" ? (ev.meeting as MeetingInfo) : null;
       next.meeting = m ? { ...s.meeting, ...m } : { ...s.meeting, status: ev.cancelled ? "cancelled" : "closed" };
       next.decision_live = null;
+      next.view = null;
+      next.recording = { ...(s.recording ?? { state: "off" }), state: "off", label: "", notice: "" };  // the end stops the recorder
       return next;
     }
     case "meeting": if (ev.meeting && typeof ev.meeting === "object") next.meeting = { ...s.meeting, ...(ev.meeting as MeetingInfo) }; return next;
@@ -524,23 +627,26 @@ export function useMeetingLive(mid: string, opts: { enabled?: boolean; onEvent?:
   onEventRef.current = opts.onEvent;
   const client = useRef<LiveClient | null>(null);
   const lastEventAt = useRef(0);
+  const fetchStartedAt = useRef(0);
 
   const poll = useQuery({
     queryKey: ["meeting", mid],
-    queryFn: () => api.get<MeetingState>(meetingUrl(mid)),
+    queryFn: () => { fetchStartedAt.current = Date.now(); return api.get<MeetingState>(meetingUrl(mid)); },
     enabled: enabled && !!mid,
     refetchInterval: (q) => (q.state.error instanceof ApiError && (q.state.error.status === 404 || q.state.error.status === 403) ? false : 10_000),
     refetchIntervalInBackground: true,
     retry: (n, e) => !(e instanceof ApiError && (e.status === 404 || e.status === 403)) && n < 2,
   });
 
-  // The poll is the truth unless a live event arrived while it was in flight (then the live part stays).
+  // The poll is the truth unless a live event arrived while it was in flight (then the live part stays): measured from when the
+  // request left, so a slow answer never brings back the case before a Next (review finding 14).
   useEffect(() => {
     if (!poll.data) return;
     setLoaded(true);
     const fresh = poll.data;
-    const recentLive = Date.now() - lastEventAt.current < 2500;
-    setState((old) => (old && recentLive ? { ...fresh, current: old.current ?? fresh.current, decision_live: old.decision_live ?? fresh.decision_live, questions: old.questions?.length > (fresh.questions?.length ?? 0) ? old.questions : fresh.questions } : fresh));
+    const recentLive = lastEventAt.current >= fetchStartedAt.current;
+    // the follow state goes with the case on the floor: a slow poll never brings back an older view either (meetings-v2 2.4)
+    setState((old) => (old && recentLive ? { ...fresh, current: old.current ?? fresh.current, view: old.view !== undefined ? old.view : fresh.view, recording: old.recording ?? fresh.recording, decision_live: old.decision_live ?? fresh.decision_live, questions: old.questions?.length > (fresh.questions?.length ?? 0) ? old.questions : fresh.questions } : fresh));
   }, [poll.data, poll.dataUpdatedAt]);
 
   useEffect(() => {
@@ -551,7 +657,9 @@ export function useMeetingLive(mid: string, opts: { enabled?: boolean; onEvent?:
         setLastEvent(ev);
         setState((s) => applyLiveEvent(s, ev));
         onEventRef.current?.(ev);
-        if (ev.type === "decision" || ev.type === "agenda" || ev.type === "ended" || ev.type === "meeting") void qc.invalidateQueries({ queryKey: ["meeting", mid] });
+        // an admission changes what the person may do (video, chat, questions): the whole state is read again at once, not at the next
+        // poll, which swapped a just-admitted member's call for the pre-join (review finding 7)
+        if (ev.type === "decision" || ev.type === "agenda" || ev.type === "ended" || ev.type === "meeting" || ev.type === "admit") void qc.invalidateQueries({ queryKey: ["meeting", mid] });
       },
       onStatus: (st, d) => { setStatus(st); setStatusDetail(d); },
     });

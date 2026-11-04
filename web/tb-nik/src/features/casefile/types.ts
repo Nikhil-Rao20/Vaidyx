@@ -166,6 +166,8 @@ export interface ChatThread {
   model?: string | null;
   /** Set by the page when the answer came from the old /ask route and is not saved. */
   unsaved?: boolean;
+  /** Nothing in the records and the question reads as a general one: the screen offers "Ask PubMed?" (docs/pubmed-ask section 8). */
+  suggest_pubmed?: boolean;
 }
 
 // ---- helpers.py --------------------------------------------------------------------------------------------------

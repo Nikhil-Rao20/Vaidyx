@@ -8,7 +8,7 @@ import type {
   CaseFile, SlotsResponse, Slot, SlotSection, QuoteBoxes, ChatThread, Helper, HelperMessage, PublishedResult, PublishedSearch, SimilarInfo, SimilarOpen, SimilarResponse, Team, Proposal,
   Urgency, Job, RequestDraft, GateRequirement, CaseAction, SendToBoardBody, MeetingMoveResult, SummaryLine,
 } from "./types";
-import type { CaseSentence, CaseSummaryReview, CaseSummaryVersionRow, CaseSummaryView } from "./steps/types";
+import type { CaseMeetingNotes, CaseSentence, CaseSummaryReview, CaseSummaryVersionRow, CaseSummaryView } from "./steps/types";
 
 const enc = encodeURIComponent;
 export const caseUrl = (id: string) => `${TB}/cases/${enc(id)}`;
@@ -60,6 +60,8 @@ export const getCaseSummary = (id: string, n?: number) => api.get<{ current: num
 export const buildCaseSummary = (id: string) => api.post<Record<string, unknown>>(`${caseUrl(id)}/case-summary`, {});
 export const reviewCaseSummary = (id: string, n: number, status: "reviewed" | "flagged" | "ai_draft", comment = "") => api.post<CaseSummaryReview>(`${caseUrl(id)}/case-summary/${n}/review`, { status, comment });
 export const editCaseSentence = (id: string, n: number, sentenceId: string, text: string) => api.post<CaseSentence>(`${caseUrl(id)}/case-summary/${n}/edit`, { sentence_id: sentenceId, text });
+/** The Case File's AI discussion notes from every meeting (meetings-v2 5.3 / 5.4); 403 for a reader of part of the Case File. */
+export const getMeetingNotes = (id: string, signal?: AbortSignal) => api.get<CaseMeetingNotes>(`${caseUrl(id)}/meeting-notes`, { signal });
 export const setSummaryLine = (id: string, text: string) => api.post<{ summary_line: SummaryLine }>(`${caseUrl(id)}/summary-line`, { text });
 export const reviewArtefact = (id: string, artefact: string, status = "reviewed", comment = "") => api.post(`${caseUrl(id)}/review`, { artefact, status, comment });
 export const refetchHis = (id: string) => api.post<{ job: string; total: number }>(`${caseUrl(id)}/his/refetch`, {});
@@ -72,7 +74,6 @@ export const uploadDocuments = (id: string, files: File[], outside: boolean) => 
 };
 export const openImages = (id: string, doc: string) => api.post<{ available: boolean; viewer_url?: string; reason?: string; modality?: string; instances?: number }>(`${caseUrl(id)}/documents/${enc(doc)}/images`, {});
 export const docFileUrl = (id: string, doc: string, page?: number) => `${caseUrl(id)}/documents/${enc(doc)}/file` + (page !== undefined ? `?render=1&page=${page}` : "");
-export const deckUrl = (id: string) => `${caseUrl(id)}/deck`;
 export const exportVtbUrl = (id: string) => `${caseUrl(id)}/export/vtb`;
 export const askOld = (id: string, question: string) => api.post<{ status: string; statements: Array<{ text: string; citations: Array<{ doc_id: string; doc_title?: string; title?: string; page?: number; quote?: string }> }>; message?: string; seconds?: number }>(`${caseUrl(id)}/ask`, { question });
 

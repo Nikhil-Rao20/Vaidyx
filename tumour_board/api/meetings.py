@@ -134,11 +134,17 @@ async def meetings_get(mid: str, request: Request):
 
 @router.put("/meetings/{mid}/agenda")
 async def meetings_agenda(mid: str, request: Request):
+    """{discussion[], noting[], not_ready[]?, by_urgency[]?}: the coordinator's order is kept; a list put in an order that is not the
+    urgency order is arranged by hand from then on (new Case Files go at its end, marked new); by_urgency names the lists to put back in
+    urgency order (meetings-v2 item 3.2)."""
     u, rl = _who(request); common.need(rl, "session"); b = await common.body(request); s = _meeting(mid)
     disc = [_case_id(x) for x in (b.get("discussion") or [])]
     note = [_case_id(x) for x in (b.get("noting") or [])]
     nr = [_case_id(x) for x in b["not_ready"]] if isinstance(b.get("not_ready"), list) else None
-    s = _call(meetings.set_agenda, s["id"], u, disc, note, nr)
+    bu = b.get("by_urgency")
+    if bu is not None and not (isinstance(bu, list) and all(isinstance(x, str) for x in bu)):
+        common.fail(400, "by_urgency must be a list of list names (discussion, noting).", "bad_list")
+    s = _call(meetings.set_agenda, s["id"], u, disc, note, nr, tuple(bu or ()))
     return meetings.view(s["id"], rl)
 
 
@@ -149,6 +155,56 @@ async def meetings_agenda_add(mid: str, request: Request):
     async with store.lock(cid):  # it may clear a withdraw on the Case File (meetings._one_agenda)
         s = _call(meetings.add_to_agenda, s["id"], u, cid, str(b.get("list") or "discussion"), str(b.get("reason") or ""))
     return meetings.view(s["id"], rl)
+
+
+# ---- weekly series (meetings-v2 item 3.1): the MDT Coordinator only ---------------------------------------------------------------------
+
+def _series_id(sid: str) -> str:
+    sid = str(sid or "").strip()
+    if not (sid[:1] == "W" and sid[1:].isalnum() and len(sid) <= 20):
+        common.fail(404, "Weekly series not found.", "not_found")
+    return sid
+
+
+@router.get("/meeting-series")
+async def series_list(request: Request):
+    """{series: [series row], weekdays: [Monday .. Sunday]}; a series row: its fields, status (active, paused, stopped), label ("Every
+    week on Friday at 10:00") and its meetings dated today or later (summary rows, cancelled ones too)."""
+    u, rl = _who(request); common.need(rl, "session")
+    return {"series": meetings.list_series(), "weekdays": list(meetings.WEEKDAY_NAMES)}
+
+
+@router.post("/meeting-series")
+async def series_create(request: Request):
+    """{title?, weekday 0..6 (or the name), time HH:MM, room?, video?, minutes_per_case?} -> {series, made: [meeting ids]}."""
+    u, rl = _who(request); common.need(rl, "session"); b = await common.body(request)
+    return _call(meetings.create_series, u, b)
+
+
+@router.put("/meeting-series/{sid}")
+async def series_update(sid: str, request: Request):
+    """The same fields (only those given) -> {series, changed, cancelled, made: [meeting ids]}."""
+    u, rl = _who(request); common.need(rl, "session"); b = await common.body(request)
+    return _call(meetings.update_series, _series_id(sid), u, b)
+
+
+@router.post("/meeting-series/{sid}/pause")
+async def series_pause(sid: str, request: Request):
+    u, rl = _who(request); common.need(rl, "session")
+    return _call(meetings.pause_series, _series_id(sid), u)
+
+
+@router.post("/meeting-series/{sid}/resume")
+async def series_resume(sid: str, request: Request):
+    u, rl = _who(request); common.need(rl, "session")
+    return _call(meetings.resume_series, _series_id(sid), u)
+
+
+@router.post("/meeting-series/{sid}/stop")
+async def series_stop(sid: str, request: Request):
+    """-> {series, cancelled: [ids of the empty future meetings cancelled], kept: [summary rows of the future meetings with Case Files]}."""
+    u, rl = _who(request); common.need(rl, "session")
+    return _call(meetings.stop_series, _series_id(sid), u)
 
 
 # ---- the owner moves or withdraws its Case File (night-v3 item 1.6) ------------------------------------------------------------------
@@ -265,6 +321,19 @@ async def meetings_open(mid: str, request: Request):
     return {"opened": await _acall(meetings.open_item(s["id"], u, str(b.get("kind") or "none"), doc_id))}
 
 
+VIEW_LIMIT = common.RateLimit(120, 60)  # Board view moves per login per minute (each click of the driver posts one)
+
+
+@router.post("/meetings/{mid}/view")
+async def meetings_view_set(mid: str, request: Request):
+    """{tab, doc_id?, page?, quote?}: the driver (the coordinator, or the presenter of the Case File on the floor while admitted) moves the
+    Board view every follower renders (meetings-v2 item 2.2, meetings.set_view). Answers {"view": {case_id, tab, doc_id, page, quote, opened,
+    by, by_name, at}}."""
+    u, rl = _who(request); b = await common.body(request); s = _meeting(mid); _member(rl, s)
+    VIEW_LIMIT.check(u, "Too many Board view changes in a minute. Wait a moment.")
+    return {"view": await _acall(meetings.set_view(s["id"], u, rl, str(b.get("tab") or ""), str(b.get("doc_id") or ""), b.get("page"), b.get("quote")))}
+
+
 @router.post("/meetings/{mid}/timer")
 async def meetings_timer(mid: str, request: Request):
     u, rl = _who(request); common.need(rl, "session"); b = await common.body(request); s = _meeting(mid)
@@ -353,6 +422,8 @@ async def meetings_spotlight(mid: str, request: Request):
     """The coordinator spotlights up to three admitted people for everyone (night-v3 5.1); an empty list removes the spotlight."""
     u, rl = _who(request); common.need(rl, "session"); b = await common.body(request); s = _meeting(mid)
     users = b.get("users")
+    if users is not None and not isinstance(users, list):  # it cleared the spotlight (the API check, meetings-v2 1.2)
+        common.fail(400, "Send the people to spotlight as a list.", "bad_users")
     users = [str(x) for x in users][:10] if isinstance(users, list) else []
     return {"spotlight": _call(meetings.spotlight, s["id"], u, users)}
 
@@ -409,7 +480,8 @@ async def meetings_end_case(mid: str, cid: str, request: Request):
 @router.post("/meetings/{mid}/cases/{cid}/card")
 async def meetings_card(mid: str, cid: str, request: Request):
     u, rl = _who(request); b = await common.body(request); s = _meeting(mid); _member(rl, s)
-    return {"card": _call(meetings.card, s["id"], _case_id(cid), u, b.get("agree"), str(b.get("note") or ""))}
+    async with store.lock(_case_id(cid)):  # a late concern corrects the board record (review finding 5)
+        return {"card": _call(meetings.card, s["id"], _case_id(cid), u, b.get("agree"), str(b.get("note") or ""))}
 
 
 @router.get("/meetings/{mid}/cards")
@@ -424,10 +496,11 @@ async def meetings_slides(mid: str, cid: str, request: Request):
     cid = _case_id(cid)
     if not meetings._on_lists(s, cid) and cid not in {a.get("case_id") for a in s.get("agenda") or []}:
         common.fail(404, "This Case File is not on the meeting's agenda.", "not_on_agenda")
-    if rl.get("outside_expert") and not meetings.manage(rl):  # an outside expert follows the shared screen only (security review #9)
+    if not meetings.manage(rl):  # this summary is the outside expert's view now (meetings-v2 2.6): anyone without the whole Case File sees
+        # only the Case File on the floor, while the meeting is in session (the API check: members read every agenda case, also after the end)
         c = store.get_case(cid) if cid not in config.PROTECTED_CASES else None
         if not (c and access.scope(rl, c) == access.FULL) and (s.get("status") != "in_session" or s.get("current") != cid):
-            common.fail(403, "An outside expert sees the slides of the Case File on the floor, while the meeting is in session.", "not_current")
+            common.fail(403, "Only the Case File on the floor is shown here, while the meeting is in session.", "not_current")
     from .. import board
     board.audit_event(s["id"], "slides_read", u, case_id=cid)
     return {"case_id": cid, "slides": _call(meetings.slides, cid, rl)}

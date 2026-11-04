@@ -88,6 +88,20 @@ export const EP = {
   audioStt: `${TB}/audio/stt`,
   /** POST {ref, part} or {text, screen}: one sentence of a statement on screen read aloud, as a WAV (headers X-Parts, X-Part). */
   audioTts: `${TB}/audio/tts`,
+
+  // Ask PubMed (docs/pubmed-ask/DESIGN.md section 8): a question runs as a job; the screen polls it for the live steps.
+  /** POST {question, years?, words?} -> 202 {job_id}: a general question from Home (no patient context). */
+  pubmedAsk: `${TB}/pubmed/ask`,
+  /** GET: {job_id, status, steps[], thread?, error?}; only the login that started it. */
+  pubmedJob: (j: string) => `${TB}/pubmed/jobs/${id(j)}`,
+  /** GET: {threads[]} the login's own Home questions, newest first. */
+  pubmedHistory: `${TB}/pubmed/history`,
+  /** GET {threads[]} (pinned first, newest first; the whole team sees them); POST {question, years?, words?} at /ask. */
+  casePubmed: (c: string) => `${TB}/cases/${id(c)}/pubmed`,
+  casePubmedAsk: (c: string) => `${TB}/cases/${id(c)}/pubmed/ask`,
+  casePubmedPin: (c: string, t: string) => `${TB}/cases/${id(c)}/pubmed/${id(t)}/pin`,
+  /** POST {pmid}: the paper into the Case File's Published list (the owner consultant, as POST /cases/{id}/published). */
+  casePubmedSave: (c: string, t: string) => `${TB}/cases/${id(c)}/pubmed/${id(t)}/save`,
 };
 
 /** The demo hospital system. On this machine (localhost or 127.0.0.1, with the ssh tunnel) it is on port 7130 of the host

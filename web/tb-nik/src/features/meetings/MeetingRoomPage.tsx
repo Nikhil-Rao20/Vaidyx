@@ -1,37 +1,43 @@
-// /meetings/:id/room: the room computer, on the projector, as the call shell's room variant (call/CallShell.tsx): the summary of the
-// case in a column on the left (a toggle, "Summary on the side", on by default), what the coordinator shares in the middle (a slide,
-// a record, the images), the remote members' cameras and the agents standing in on the right, the questions and the live decision
-// below. No control bar: a small bar at the bottom right (room microphone and camera, the summary column, the agent voices, full
-// screen, close). It joins the video room under its own identity ("<user>#room"); its microphone and camera stay off until the
+// /meetings/:id/room: a separate room computer on the projector (for a hospital that does not mirror the coordinator's laptop,
+// meetings-v2 D1), as the call shell's room variant (call/CallShell.tsx): the agenda column, the Board view of the Case File on the
+// floor in large type, always following the coordinator and taking no clicks, the remote members' cameras and the agents standing in
+// on the right, the questions and the live decision below. No control bar: a small bar at the bottom right (room microphone and
+// camera, the agent voices, full screen, close). It joins the video room under its own identity ("<user>#room"); its microphone and camera stay off until the
 // coordinator turns them on here, so the remote members see and hear the room.
+import { useRef } from "react";
 import { useParams } from "react-router-dom";
 import { useSession } from "@/lib/session";
-import { useMeetingLive } from "@/lib/live";
+import { useMeetingLive, type LiveEvent } from "@/lib/live";
 import { StageFrame, StageTopBar } from "./components/Stage";
 import { LiveDot } from "./components/shared";
 import { CallShell } from "./call/CallShell";
 import { ErrorState, SkeletonLines } from "@/features/casefile/components/common";
+import { useLightForMeeting } from "@/lib/appearance";
 
 export default function MeetingRoomPage() {
+  useLightForMeeting();  // the meeting is always light (owner, 2 Nov 2026)
   const { id = "" } = useParams();
   const { me } = useSession();
-  const live = useMeetingLive(id);
+  // every live event in order to the shell (a burst of spoken sentences, a stop, a decision): reading only the last one dropped some
+  // on the projector (review finding 9)
+  const shellEvents = useRef<((ev: LiveEvent) => void) | null>(null);
+  const live = useMeetingLive(id, { onEvent: (ev: LiveEvent) => shellEvents.current?.(ev) });
   const s = live.state;
 
   if (!s) {
     return (
       <StageFrame testId="room-screen" attrs={{ "data-meeting-status": undefined }}>
         <StageTopBar left={<span className="text-sm text-stage-muted">Tumour Board</span>} right={<LiveDot status={live.status} detail={live.statusDetail} />} />
-        {live.notBuilt ? <div className="p-8" data-theme="dark"><ErrorState error={live.error} title="The meeting rooms are not on this server yet" /></div>
-          : live.missing ? <div className="p-8" data-theme="dark"><ErrorState error={live.error} title="This meeting does not exist" /></div>
-          : live.forbidden ? <div className="p-8" data-theme="dark"><ErrorState error={live.error} title="This computer is not signed in as a member of the meeting" /></div>
-          : live.error ? <div className="p-8" data-theme="dark"><ErrorState error={live.error} retry={() => void live.refresh()} /></div>
-          : <div className="p-8" data-theme="dark"><SkeletonLines n={6} /></div>}
+        {live.notBuilt ? <div className="p-8"><ErrorState error={live.error} title="The meeting rooms are not on this server yet" /></div>
+          : live.missing ? <div className="p-8"><ErrorState error={live.error} title="This meeting does not exist" /></div>
+          : live.forbidden ? <div className="p-8"><ErrorState error={live.error} title="This computer is not signed in as a member of the meeting" /></div>
+          : live.error ? <div className="p-8"><ErrorState error={live.error} retry={() => void live.refresh()} /></div>
+          : <div className="p-8"><SkeletonLines n={6} /></div>}
         <div className="flex-1" />
       </StageFrame>
     );
   }
 
   const videoOn = !!s.meeting.video && !!me?.features?.video && s.meeting.status === "in_session" && !!s.can?.manage;
-  return <CallShell mid={id} variant="room" live={{ ...live, state: s }} me={me} videoAvailable={videoOn} />;
+  return <CallShell mid={id} variant="room" live={{ ...live, state: s }} me={me} videoAvailable={videoOn} events={shellEvents} />;
 }

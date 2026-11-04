@@ -2,11 +2,13 @@
 // line), read it, "I have read it", then "Send to the board". What the doctor typed is shown apart, "entered by Dr X, no report". The
 // Specialty agents (their briefs and the shared threads, night-v3 item 6.5), Similar Case Files (past Case Files of this hospital, night-v3
 // item 7.3, "Past Case File, not advice for this patient") and similar published cases sit here too (B9).
-// After the first board decision (night-v3 3.4, owner decision D3) the Case summary comes first; the pre-board summary folds under
-// "Before the board on DD/MM/YYYY", with its earlier versions (summary history) in a fold of their own.
+// After the first board decision (night-v3 3.4, owner decision D3) the Case summary comes first, titled "Summary after the board" with the
+// latest board's date (meetings-v2 5.4, D14), and the Case File's discussion notes of the board follow it (read-only); the pre-board
+// summary folds under "Summary before the board, DD/MM/YYYY" (the first board's date), one click away from the after-board summary's
+// header, with its earlier versions (summary history) in a fold of their own.
 // Voice (night-v3 item 4.4): "Read aloud" beside each section of the pre-board summary and on Points for review reads the saved text as
 // shown (the server loads it by reference); nothing is drawn when voice is off.
-import type { ReactNode } from "react";
+import { useRef, useState, type ReactNode, type RefObject } from "react";
 import { Bot, CheckCheck, History, PenLine, RefreshCw, Send, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SpeakButton } from "@/components/SpeakButton";
@@ -14,7 +16,7 @@ import type { TtsRef } from "@/lib/voice";
 import { consultantTitle } from "@/lib/format";
 import type { SlotHandlers } from "../components/SlotLine";
 import { ProseBlock } from "../components/SummaryColumn";
-import { CaseSummaryCard } from "../components/CaseSummaryCard";
+import { BEFORE_TITLE, CaseSummaryCard, DiscussionNotes } from "../components/CaseSummaryCard";
 import { LoadingButton, SkeletonLines, fmtDate, fmtDateTime, indianDates, modelLabel } from "../components/common";
 import type { CaseDocument, ProseSection } from "../types";
 import { Card } from "./Overview";
@@ -61,6 +63,12 @@ export function SummaryStep({ steps, docs, h, canWrite, canRead, busy, reading, 
   onBoard?: () => void;
 }) {
   const cs = steps.summary.case_summary ?? null;
+  const [beforeOpen, setBeforeOpen] = useState(false);
+  const beforeRef = useRef<HTMLDetailsElement>(null);
+  const openBefore = () => {
+    setBeforeOpen(true);
+    requestAnimationFrame(() => { beforeRef.current?.scrollIntoView({ block: "start", behavior: "smooth" }); beforeRef.current?.querySelector("summary")?.focus(); });
+  };
   const archived = (steps.summary.history ?? []).filter((v) => !v.live);
   const prose = steps.summary.prose;
   const sent = steps.summary.sent;
@@ -71,8 +79,10 @@ export function SummaryStep({ steps, docs, h, canWrite, canRead, busy, reading, 
   ];
   return (
     <div className="space-y-4" data-testid="section-summary">
-      {cs ? <CaseSummaryCard caseId={steps.case_id} view={cs} docs={docs} h={h} onBoard={onBoard} /> : null}
-      <PreBoardFrame folded={!!cs} title={cs ? `Before the board${cs.first_board_date ? ` on ${fmtDate(cs.first_board_date)}` : ""}` : "The board summary"}>
+      {cs ? <CaseSummaryCard caseId={steps.case_id} view={cs} docs={docs} h={h} onBoard={onBoard} onBefore={openBefore} beforeDate={cs.first_board_date} /> : null}
+      <DiscussionNotes caseId={steps.case_id} enabled={!!cs || !!sent} />
+      <PreBoardFrame folded={!!cs} open={beforeOpen} onToggle={setBeforeOpen} frameRef={beforeRef}
+        title={cs ? `${cs.before_title || BEFORE_TITLE}${cs.first_board_date ? `, ${fmtDate(cs.first_board_date)}` : ""}` : "The board summary"}>
         <div className="space-y-3 py-2">
           {prose.status === "none" && !busy ? (
             <div className="space-y-2">
@@ -135,12 +145,15 @@ export function SummaryStep({ steps, docs, h, canWrite, canRead, busy, reading, 
   );
 }
 
-/** The pre-board summary's frame: the card as before, or a fold closed by default once the Case summary is the main summary. */
-function PreBoardFrame({ folded, title, children }: { folded: boolean; title: string; children: ReactNode }) {
+/** The pre-board summary's frame: the card as before, or a fold closed by default once the Case summary is the main summary ("Summary
+ *  before the board"); `open` lets the after-board summary's header open it. */
+function PreBoardFrame({ folded, title, open, onToggle, frameRef, children }: {
+  folded: boolean; title: string; open: boolean; onToggle: (open: boolean) => void; frameRef: RefObject<HTMLDetailsElement>; children: ReactNode;
+}) {
   if (!folded) return <Card title={title} icon={<Sparkles className="size-4 text-brand" aria-hidden />} testId="summary-card">{children}</Card>;
   return (
-    <details className="surface overflow-hidden" data-testid="summary-card">
-      <summary className="flex cursor-pointer items-center gap-2 px-4 py-2.5 text-[15px] font-semibold text-foreground hover:bg-accent/60">
+    <details ref={frameRef} open={open} onToggle={(e) => onToggle(e.currentTarget.open)} className="surface scroll-mt-4 overflow-hidden" data-testid="summary-card">
+      <summary className="flex cursor-pointer flex-wrap items-center gap-2 px-4 py-2.5 text-[15px] font-semibold text-foreground hover:bg-accent/60">
         <History className="size-4 text-muted-foreground" aria-hidden />{title}
         <span className="ml-auto text-xs font-normal text-muted-foreground">the summary the board read</span>
       </summary>

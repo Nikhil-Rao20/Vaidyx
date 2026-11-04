@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 // Theme (light / dark) and text size are per-viewer conveniences: kept in
 // localStorage, applied before the first paint, and also saved to the profile
 // so they follow the person to another laptop.
@@ -40,4 +41,15 @@ export function applyStoredAppearance() {
   applyTheme(t === "dark" ? "dark" : "light");
   const s = read(KEY_TEXT);
   applyTextSize(s === "large" || s === "small" ? s : "normal");
+}
+
+/** The meeting pages are always light (owner, 2 Nov 2026: "the meeting must be in light theme ... doctors are not dark theme guys"):
+ *  a person who chose dark for the app sees the meeting light; their choice comes back when they leave the meeting (nothing is saved). */
+export function useLightForMeeting() {
+  useEffect(() => {
+    const before = currentTheme();
+    if (before === "light") return undefined;
+    document.documentElement.setAttribute("data-theme", "light");
+    return () => { document.documentElement.setAttribute("data-theme", before); };
+  }, []);
 }

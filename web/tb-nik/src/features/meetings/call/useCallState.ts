@@ -12,6 +12,7 @@ import { agentVoiceChoice, onAgentVoiceChange, setAgentVoice } from "@/lib/voice
 import { agentVoicesFor } from "./agentSpeaker";
 import type { ReactionEvent } from "@/lib/live";
 import type { CallCtx, CallVariant, CallVideo, LayoutKind, PanelKind, ShownReaction } from "./types";
+import type { Recorder } from "../recorder/useRecorder";
 
 /** How long a reaction stays on a tile, and how long "Decision saved" stays on the strip. */
 export const REACTION_MS = 3000;
@@ -40,9 +41,17 @@ export interface ShellExtras {
   /** "Save data" (night-v3 5.5): camera off and the remote video at the lower quality, remembered for this tab. */
   saveData: boolean;
   setSaveData: (on: boolean) => void;
+  /** Meetings-v2 5.2: the coordinator's recorder (Record, Pause, Resume, Stop and the capture); null on every other screen. */
+  recorder: Recorder | null;
+  /** Meetings-v2 3.4: opens "Take up another Case File" (the coordinator, while the meeting is in session). */
+  openTakeUp: () => void;
+  /** Meetings-v2 5.3: opens the notes panel on a Case File (null: the case on the floor, else the first with notes). */
+  openNotes: (caseId?: string | null) => void;
+  /** The Case File the notes panel shows. */
+  notesCase: string | null;
 }
 const noop = () => {};
-export const ShellContext = createContext<ShellExtras>({ joined: false, idx: -1, minutes: 10, setMinutes: noop, next: noop, previous: noop, openShortcuts: noop, cardAsked: false, handPending: false, goPending: false, timerPending: false, endPending: false, presencePending: false, menu: null, setMenu: noop, saveData: false, setSaveData: noop });
+export const ShellContext = createContext<ShellExtras>({ joined: false, idx: -1, minutes: 10, setMinutes: noop, next: noop, previous: noop, openShortcuts: noop, cardAsked: false, handPending: false, goPending: false, timerPending: false, endPending: false, presencePending: false, menu: null, setMenu: noop, saveData: false, setSaveData: noop, recorder: null, openTakeUp: noop, openNotes: noop, notesCase: null });
 
 export const pinKey = (mid: string) => `tbnik.call.pin.${mid}`;
 
@@ -295,6 +304,7 @@ export function useShortcuts(ctx: CallCtx | null, extra: { openHelp: () => void;
       switch (id) {
         case "escape":
           if (layerOpen()) return;
+          if (isTypingTarget(e.target)) return;  // Esc in a text box (the decision form) never closes its panel (review finding 6)
           // an agent speaking on this device stops first (here only; the others keep hearing it), the next Esc closes the panel
           if (c.speakingNow) { c.stopAgentAudio(); e.preventDefault(); return; }
           if (c.panel) { c.setPanel(null); e.preventDefault(); }

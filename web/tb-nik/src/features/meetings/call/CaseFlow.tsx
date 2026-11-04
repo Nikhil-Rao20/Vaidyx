@@ -1,8 +1,7 @@
 // The case flow of the call (night-v3 5.4, research/04 section 6.13): when the coordinator moves the meeting to another case, the
-// member and the room screen see a short toast at the top left of the stage (clear of the "Following the shared screen" chip at the
-// top right; centred on the room screen, which has no chip), "Moved to case 4 of 8: <patient line>", for 3 s and hear the
-// polite announcement "The meeting moved to case 4 of 8"; a new presenter is announced as "Presenter: <name>". The member's "stepped
-// away" state is reset by the shell on a case change, not here. Also the case clock the agenda rail and the Agenda panel share: the
+// member and the room screen see a short toast at the foot of the stage (centred on the room screen), "Moved to case 4 of 8:
+// <patient line>", for 3 s and hear the polite announcement "The meeting moved to case 4 of 8"; a new presenter is announced as
+// "Presenter: <name>". A member looking around in the Board view comes back to the room on a case change (board/useFollow.ts). Also the case clock the agenda rail and the Agenda panel share: the
 // time spent on the case on the floor (counting up between events while the timer runs) and what is left of its timer.
 // Night-v3 6.1: when a case with stand-in agents comes on the floor (and at the first state after joining), every screen shows for
 // 6 s "AI agents in this case: Radiology, Pathology. They read records and guidelines only. They do not decide or advise.", said
@@ -169,10 +168,10 @@ export function CaseFlow() {
   }, [agentsToast]);
 
   const room = c.variant === "room";
-  // Drawn inside the stage (the shell puts it among the stage's overlays): the member's toast starts at the left and stops short of
-  // the chip at the top right (an icon on a phone, the words on a laptop).
+  // Drawn inside the stage (the shell puts it among the stage's overlays), at the foot of the stage so the Board view's header (the
+  // patient, the cancer, the presenter, the tabs) stays readable while it shows.
   return (
-    <div className={cn("pointer-events-none absolute inset-x-0 top-3 z-30 flex flex-col gap-2 px-3", room ? "items-center" : cn("items-start", c.phone ? "pr-12" : "pr-60"))} data-testid="case-toast-area">
+    <div className={cn("pointer-events-none absolute inset-x-0 bottom-3 z-30 flex flex-col-reverse gap-2 px-3", room ? "items-center" : "items-start")} data-testid="case-toast-area">
       <AnimatePresence>
         {toast ? (
           // role status for the tests and assistive tools; aria-live off because the shell's polite region already says it once.
@@ -187,8 +186,8 @@ export function CaseFlow() {
           // aria-live off: the shell's polite region says it once (c.announce above)
           <motion.p key={`agents-${agentsToast.key}`} role="status" aria-live="off" data-testid="agents-notice"
             initial={reduce ? { opacity: 0 } : { opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
-            className={cn("inline-flex max-w-full items-start gap-2 rounded-xl border border-stage-line bg-stage-panel/95 px-4 py-2 font-medium text-stage-fg shadow-[var(--shadow-lift)] backdrop-blur", room ? "max-w-[min(100%,56rem)] text-xl" : "text-sm")}>
-            <Bot className={cn("mt-0.5 shrink-0 text-primary", room ? "size-6" : "size-4")} aria-hidden />
+            className={cn("inline-flex max-w-full items-start gap-2 rounded-xl border border-stage-line bg-stage-panel/95 px-4 py-2 font-medium text-stage-fg shadow-[var(--shadow-lift)] backdrop-blur", room ? "max-w-[min(100%,56rem)] text-sm lg:text-xl" : "text-sm")}>
+            <Bot className={cn("mt-0.5 shrink-0 text-primary", room ? "size-4 lg:size-6" : "size-4")} aria-hidden />
             <span className="min-w-0">{agentsToast.text}</span>
           </motion.p>
         ) : null}

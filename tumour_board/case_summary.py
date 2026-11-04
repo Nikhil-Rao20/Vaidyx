@@ -2,19 +2,27 @@
 summary and is written again after every later decision. Every version is kept; the owner's consultant reviews and edits it.
 
 Storage: st["artefacts"]["case_summary"] = {"current": n, "case_id": id, "versions": [v1, v2, ...]}, written through store.save_state.
-Five sections, in this order:
+Five sections (six when the board kept discussion notes), in this order:
   presentation  "Presentation and diagnosis"                 the reasoner over the records dated up to the first board, plus
                                                              summary.fill_from_facts for the presentation and investigation facts
   stage         "Stage"                                      code only: the stage as recorded in a signed report, a Vaidyx draft stage
                                                              only after a doctor confirmed it, the stage as agreed by each board
   rounds        "Board rounds"                               code only: one block per board record, oldest first
+  discussion    "What was said at the board"                 only when the meetings of the board records kept AI discussion notes for
+                (meetings-v2 item 5.4)                       this Case File (meeting_notes, item 5.3): the reasoner over those notes,
+                                                             given as what was said at the board, attributed to the speakers; never
+                                                             a decision, a plan or advice in Vaidyx's own voice
   since         "Treatment and follow-up since the board"    the reasoner over the records dated after the first board, plus the
                                                              treatment facts of those records and the HIS encounters after the board
   status        "Current status and open actions"            code only: open and closed board actions, the patient told, next review
 Every sentence cites a record line (qa.verify, word for word), a board-record field, an action, the stage confirmation or a member's card
-(the exact stored text, checked by verify_field), or is code (code: true). A model sentence that fails a check is kept in `removed` with
-its reason. Code-built sentences quote the stored field itself, so nothing is paraphrased. No diagnosis, no stage computation, no
-interpretation, no treatment advice, no prognosis. The model is the reasoner (non-medical); "AI draft, not reviewed" until reviewed.
+(the exact stored text, checked by verify_field), a note line of the board discussion (kind "said": {meeting_id, line_id, speaker,
+speaker_name, department, at, board_date, quote}; the line still in that meeting's notes for this Case File and the quote word for word in
+what the speaker said, verify_said), or is code (code: true). A model sentence that fails a check is kept in `removed` with its reason.
+Code-built sentences quote the stored field itself, so nothing is paraphrased. No diagnosis, no stage computation, no interpretation, no
+treatment advice, no prognosis. The model is the reasoner (non-medical); "AI draft, not reviewed" until reviewed. Every screen titles it
+TITLE ("Summary after the board", owner decision D14) beside the pre-board summary (TITLE_BEFORE, "Summary before the board"); it is
+written again when the discussion notes of one of its meetings are built or edited (on_notes_changed, called by meeting_notes).
 
 The consultant's edits are never overwritten: a rebuild carries an edited sentence forward with its edited text; a different model
 sentence for the same place is kept under edited.suggested. Never for a protected Case File (config.PROTECTED_CASES)."""
@@ -34,9 +42,12 @@ log = logging.getLogger("tumour_board")
 
 ART = "case_summary"
 SECTIONS = [("presentation", "Presentation and diagnosis"), ("stage", "Stage"), ("rounds", "Board rounds"),
+            ("discussion", "What was said at the board"),
             ("since", "Treatment and follow-up since the board"), ("status", "Current status and open actions")]
 TITLES = dict(SECTIONS)
-MODEL_SECTIONS = ("presentation", "since")
+MODEL_SECTIONS = ("presentation", "discussion", "since")
+TITLE = "Summary after the board"            # the Case summary's title on every screen (meetings-v2 item 5.4, owner decision D14)
+TITLE_BEFORE = "Summary before the board"    # the pre-board summary's title beside it
 CONTEXT_BUDGET = 40000
 CLIP = 600
 REVIEW_STATUSES = ("reviewed", "flagged", "ai_draft")
@@ -53,7 +64,11 @@ CODE_EDIT = "This sentence quotes the record itself and cannot be edited; correc
 FIXED_EDIT = "This sentence is written by Vaidyx when nothing is documented and cannot be edited."
 
 REASONS = {**qa.REASONS, "relative_date": "a relative date (for example \"last month\") cannot be checked against the record",
-           "not_given": "the cited record was not among the records given for this section"}
+           "not_given": "the cited record was not among the records given for this section",
+           "no_citation": "the sentence cites no note line of the board discussion",
+           "not_attributed": "the sentence does not say who spoke at the board",
+           "said_as_decision": "what was said at the board is written as a decision or a plan",
+           "names": "a name or term of the sentence is not in the quoted words and is not the speaker's"}
 
 # "last month", "two weeks ago", "recently", "yesterday": a date the record cannot confirm (the reader does not know "when" it was written)
 RELATIVE = re.compile(r"\b(?:last|past|previous|next|this|coming)\s+(?:\d+\s+|few\s+|several\s+)?(?:day|week|fortnight|month|year)s?\b|"
@@ -180,7 +195,9 @@ def _numbers_ok(text, cites) -> bool:
 
 def _removed(item, reason, detail, where):
     return {"text": (item or {}).get("text") or "", "reason": reason, "reason_label": REASONS[reason], "detail": detail, "where": where,
-            "citations": [{"doc_id": c.get("doc_id") or "", "quote": (c.get("quote") or "")[:400]} for c in (item or {}).get("citations") or [] if isinstance(c, dict)]}
+            "citations": [{"doc_id": c.get("doc_id") or "", "quote": (c.get("quote") or "")[:400],
+                           **({"note_line": str(c.get("note_line") or c.get("line_id"))} if c.get("note_line") or c.get("line_id") else {})}
+                          for c in (item or {}).get("citations") or [] if isinstance(c, dict)]}
 
 
 def _check_model(case_id, items, allowed, where, removed, issues, near):
@@ -620,8 +637,8 @@ def _messages(case, sec, ctx, first_date, st, hints=""):
             {"role": "user", "content": f"Patient: {p.get('name')}, {p.get('agesex', '')}.\n\n{head}\n{ctx}{extra}\n\n{task}"}]
 
 
-async def _ask(case_id, sec, msgs, au):
-    return await llm.chat("reasoner", msgs, json_schema=SCHEMA, max_tokens=1500, purpose=f"case summary {sec}", audit=au)
+async def _ask(case_id, sec, msgs, au, schema=None):
+    return await llm.chat("reasoner", msgs, json_schema=schema or SCHEMA, max_tokens=1500, purpose=f"case summary {sec}", audit=au)
 
 
 def _closed_hints(case_id, st) -> str:
@@ -644,6 +661,291 @@ def _encounters_after(case_id, case, first_date) -> list:
     return out
 
 
+# ---- what was said at the board (meetings-v2 item 5.4, owner decision D14) -----------------------------------------------------------
+
+DISCUSSION_SYS = (
+    "You write the 'What was said at the board' part of the Case summary of a hospital Tumour Board Case File. You are given the "
+    "discussion notes of each board meeting for this Case File: every note line has its id, the time, the speaker and the exact words "
+    "that speaker said. This is WHAT WAS SAID AT THE BOARD, not what was decided: the board's decision is recorded elsewhere and you never "
+    "restate it, never turn what someone said into a decision or a plan, and never decide, advise, diagnose, stage, judge or conclude "
+    "anything yourself.\n\n"
+    "Rules for every sentence:\n"
+    "1. Begin with the board date as given and name who spoke as the note gives it, for example \"At the board of 23/10/2026, Dr Rao "
+    "(Radiology) noted ...\". A note from the Board room microphone has no known speaker: write \"At the board of 23/10/2026, it was "
+    "said in the room that ...\" or \"... someone in the room asked ...\".\n"
+    "2. Use only plain reporting verbs: said, noted, asked, reported, raised, mentioned, read out, gave their view. Never write in your "
+    "own words that something was decided, agreed on, planned, recommended, advised, indicated, needed or should be done; a speaker's "
+    "own view stays in their exact words, in quotation marks.\n"
+    "3. Cite every sentence: note_line is the id of the note line it reports, quote is a part of that line's exact words copied word "
+    "for word (at least three words).\n"
+    "4. Never add a fact, number, date, name, drug, stage, diagnosis or decision that is not in the quoted words. Write a number only "
+    "exactly as the quote has it. Dates as DD/MM/YYYY, never relative.\n"
+    "5. At most one sentence per note line; leave out lines that only repeat another, greetings and anything not about this Case File.\n"
+    "6. Plain English. No em dashes. Do not write the patient's name. If there is nothing to report, return no sentence.")
+DISCUSSION_SCHEMA = {"type": "object", "additionalProperties": False, "properties": {
+    "sentences": {"type": "array", "items": {"type": "object", "additionalProperties": False, "properties": {
+        "text": {"type": "string"},
+        "citations": {"type": "array", "items": {"type": "object", "additionalProperties": False, "properties": {
+            "note_line": {"type": "string"}, "quote": {"type": "string"}}, "required": ["note_line", "quote"]}}},
+        "required": ["text", "citations"]}}},
+    "required": ["sentences"]}
+DISCUSSION_BUDGET = 30000   # characters of notes per call
+MAX_NOTE_LINES = 150        # note lines given to the model
+MIN_SAID_WORDS = 3          # a quote shorter than this must be the speaker's whole words
+NOTHING_DISCUSSION = ("The discussion notes of the board are kept with the meeting; no sentence of what was said could be checked "
+                      "against them.")
+ROOM = "room"
+# what was said, written as a decision or a plan in the sentence's own words (outside the quoted words)
+SAID_DECISION = re.compile(r"\b(?:decid\w*|decision\w*|conclu\w*|resolv\w*|finali[sz]\w*|agreed\s+(?:to|on|upon)\b|the\s+(?:board|team|panel|mdt)\s+"
+                           r"agreed|(?:the|a)\s+plan\b|plan\s+(?:is|was)\b|planned\b|will\s+(?:undergo|receive|have|get|start|be\s+given|be\s+treated)\b)", re.I)
+_SAID_MARKS = re.compile(r"[\"“”‘’`]")
+_SAID_CAPS = re.compile(r"\b[A-Z][A-Za-z0-9+\-/]*")
+_SAID_PLAIN = {"the", "in", "a", "an", "it", "they", "he", "she", "there", "this", "that", "both", "all", "someone", "members", "member", "board",
+               "tumour", "mdt", "coordinator", "room", "dr", "doctor", "prof", "professor", "i", "at", "on", "of", "during", "when", "while"}
+_SPEAKER_STOP = {"the", "and", "dept", "department", "of", "unit", "dr", "doctor", "prof"}
+
+
+def board_notes(case_id, recs) -> list:
+    """The AI discussion notes of this Case File kept by the meeting of each board record (meeting_notes, item 5.3), oldest board first:
+    [{meeting_id, date, record, review, lines: [stored note line]}]; only lines with the speaker's exact words. [] for a protected Case
+    File or when no meeting of its board records kept notes."""
+    if not case_id or case_id in config.PROTECTED_CASES:
+        return []
+    out, seen = [], set()
+    for rec in recs or []:
+        mid = str(rec.get("session") or "")
+        if not mid or mid in seen:
+            continue
+        seen.add(mid)
+        try:
+            from . import meetings
+            s = meetings.get(mid) or {}
+        except Exception:
+            continue
+        e = (s.get("notes") or {}).get(case_id) if isinstance(s.get("notes"), dict) else None
+        if not isinstance(e, dict):
+            continue
+        lines = [x for x in e.get("lines") or [] if isinstance(x, dict) and x.get("id") and isinstance(x.get("said"), dict)
+                 and _fold(x["said"].get("quote"))]
+        if lines:
+            out.append({"meeting_id": mid, "date": str(s.get("date") or _rec_date(rec))[:10], "record": rec["id"],
+                        "review": e.get("review") if isinstance(e.get("review"), dict) else {}, "lines": lines})
+    return out
+
+
+def _notes_part(case_id, recs) -> str:
+    """What the discussion part is built from (the note lines' ids, texts and exact words); "" when there are none, so a Case File
+    without notes keeps the signature it had before item 5.4."""
+    notes = board_notes(case_id, recs)
+    if not notes:
+        return ""
+    return _hash([(m["meeting_id"], [(x["id"], _fold(x.get("text")), _fold(x["said"].get("quote"))) for x in m["lines"]]) for m in notes])
+
+
+def _said_cite(m, ln, quote) -> dict:
+    """The "said" citation of a note line: which meeting and line, who spoke, when, the board date and the quoted words."""
+    said = ln.get("said") or {}
+    return {"kind": "said", "meeting_id": m["meeting_id"], "line_id": ln["id"], "speaker": str(said.get("speaker") or ""),
+            "speaker_name": str(said.get("speaker_name") or ""), "department": str(said.get("department") or ""), "at": str(said.get("at") or ""),
+            "board_date": m["date"], "quote": quote}
+
+
+def _find_line(notes, meeting_id, line_id):
+    for m in notes or []:
+        if m["meeting_id"] == meeting_id or meeting_id is None:
+            for ln in m["lines"]:
+                if ln.get("id") == line_id:
+                    return m, ln
+    return None, None
+
+
+def verify_said(case_id, cite, notes=None, sentence=None) -> bool:
+    """A "said" citation holds: its note line is still in that meeting's notes for this Case File (a board record of it names the
+    meeting), the quote is word for word in what the speaker said (verify_field: whitespace, case and punctuation forms only) and long
+    enough to stand for it, and every number of the sentence (when given) is in the quote."""
+    if not isinstance(cite, dict) or cite.get("kind") != "said":
+        return False
+    if notes is None:
+        notes = board_notes(case_id, records(store.get_state(case_id)))
+    m, ln = _find_line(notes, cite.get("meeting_id"), cite.get("line_id"))
+    if not ln:
+        return False
+    said = _fold((ln.get("said") or {}).get("quote"))
+    q = _fold(cite.get("quote"))
+    if len(re.findall(r"\w+", q)) < MIN_SAID_WORDS and grounding.norm(q) != grounding.norm(said):
+        return False
+    return verify_field(q, said, sentence)
+
+
+def _speaker_pool(c) -> str:
+    """The speaker's name, and the name and aliases of the speaker's department (as meeting_notes checks a note line)."""
+    try:
+        from . import meeting_notes
+        return meeting_notes._speaker_pool(c)
+    except Exception:
+        return " ".join(str(c.get(k) or "") for k in ("speaker_name", "department"))
+
+
+def _said_own(text, quotes) -> str:
+    """The sentence's own words: the quoted words taken out and every quotation mark removed."""
+    return _fold(_SAID_MARKS.sub(" ", guardrails.outside_quotes(text, quotes)))
+
+
+def _attributed(own, cites) -> bool:
+    """The sentence's own words say who spoke: a word of a cited speaker's name or department, or "room" for the Board room microphone."""
+    words = set(re.findall(r"[a-z0-9]+", grounding.norm(own)))
+    for c in cites:
+        if c.get("speaker") == ROOM:
+            if "room" in words:
+                return True
+            continue
+        toks = {w for w in re.findall(r"[a-z0-9]+", grounding.norm(_speaker_pool(c))) if len(w) >= 3 and w not in _SPEAKER_STOP}
+        if toks & words:
+            return True
+    return False
+
+
+def _said_names_ok(own, cites, full_words) -> bool:
+    """Every capitalised word of the sentence's own words (a name, a department, a test, a marker) is in what the cited speakers said or
+    is a cited speaker's name or department; a few plain words excepted. So a sentence cannot put words in another person's mouth."""
+    pool = grounding.norm(" ".join(full_words + [c["quote"] for c in cites] + [_speaker_pool(c) for c in cites]))
+    for mm in _SAID_CAPS.finditer(own):
+        w = mm.group(0)
+        if w.lower() in _SAID_PLAIN:
+            continue
+        if grounding.norm(w) not in pool:
+            return False
+    return True
+
+
+def _check_said(items, notes, removed, issues) -> list:
+    """The model's sentences of what was said that pass: no relative date, every citation a note line given (verify_said: the line is in
+    the notes now and the quote is word for word in the speaker's words), every number in the quotes (or the board date and time), the
+    speaker named in the sentence's own words, no decision or plan in its own words, no name the speakers did not say, and the advice
+    guardrail on its own words. Every drop is kept in `removed` with its reason. In board order, then the order spoken."""
+    where = "discussion"
+    place = {(m["meeting_id"], ln["id"]): (m["date"], i) for m in notes for i, ln in enumerate(m["lines"])}
+    keep = []
+    for k, x in enumerate(items or []):
+        if not isinstance(x, dict):
+            continue
+        text = _fold(str(x.get("text") or "").replace("—", "-").replace("–", "-"))
+        raw = [c for c in x.get("citations") or [] if isinstance(c, dict)]
+        item = {"text": text, "citations": raw}
+        if not text:
+            continue
+        m_ = RELATIVE.search(text)
+        if m_:
+            removed.append(_removed(item, "relative_date", f"\"{m_.group(0)}\" is a relative date", where))
+            continue
+        if not raw:
+            removed.append(_removed(item, "no_citation", "no note line cited", where))
+            continue
+        cites, why, full = [], None, []
+        for c in raw:
+            lid = str(c.get("note_line") or c.get("line_id") or "").strip()
+            m, ln = _find_line(notes, None, lid)
+            if not ln:
+                why = ("not_given", lid or "(no id)")
+                break
+            cite = _said_cite(m, ln, _fold(c.get("quote")))
+            if not verify_said("", cite, notes):
+                short = len(re.findall(r"\w+", cite["quote"])) < MIN_SAID_WORDS and verify_field(cite["quote"], ln["said"].get("quote"))
+                why = ("quote_not_found", f"too short to stand for what {cite['speaker_name'] or 'the speaker'} said (note line {lid})" if short
+                       else f"not word for word in what {cite['speaker_name'] or 'the speaker'} said (note line {lid})")
+                break
+            cites.append(cite)
+            full.append(_fold(ln["said"].get("quote")))
+        if why:
+            removed.append(_removed(item, why[0], why[1], where))
+            continue
+        if not _numbers_ok(text, cites):
+            removed.append(_removed(item, "number_not_in_quote", "a number is not in the quoted words", where))
+            continue
+        own = _said_own(text, [c["quote"] for c in cites])
+        if not _attributed(own, cites):
+            removed.append(_removed(item, "not_attributed", "no speaker named", where))
+            continue
+        dec = SAID_DECISION.search(own)
+        if dec:
+            removed.append(_removed(item, "said_as_decision", f"\"{dec.group(0)}\" outside the quoted words", where))
+            continue
+        if not _said_names_ok(own, cites, full):
+            removed.append(_removed(item, "names", "a name or term the speakers did not say", where))
+            continue
+        iss = guardrails.scan_output(own)
+        if iss:
+            issues.extend(iss)
+            removed.append(_removed(item, "guardrail", "; ".join(dict.fromkeys(i["reason"] for i in iss)), where))
+            continue
+        text = _ISO_DATE.sub(lambda mm: dmy(mm.group(0)), text)
+        first = min(place.get((c["meeting_id"], c["line_id"]), ("9999", 10 ** 6)) for c in cites)
+        keep.append((first, k, {"text": text, "citations": cites}))
+    keep.sort(key=lambda t: (t[0], t[1]))
+    return [t[2] for t in keep]
+
+
+def _who(said) -> str:
+    if said.get("speaker") == ROOM:
+        return "Board room microphone (speaker not known)"
+    dept = str(said.get("department") or "")
+    name = str(said.get("speaker_name") or said.get("speaker") or "A member")
+    if not dept:
+        return name
+    try:
+        from . import org
+        return f"{name} ({org.department_name(dept)})"
+    except Exception:
+        return f"{name} ({dept})"
+
+
+def _discussion_messages(notes):
+    """The notes of each board, oldest first, as what was said at the board: id, time, speaker, the note line and the exact words. No
+    patient name."""
+    parts, used, n = [], 0, 0
+    total = sum(len(m["lines"]) for m in notes)
+    for m in notes:
+        rv = m.get("review") or {}
+        state = f"reviewed by {rv.get('by_name') or rv.get('by')}" if rv.get("status") == "reviewed" else "AI draft, not reviewed"
+        rows = []
+        for ln in m["lines"]:
+            said = ln.get("said") or {}
+            row = (f"[{ln['id']}] {str(said.get('at') or '')[11:16]} {_who(said)}. Note: {_fold(ln.get('text'))} "
+                   f"Exact words: \"{_fold(said.get('quote'))}\"")
+            if n >= MAX_NOTE_LINES or used + len(row) > DISCUSSION_BUDGET:
+                break
+            rows.append(row); used += len(row) + 1; n += 1
+        if rows:
+            parts.append(f"BOARD OF {dmy(m['date'])} (meeting notes, {state}):\n" + "\n".join(rows))
+    user = ("WHAT WAS SAID AT THE BOARD (the discussion notes of this Case File, attributed to the speakers; not the board's decision):\n\n"
+            + "\n\n".join(parts) + "\n\nWrite the 'What was said at the board' part of the Case summary.")
+    return ([{"role": "system", "content": DISCUSSION_SYS}, {"role": "user", "content": user}],
+            {"meetings": len(parts), "lines": n, "left_out": total - n, "characters": used})
+
+
+def discussion_section(sentences, context) -> dict:
+    out = [{**s, "id": _sid("discussion", i)} for i, s in enumerate(sentences, 1)]
+    if not out:
+        out = [_fixed(_sid("discussion", 1), NOTHING_DISCUSSION)]
+    return {"id": "discussion", "title": TITLES["discussion"], "sentences": out, "built_by": "model", "context": context,
+            "note": "From the AI discussion notes of the board: what was said, attributed to the speakers; never the board's decision."}
+
+
+def on_notes_changed(mid, case_id, by="", why="notes_built") -> dict:
+    """HOOK (meeting_notes, after the notes of a Case File were built or a line edited): the summary after the board is written again in
+    the background when a board record of this Case File comes from that meeting (schedule waits while a meeting is in session). Never
+    raises. {"scheduled", "how"}."""
+    try:
+        if not case_id or case_id in config.PROTECTED_CASES:
+            return {"scheduled": False, "how": "off"}
+        if not any(str(r.get("session") or "") == str(mid) for r in records(store.get_state(case_id))):
+            return {"scheduled": False, "how": "no_board_record"}
+        return schedule(case_id, {"kind": "notes", "meeting": mid, "why": why}, by)
+    except Exception as e:
+        log.warning("Case summary not scheduled after the notes of %s in %s (%s)", case_id, mid, e.__class__.__name__)
+        return {"scheduled": False, "how": "error"}
+
+
 # ---- signature, staleness -----------------------------------------------------------------------------------------------------------
 
 def _status_part(st, recs):
@@ -657,7 +959,8 @@ def _status_part(st, recs):
 
 def signature(case_id, st) -> dict:
     """What a version is built from: rules.case_signature, the board records (ids, versions and the round's communication fields), the
-    board actions and the latest record's patient-informed fields and flags (the status part), the draft stage confirmation."""
+    board actions and the latest record's patient-informed fields and flags (the status part), the draft stage confirmation, and the
+    discussion notes of the board records' meetings (only when there are some)."""
     st = st if isinstance(st, dict) else store.get_state(case_id)
     recs = records(st)
     base = rules.case_signature(case_id, st)
@@ -666,6 +969,9 @@ def signature(case_id, st) -> dict:
     parts = {"case": base["hash"],
              "board": _hash([(r["id"], r.get("version", 1), *[r.get(k) for k in ROUND_COMM]) for r in recs]),
              "status": _status_part(st, recs), "staging": conf or ""}
+    notes = _notes_part(case_id, recs)
+    if notes:  # only with notes: a Case File without them keeps the hash it had before item 5.4
+        parts["notes"] = notes
     return {"hash": _hash(parts), "parts": parts, "case": base, "records": len(recs)}
 
 
@@ -683,14 +989,18 @@ def stale_reason(then, now) -> str:
         why.append("The draft stage confirmation changed since this was built")
     if tp.get("status") != np_.get("status"):
         why.append("Board actions or the record of telling the patient changed since this was built")
+    if (tp.get("notes") or "") != (np_.get("notes") or ""):
+        why.append("The discussion notes of the board changed since this was built")
     return ". ".join(why) or "The Case File changed since this was built"
 
 
 # ---- build --------------------------------------------------------------------------------------------------------------------------
 
 def _cite_keys(sentence) -> set:
-    return {(str(c.get("doc_id") or ""), grounding.norm(str(c.get("quote") or ""))) for c in sentence.get("citations") or []
-            if isinstance(c, dict) and c.get("doc_id") and c.get("quote")}
+    """(record, quote) of each record-line citation, and ("said:" note line, quote) of each note-line citation."""
+    return {(str(c.get("doc_id") or "") if c.get("doc_id") else "said:" + str(c.get("line_id")), grounding.norm(str(c.get("quote") or "")))
+            for c in sentence.get("citations") or []
+            if isinstance(c, dict) and (c.get("doc_id") or (c.get("kind") == "said" and c.get("line_id"))) and c.get("quote")}
 
 
 def _carry_edits(prev, sections, case_id):
@@ -777,6 +1087,11 @@ async def build(case_id, trigger: dict, user="") -> dict:
         calls["presentation"] = _ask(case_id, "presentation", _messages(case, "presentation", ctx_pre, first, st), au)
     if ids_post:
         calls["since"] = _ask(case_id, "since", _messages(case, "since", ctx_post, first, st, _closed_hints(case_id, st)), au)
+    notes = board_notes(case_id, recs)  # what was said at the board (item 5.4): only when a meeting of the records kept notes
+    mode_disc = None
+    if notes:
+        msgs_disc, mode_disc = _discussion_messages(notes)
+        calls["discussion"] = _ask(case_id, "discussion", msgs_disc, au, DISCUSSION_SCHEMA)
     got = dict(zip(calls, await asyncio.gather(*calls.values(), return_exceptions=True))) if calls else {}
     for k, r in got.items():
         if isinstance(r, BaseException):
@@ -794,9 +1109,13 @@ async def build(case_id, trigger: dict, user="") -> dict:
     since = _finish_model_section("since", since)
     if not since:
         since = [_fixed(_sid("since", 1), (NOTHING_CHECKED_SINCE if post else NOTHING_SINCE).format(date=dmy(first)))]
+    disc = None
+    if notes:  # checked against the notes as they are now (a rebuild of the notes during the model call drops the old lines)
+        disc = discussion_section(_check_said((got.get("discussion") or {}).get("sentences"), board_notes(case_id, recs), removed, issues), mode_disc)
     sections = [{"id": "presentation", "title": TITLES["presentation"], "sentences": pres, "built_by": "model", "context": mode_pre},
                 stage_section(case_id, st, facts, recs, removed),
                 rounds_section(case_id, st, recs, facts, removed),
+                *([disc] if disc else []),
                 {"id": "since", "title": TITLES["since"], "sentences": since, "built_by": "model", "context": mode_post},
                 status_section(case_id, st, recs, removed)]
     if issues:
@@ -813,8 +1132,9 @@ async def build(case_id, trigger: dict, user="") -> dict:
          "inputs": {"board_records": [{"id": r["id"], "version": r.get("version", 1)} for r in recs],
                     "actions": [{"id": a.get("id"), "status": a.get("status")} for a in _board_actions(st)],
                     "stage_confirmed_at": sig["parts"]["staging"] or None, "documents": len(docs),
-                    "documents_before": len(pre), "documents_after": len(post)},
-         "first_board_date": first, "sections": sections, "removed": removed, "model": label, "model_line": f"Written by {label} (non-medical)",
+                    "documents_before": len(pre), "documents_after": len(post),
+                    "notes": [{"meeting_id": m["meeting_id"], "lines": len(m["lines"])} for m in notes]},
+         "title": TITLE, "first_board_date": first, "last_board_date": _rec_date(recs[-1]), "sections": sections, "removed": removed, "model": label, "model_line": f"Written by {label} (non-medical)",
          "label": "AI draft, not reviewed", "status_day": today(), "seconds": round(time.time() - t0, 1), "review": {"status": "ai_draft"}, "edits": [],
          "carried_edits": carried, **({"model_error": model_error} if model_error else {})}
     art["versions"].append(v)
@@ -889,11 +1209,14 @@ def _notify_owner(case_id, v, user):
     patient = (case.get("patient") or {}).get("name") or case_id
     to = {"department": case["department"]} if case.get("department") and org.department_id(case["department"]) else {"user": user}
     rid = (v.get("trigger") or {}).get("record")
+    mid = (v.get("trigger") or {}).get("meeting")
     st = store.get_state(case_id)
-    rec = next((r for r in records(st) if r["id"] == rid), None) or (records(st) or [{}])[-1]
-    title = f"Case summary updated: {patient} ({case_id})"
-    text = (f"Version {v['n']} after the board decision of {dmy(_rec_date(rec))}: AI draft, not reviewed. "
-            "The owner's consultant reviews and edits it.")
+    rec = (next((r for r in records(st) if r["id"] == rid), None) or next((r for r in reversed(records(st)) if mid and r.get("session") == mid), None)
+           or (records(st) or [{}])[-1])
+    title = f"{TITLE} updated: {patient} ({case_id})"
+    after = (f"with the discussion notes of the board of {dmy(_rec_date(rec))}" if (v.get("trigger") or {}).get("kind") == "notes"
+             else f"after the board decision of {dmy(_rec_date(rec))}")
+    text = f"Version {v['n']} {after}: AI draft, not reviewed. The owner's consultant reviews and edits it."
     for kind in ("summary_ready", "owner_reminder"):
         try:
             return notify.notify(to, kind, case_id, title, text, by="Vaidyx (automatic)", version=v["n"], artefact=ART)
@@ -994,7 +1317,8 @@ def _checked(text, cites) -> bool:
     cites = [c for c in cites or [] if isinstance(c, dict)]
     if not cites:
         return False
-    rows = [{"quote": str(c.get("quote") or ""), "doc_title": str(c.get("doc_title") or ""), "date": str(c.get("date") or "")} for c in cites]
+    rows = [{"quote": str(c.get("quote") or ""), "doc_title": str(c.get("doc_title") or (_speaker_pool(c) if c.get("kind") == "said" else "")),
+             "date": " ".join(str(c.get(k) or "") for k in ("date", "board_date"))} for c in cites]
     if qa._missing_numbers(text, rows):
         return False
     pool = grounding.norm(" ".join(r["quote"] + " " + r["doc_title"] for r in rows))
@@ -1159,6 +1483,10 @@ def display(case_id, st, v) -> dict:
     """A version as shown: board chips labelled, and for the current version the status section worked out now (code, no model), so
     "overdue" and the open actions are true today without writing anything on a read (Phase 3 review N3). Earlier versions as stored."""
     out = with_labels(v)
+    out.setdefault("title", TITLE)  # a version built before item 5.4 reads with the same title
+    if not out.get("last_board_date"):
+        rounds = next((x for x in out.get("sections") or [] if x.get("id") == "rounds"), None) or {}
+        out["last_board_date"] = next((b.get("date") for b in reversed(rounds.get("blocks") or []) if b.get("date")), None)
     cur = current(st)
     if cur and v.get("n") == cur.get("n") and case_id not in config.PROTECTED_CASES:
         try:
@@ -1192,7 +1520,9 @@ def view(case_id, st, roles=None, n=None) -> dict | None:
     rv = v.get("review") or {}
     reviewed = rv.get("status") == "reviewed"
     lv = display(case_id, st, v)
+    recs = records(st)
     return {"status": stt["status"], "current": cur.get("n"), "n": v.get("n"), "built_at": v.get("built_at"),
+            "title": TITLE, "before_title": TITLE_BEFORE, "last_board_date": v.get("last_board_date") or (_rec_date(recs[-1]) if recs else None),
             "trigger": {"kind": (v.get("trigger") or {}).get("kind"), "by": (v.get("trigger") or {}).get("by")},
             "model_line": v.get("model_line") or "", "model": v.get("model") or "",
             "label": f"Reviewed by {rv.get('by_name') or _name(rv.get('by'))}" if reviewed else "AI draft, not reviewed",

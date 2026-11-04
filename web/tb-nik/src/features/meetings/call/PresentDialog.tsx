@@ -18,7 +18,7 @@ export function markPresentAsked(mid: string) {
 export function PresentDialog({ open, onOpenChange, onShare }: { open: boolean; onOpenChange: (o: boolean) => void; onShare: () => void }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent aria-describedby="present-desc" data-testid="present-dialog" className="text-foreground sm:max-w-md" data-theme="dark">
+      <DialogContent aria-describedby="present-desc" data-testid="present-dialog" className="text-foreground sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Present a screen</DialogTitle>
           <DialogDescription id="present-desc">Only share what the board needs. The share is not recorded.</DialogDescription>

@@ -5,7 +5,7 @@
 // Routes: e2e/support/f2.ts (SYNTHETIC).
 import { expect, test, type Page } from "@playwright/test";
 import { SIZES, login, prepare, watchConsole } from "../support/helpers";
-import { AGENT_ANSWER_NOTE, MID, meetingState, memberState, routeCaseFile, routeMeetings, type MeetingRouteOptions } from "../support/f2";
+import { AGENT_ANSWER_NOTE, MID, meetingState, memberState, routeBoardCases, routeMeetings, type MeetingRouteOptions } from "../support/f2";
 import type { Role } from "../support/fixtures";
 
 const OUT = process.env.AGENT_SHOTS ?? "";
@@ -28,7 +28,7 @@ async function routeDev(page: Page) {
 
 async function open(page: Page, to: string, o: MeetingRouteOptions & { role?: Role; wait: string }) {
   await prepare(page, { role: o.role ?? "coordinator" });
-  await routeCaseFile(page);
+  await routeBoardCases(page);
   const live = await routeMeetings(page, o);
   await routeDev(page);
   await login(page);
@@ -129,10 +129,11 @@ test.describe("Meetings: AI agents", () => {
       await expect(nmCard.getByTestId("present-why")).toHaveText("The brief lists no points for review.");
       await card.getByTestId("agent-points").scrollIntoViewIfNeeded();
       await shot(page, "points");
-      // The coordinator's chip opens the record on the stage.
-      const opened = page.waitForRequest((r) => r.method() === "POST" && r.url().endsWith(`/meetings/${MID}/open`));
+      // The coordinator's chip opens the report in the Board view for everyone, at its page with the line highlighted.
+      const opened = page.waitForRequest((r) => r.method() === "POST" && r.url().endsWith(`/meetings/${MID}/view`));
       await chips.first().click();
-      expect((await opened).postDataJSON()).toEqual({ kind: "record", doc_id: "D8a2c165d" });
+      expect((await opened).postDataJSON()).toEqual({ tab: "reports", doc_id: "D8a2c165d", page: 0, quote: "Grade: Grade 2 (Nottingham score 6)" });
+      await expect(page.getByTestId("board-view")).toHaveAttribute("data-doc", "D8a2c165d");
       if (!(await panel.isVisible())) await pathology.getByRole("button").first().click();
       // Present your points posts and the answer lands in the card's questions with the not documented list.
       const posted = page.waitForRequest((r) => r.method() === "POST" && r.url().endsWith(`/meetings/${MID}/agents/pathology/present`));
@@ -171,7 +172,7 @@ test.describe("Meetings: AI agents", () => {
     await page.locator("[data-testid=agent-tile][data-role=pathology]").getByRole("button").first().click();
     const card = page.getByTestId("agents-panel").locator("[data-testid=agent-card][data-role=pathology]");
     const opened = { n: 0 };
-    page.on("request", (r) => { if (r.method() === "POST" && r.url().endsWith("/open")) opened.n += 1; });
+    page.on("request", (r) => { if (r.method() === "POST" && (r.url().endsWith("/open") || r.url().endsWith("/view"))) opened.n += 1; });
     await card.getByTestId("point-chip").first().click();
     await expect(card.getByTestId("point-quote")).toHaveText("\"Grade: Grade 2 (Nottingham score 6)\"");
     expect(opened.n).toBe(0);

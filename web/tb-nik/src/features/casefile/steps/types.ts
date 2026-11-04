@@ -88,7 +88,27 @@ export type CaseCitation =
   | { kind: "board"; board_record: string; version?: number; field: string; label?: string; quote: string; board_date?: string }
   | { kind: "action"; action?: string; board_record?: string; field: string; label?: string; quote: string; at?: string }
   | { kind: "staging"; field: string; quote: string; by?: string; at?: string }
-  | { kind: "card"; meeting?: string; user?: string; field: string; quote: string; board_date?: string };
+  | { kind: "card"; meeting?: string; user?: string; field: string; quote: string; board_date?: string }
+  /** A line of the board's discussion notes (meetings-v2 5.4): who said it, when, and the exact words (verified against the notes). */
+  | SaidCitation;
+
+/** What was said at the board: a note line of the meeting's AI discussion notes, with the speaker's exact words ("room" is the Board room
+ *  microphone, no speaker known). No audio is ever kept. */
+export interface SaidCitation { kind: "said"; meeting_id?: string; line_id?: string; speaker?: string; speaker_name?: string; department?: string; at?: string; board_date?: string; quote: string }
+
+/** GET /cases/{id}/meeting-notes (meeting_notes.case_view): the Case File's AI discussion notes from every meeting, newest first; whoever
+ *  reads the whole Case File. Read-only here: the MDT Coordinator edits and reviews them on the meeting page. */
+export interface NoteLine {
+  id: string; text: string;
+  said: { segment_id?: string; speaker?: string; speaker_name?: string; at?: string; quote?: string };
+  edited?: { by?: string; by_name?: string; at?: string; checked?: boolean } | null;
+}
+export interface MeetingNotesRow {
+  meeting_id: string; date?: string; time?: string; title?: string; status?: string; label_meeting?: string;
+  lines: NoteLine[]; generated_at?: string; model?: string; model_line?: string; label?: string;
+  review?: { status?: "draft" | "reviewed" | string; by?: string | null; by_name?: string; at?: string | null };
+}
+export interface CaseMeetingNotes { case_id: string; label?: string; meetings: MeetingNotesRow[] }
 
 /** What the model wrote for an edited sentence on a later rebuild (case_summary._carry_edits); never written over the edit. */
 export interface SuggestedSentence { text: string; citations?: CaseCitation[] }
@@ -119,7 +139,9 @@ export interface CaseSummarySection {
   id: "presentation" | "stage" | "rounds" | "since" | "status" | string;
   title: string;
   built_by?: "model" | "code" | string;
-  context?: string;
+  context?: string | Record<string, unknown>;
+  /** A plain line under the title ("What was said at the board": from the AI discussion notes, never the board's decision). */
+  note?: string;
   sentences?: CaseSentence[];
   /** The board rounds: one block per board record, oldest first. */
   blocks?: Array<{ record: string; version?: number; date?: string; outcome?: string; sentences: CaseSentence[] }>;
@@ -132,6 +154,11 @@ export interface CaseSummaryVersionRow { n: number; built_at?: string; trigger?:
 export interface CaseSummaryView {
   status: "building" | "ready" | "stale" | "reviewed";
   current: number;
+  /** "Summary after the board" (meetings-v2 5.4, D14), beside "Summary before the board" (the pre-board summary). */
+  title?: string;
+  before_title?: string;
+  /** The latest board's date (ISO) the summary is after. */
+  last_board_date?: string | null;
   built_at?: string;
   trigger?: { kind?: string; by?: string };
   model_line?: string;

@@ -1,72 +1,30 @@
-"""The board deck downloads (19 Oct 2026) and the hospital's logo.
+"""The hospital's logo (19 Oct 2026). The .pptx deck routes that lived here were removed in meetings-v2 item 4.2 (owner decision D10):
+the meeting PDF and the Case File's board record PDF replace them (api/meeting_pdf.py). The module keeps its name so the router list
+in routes/tumour_board_routes.py stays as it is.
 
-    GET  /meetings/{mid}/deck        the deck of a meeting (.pptx): the coordinator and the admitted members; an outside expert is refused
-    GET  /cases/{cid}/deck           the deck of one Case File (.pptx): whoever may open the whole Case File, never in a read-only window
-    GET  /hospital/logo              the hospital's logo (PNG or JPEG), for the website and the deck; 404 when none was uploaded
+    GET  /hospital/logo              the hospital's logo (PNG or JPEG), for the website and the meeting PDF; 404 when none was uploaded
     POST /setup/hospital/logo        {data: "data:image/png;base64,..."} (root admin): kept under the data root as hospital_logo.<ext>,
-                                     at most 1 MB, PNG or JPEG only (a deck cannot carry an SVG); DELETE removes it
-Every download is audited on the meeting or the Case File."""
-import asyncio
+                                     at most 1 MB, PNG or JPEG only; DELETE removes it
+The upload and the removal are audited (org audit: hospital_logo, hospital_logo_removed)."""
 import base64
 import copy
 import re
 
 from fastapi import Request
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse
 
-from tumour_board import access, board, config, deck, meetings, org, store
-from tumour_board.api.common import body, case, fail, make_router, need, need_known, roles, scope, user
+from tumour_board import config, meeting_pdf, org
+from tumour_board.api.common import body, fail, make_router, need, roles, user
 
-router = make_router(["tumour-board-deck"])
-PPTX = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+router = make_router(["tumour-board-logo"])
 LOGO_MAX = 1_000_000
 LOGO_TYPES = {"image/png": "png", "image/jpeg": "jpg"}
-
-
-def _pptx(data: bytes, name: str) -> Response:
-    return Response(data, media_type=PPTX, headers={"Content-Disposition": f'attachment; filename="{name}"'})
-
-
-@router.get("/meetings/{mid}/deck")
-async def meeting_deck(mid: str, request: Request):
-    u = user(request); rl = roles(request); need_known(rl)
-    s = meetings.get(mid)
-    if not s:
-        fail(404, "Meeting not found.", "not_found")
-    if rl.get("outside_expert") and not meetings.manage(rl):
-        fail(403, "An outside expert follows the shared screen; the deck is for the hospital's members.", "outside_expert")
-    if not (meetings.manage(rl) or meetings.is_member(rl, s)):
-        fail(403, "Only the MDT Coordinator and the admitted members download the deck.", "not_member")
-    try:
-        data = await asyncio.to_thread(deck.build_meeting, mid, rl)
-    except KeyError:
-        fail(404, "Meeting not found.", "not_found")
-    board.audit_event(mid, "deck_downloaded", u, bytes=len(data))
-    return _pptx(data, deck.filename("meeting", mid, str(s.get("date") or "")))
-
-
-@router.get("/cases/{case_id}/deck")
-async def case_deck(case_id: str, request: Request):
-    u = user(request); rl = roles(request); need_known(rl)
-    c = case(case_id)
-    try:  # a window (a doctor's opened with a reason, a Vaidyx admin's break-glass) never downloads the deck (Phase 9 review E, I1)
-        access.no_export_in_window(rl, c, scope(request))
-    except access.AccessError as e:
-        fail(e.status, str(e), e.code)
-    if str(access.scope(rl, c) or "").upper() != "FULL":
-        fail(403, "Only the people who may open the whole Case File download its deck.", "forbidden")
-    try:
-        data = await asyncio.to_thread(deck.build_case, case_id, rl)
-    except meetings.MeetingError as e:  # a protected Case File has no slides (meetings.slides): a plain refusal, never a 500
-        fail(e.status, str(e), e.code)
-    store.audit(case_id, {"kind": "deck_downloaded", "by": u, "bytes": len(data)})
-    return _pptx(data, deck.filename("case", case_id))
 
 
 @router.get("/hospital/logo")
 async def hospital_logo(request: Request):
     user(request)
-    p = deck.hospital_logo_path()
+    p = meeting_pdf.logo_path()
     if not p or not p.exists():
         fail(404, "No hospital logo has been uploaded.", "no_logo")
     media = "image/png" if p.suffix == ".png" else "image/jpeg"

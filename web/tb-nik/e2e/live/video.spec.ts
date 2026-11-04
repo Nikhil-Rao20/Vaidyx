@@ -8,6 +8,10 @@
 // Night-v3 6.3 adds the AI agents after the quorum (research/05 section 8 "Live", steps 1 to 4, the contract of section 11): the
 // Agents panel with the six roles and the tiles of the absent heads (A1), the coordinator switching Nuclear Medicine in and out (A2),
 // the member asking the first agent a records question with the states on both screens (A3), and a treatment question refused (A4).
+// Meetings-v2 2.5 and 2.6 add the Board view (step B): no slides; the coordinator leads the Case File on the floor (a tab, a report at
+// its page), the doctor's screen follows, looks around on its own and comes back to the room; the room screen follows too. Real
+// screenshots of the coordinator, the member following and looking around and the room screen at 1366 and 390 go to
+// /data/vaidyx/meetings-v2/shots/phase2 (TBNIK_PHASE2_SHOTS).
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -16,6 +20,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type APIRequestContext, type Browser, type Page } from "@playwright/test";
 
 const SHOTS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../docs/ui/build/shots");
+const PHASE2 = process.env.TBNIK_PHASE2_SHOTS || "/data/vaidyx/meetings-v2/shots/phase2";
 const AXE_OUT = process.env.TBNIK_AXE_OUT || "/data/vaidyx/night-v3/shots/phase5/axe-live-member.json";
 const CASE = process.env.TBNIK_LIVE_CASE || "TB-2026-0001";
 const SYNTHETIC = /^TB-2026-\d{4}$/;  // the synthetic Case Files of the demo; the real case never matches
@@ -82,6 +87,21 @@ async function signedIn(browser: Browser, user: string, password: string): Promi
 async function shot(page: Page, name: string) {
   fs.mkdirSync(SHOTS, { recursive: true });
   await page.screenshot({ path: path.join(SHOTS, `live-${name}.png`), fullPage: false });
+}
+
+const LAPTOP = { width: 1366, height: 768 };
+const PHONE = { width: 390, height: 844 };
+/** A real screenshot of the Board view screens (meetings-v2 2.5) at a width: <name>-<width>.png under PHASE2. On a phone the call's
+ *  controls fade after 4 s; a key press brings them back for the picture. */
+async function boardShot(page: Page, name: string, size: { width: number; height: number }) {
+  fs.mkdirSync(PHASE2, { recursive: true });
+  await page.setViewportSize(size);
+  await page.waitForTimeout(700);
+  if (size.width < 1024) await page.keyboard.press("Shift");
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: path.join(PHASE2, `${name}-${size.width}.png`), fullPage: false });
+  const sideways = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+  expect(sideways, `${name} at ${size.width}: no sideways scroll`).toBe(false);
 }
 
 const said = (page: Page) => page.evaluate(() => (window as unknown as { __said?: string[] }).__said ?? []);
@@ -183,7 +203,7 @@ test("two people in a meeting with video, chat, case flow and the ending", async
     expect(added.ok(), await added.text()).toBeTruthy();
     const list = await (await mdt.api.get("/api/tb/case-list")).json();
     const ids: string[] = (list.rows || list.cases || []).map((r: { case_id?: string; id?: string }) => r.case_id || r.id || "");
-    const candidates = ["TB-2026-0002", ...ids].filter((id, i, a) => SYNTHETIC.test(id) && id !== CASE && a.indexOf(id) === i && ids.includes(id));
+    const candidates = ["TB-2026-0010", "TB-2026-0012", ...ids].filter((id, i, a) => SYNTHETIC.test(id) && id !== CASE && a.indexOf(id) === i && ids.includes(id));
     let CASE2 = "";
     for (const id of candidates) {
       if ((await mdt.api.post(`/api/tb/meetings/${mid}/agenda/add`, { data: { case_id: id, list: "noting" } })).ok()) { CASE2 = id; break; }
@@ -290,11 +310,69 @@ test("two people in a meeting with video, chat, case flow and the ending", async
     await expect(mdt.page.getByTestId("share-stop")).toBeVisible();  // the coordinator may stop anyone's share
     await shot(mdt.page, "conduct-sees-share");
 
-    // the doctor stops: both stages show the slide again
+    // the doctor stops: both stages show the Board view again
     await doc.page.getByTestId("stop-presenting").click();
     await expect(doc.page.getByTestId("present")).toHaveAttribute("aria-pressed", "false", { timeout: 20_000 });
-    await expect(docStage).toHaveAttribute("data-stage", "slide", { timeout: 20_000 });
-    await expect(mdtStage).toHaveAttribute("data-stage", "slide", { timeout: 20_000 });
+    await expect(docStage).toHaveAttribute("data-stage", "board", { timeout: 20_000 });
+    await expect(mdtStage).toHaveAttribute("data-stage", "board", { timeout: 20_000 });
+
+    note("step B");
+    // (B, meetings-v2 2.5) the Board view: no slides; the coordinator leads, the doctor follows the same tab, report and page
+    const mdtBoard = mdt.page.getByTestId("board-view");
+    const docBoard = doc.page.getByTestId("board-view");
+    await expect(mdt.page.getByTestId("stage-tabs")).toHaveCount(0);
+    await expect(doc.page.getByTestId("slide")).toHaveCount(0);
+    await expect(mdtBoard).toHaveAttribute("data-mode", "drive", { timeout: 20_000 });
+    await expect(docBoard).toHaveAttribute("data-mode", "follow", { timeout: 20_000 });
+    await expect(doc.page.getByTestId("board-follow")).toContainText("Following");
+    await expect(mdt.page.getByTestId("board-question")).toBeVisible({ timeout: 20_000 });
+    await expect(doc.page.getByTestId("board-question")).toBeVisible({ timeout: 20_000 });
+    await expect(mdt.page.getByTestId("record")).toBeEnabled();  // meetings-v2 5.2: the recorder, off until the coordinator presses it
+    await boardShot(mdt.page, "coordinator-summary", LAPTOP);
+    await boardShot(doc.page, "member-following-summary", LAPTOP);
+    const viewPosted = mdt.page.waitForResponse((r) => r.request().method() === "POST" && r.url().endsWith(`/meetings/${mid}/view`));
+    await mdt.page.getByTestId("board-tab-reports").click();
+    expect((await viewPosted).ok(), "the coordinator's tab is posted").toBe(true);
+    await expect(docBoard).toHaveAttribute("data-tab", "reports", { timeout: 15_000 });
+    const firstReport = mdt.page.getByTestId("board-report-row").first();
+    await expect(firstReport).toBeVisible({ timeout: 20_000 });
+    const reportId = (await firstReport.getAttribute("data-doc")) ?? "";
+    expect(reportId, "a report of the synthetic Case File").toBeTruthy();
+    const reportPosted = mdt.page.waitForResponse((r) => r.request().method() === "POST" && r.url().endsWith(`/meetings/${mid}/view`));
+    await firstReport.click();
+    const reportRes = await reportPosted;
+    expect(reportRes.ok(), `open a report: HTTP ${reportRes.status()}`).toBe(true);
+    await expect(mdtBoard).toHaveAttribute("data-doc", reportId);
+    await expect(docBoard).toHaveAttribute("data-doc", reportId, { timeout: 15_000 });
+    await expect(docBoard).toHaveAttribute("data-page", (await mdtBoard.getAttribute("data-page")) ?? "0", { timeout: 15_000 });
+    await expect(doc.page.getByTestId("board-report-page")).toBeVisible({ timeout: 20_000 });
+    await doc.page.waitForTimeout(1500);  // the report page picture
+    await boardShot(mdt.page, "coordinator-report", LAPTOP);
+    await boardShot(doc.page, "member-following-report", LAPTOP);
+    // the doctor looks around on their own: nothing is posted, the coordinator's view does not move; Back to the room follows again
+    let docPosts = 0;
+    const countPosts = (r: import("@playwright/test").Request) => { if (r.method() === "POST" && r.url().endsWith(`/meetings/${mid}/view`)) docPosts += 1; };
+    doc.page.on("request", countPosts);
+    await doc.page.getByTestId("board-look-around").click();
+    await expect(docView).toHaveAttribute("data-following", "false");
+    await doc.page.getByTestId("board-tab-stage").click();
+    await expect(docBoard).toHaveAttribute("data-tab", "stage");
+    await expect(docBoard).toHaveAttribute("data-mode", "look");
+    await doc.page.waitForTimeout(1500);
+    await expect(mdtBoard).toHaveAttribute("data-tab", "reports");
+    await boardShot(doc.page, "member-looking-around", LAPTOP);
+    await boardShot(doc.page, "member-looking-around", PHONE);
+    await doc.page.getByTestId("board-back-to-room").click();
+    await expect(docView).toHaveAttribute("data-following", "true");
+    await expect(docBoard).toHaveAttribute("data-doc", reportId);
+    doc.page.off("request", countPosts);
+    expect(docPosts, "a member looking around never moves the room").toBe(0);
+    await boardShot(doc.page, "member-following-report", PHONE);
+    await boardShot(mdt.page, "coordinator-report", PHONE);
+    await doc.page.setViewportSize(LAPTOP);
+    await mdt.page.setViewportSize(LAPTOP);
+    await expect(docView).toHaveAttribute("data-video-status", "connected", { timeout: 40_000 });
+    note(`Board view: the coordinator opened ${reportId}; the doctor followed, looked around and came back (${docPosts} posts from the doctor)`);
 
     note("step 5");
     // (5) chat: the doctor sends a line, the coordinator sees it, it survives a reload and is in the meeting record; a question to the
@@ -605,13 +683,35 @@ test("two people in a meeting with video, chat, case flow and the ending", async
     note(`axe: ${bad.length} serious or critical rules (${bad.map((b) => `${b.id} x${b.nodes}`).join(", ") || "none"}), written to ${AXE_OUT}`);
     await doc.page.getByTestId("panel-people").click();
 
-    // the room screen joins under its own identity and shows the remote doctor
+    // the room screen joins under its own identity and shows the remote doctor; its Board view follows the coordinator, no clicks
     const room = await mdt.page.context().newPage();
+    await room.setViewportSize(LAPTOP);
     await room.goto(`/tb-nik/meetings/${mid}/room`);
     await room.getByTestId("room-screen").waitFor({ timeout: 30_000 });
     await expect(room.locator('[data-testid="tile"][data-user="tb-rad-doc"]:visible').first()).toBeVisible({ timeout: 40_000 });
     await room.waitForTimeout(1500);
     await shot(room, "room-in-call");
+    const roomBoard = room.getByTestId("board-view");
+    await expect(roomBoard).toHaveAttribute("data-mode", "follow", { timeout: 20_000 });
+    await expect(room.getByTestId("board-look-around")).toHaveCount(0);
+    await mdt.page.getByTestId("board-tab-reports").click();
+    const roomRow = mdt.page.getByTestId("board-report-row").first();
+    await expect(roomRow).toBeVisible({ timeout: 20_000 });
+    const roomDoc = (await roomRow.getAttribute("data-doc")) ?? "";
+    await roomRow.click();
+    await expect(roomBoard).toHaveAttribute("data-doc", roomDoc, { timeout: 15_000 });
+    await expect(room.getByTestId("board-tab-summary")).toBeDisabled();
+    await expect(room.getByTestId("board-report-page")).toBeVisible({ timeout: 20_000 });
+    await room.waitForTimeout(1500);
+    await boardShot(room, "room-following-report", LAPTOP);
+    await boardShot(room, "room-following-report", PHONE);
+    await boardShot(room, "room-following-report", { width: 1920, height: 1080 });
+    await mdt.page.getByTestId("board-tab-summary").click();
+    await expect(roomBoard).toHaveAttribute("data-tab", "summary", { timeout: 15_000 });
+    await room.waitForTimeout(1000);
+    await boardShot(room, "room-following-summary", LAPTOP);
+    await boardShot(mdt.page, "coordinator-summary-case2", LAPTOP);
+    note(`room screen followed the coordinator to ${roomDoc} and back to the Summary`);
     await room.close();
 
     note("step 12");

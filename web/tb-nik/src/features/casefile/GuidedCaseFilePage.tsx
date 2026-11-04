@@ -16,7 +16,7 @@ import { ApiError } from "@/lib/api";
 import { notify } from "@/components/Toasts";
 import { consultantTitle } from "@/lib/format";
 import {
-  archiveCase, buildSummary, createFreeRequest, deckUrl, exportVtbUrl, markReady, moveCase, notBuiltYet, postConfirmation, postProposal, remindRequest, reviewArtefact,
+  archiveCase, buildSummary, createFreeRequest, exportVtbUrl, markReady, moveCase, notBuiltYet, postConfirmation, postProposal, remindRequest, reviewArtefact,
   setSlotValue, setUrgency, slotAskDepartment, slotNotNeeded, undoConfirmation, withdrawCase,
 } from "./api";
 import { useCaseFile, useMyRole, useProposals, useRememberCase, useSlots, useTeam } from "./hooks";
@@ -54,6 +54,7 @@ import { BookViewer } from "./staging/BookViewer";
 import { StagingCard } from "./staging/StagingCard";
 import { useStaging, type BookTarget } from "./staging/api";
 import { SLUG, fromSlug, type MissingItem, type SectionId } from "./steps/types";
+import { caseBoardPdfUrl } from "@/features/meetings/api";
 import "./print.css";
 
 type Side =
@@ -340,11 +341,13 @@ export default function GuidedCaseFilePage() {
 
   const prose = steps?.summary.prose;
   const exportAllowed = !!prose?.reviewed;
+  // The board record PDF (meetings-v2 4.1) replaces the .pptx deck (4.2): after the board, never inside a read-only window.
+  const hasBoardRecord = !!(cf.state?.board_records?.length || cf.case?.board_record);
   const canWrite = prepare && (resident || !!cf.permissions?.mark_ready || !!cf.permissions?.review);
   const canConfirm = prepare && !resident && !!steps?.permissions?.review;
   const canMove = !resident && !teamq.data?.archived && (!!cf.permissions?.mark_ready || role.coordinator) && (!!cf.case.board_ready || !!steps?.summary.sent);
   const sectionTitle = steps?.sections.find((s) => s.id === section)?.label ?? "";
-  const panelTitle = side?.kind === "panel" ? (side.panel === "team" ? "Team" : "Board decisions") : side?.kind === "source" ? (side.target.title ?? "Report") : side?.kind === "review" ? "Please check" : side?.kind === "request" ? "Change the message" : side?.kind === "ask" ? "Ask about this patient" : "";
+  const panelTitle = side?.kind === "panel" ? (side.panel === "team" ? "Team" : "Board decisions") : side?.kind === "source" ? (side.target.title ?? "Report") : side?.kind === "review" ? "Please check" : side?.kind === "request" ? "Change the message" : side?.kind === "ask" ? "Ask" : "";
   const reviewSlot = side?.kind === "review" ? slotById(side.slotId) : null;
   const requestSlot = side?.kind === "request" ? slotById(side.slotId) : null;
 
@@ -399,7 +402,7 @@ export default function GuidedCaseFilePage() {
       </AnimatePresence>
 
       <CaseHeader cf={cf} team={teamq.data} steps={steps} resident={resident} consultantName={consultantName} onSend={() => setReadyOpen(true)}
-        onPanel={(p) => setSide({ kind: "panel", panel: p })} onPrint={() => window.print()} deckHref={deckUrl(id)} exportHref={exportVtbUrl(id)} exportAllowed={exportAllowed}
+        onPanel={(p) => setSide({ kind: "panel", panel: p })} onPrint={() => window.print()} boardPdfHref={hasBoardRecord && !bg ? caseBoardPdfUrl(id) : null} exportHref={exportVtbUrl(id)} exportAllowed={exportAllowed}
         onArchive={teamq.data?.can?.archive && !teamq.data?.archived ? () => setArchiveOpen(true) : undefined}
         onMove={canMove ? () => setMoveOpen(true) : undefined} onWithdraw={canMove ? () => setTakeOffOpen(true) : undefined} />
 
@@ -419,8 +422,9 @@ export default function GuidedCaseFilePage() {
               <SectionNav steps={steps} active={section} leftOff={leftOff} onOpen={(s) => go(s)} onGo={go} />
               {/* on a laptop Ask sits under the sections, never over the page (it covered a Prepare button; 2 Nov test pass) */}
               <button type="button" onClick={() => setSide({ kind: "ask" })} data-testid="ask-bubble"
-                className="inline-flex w-full items-center gap-2 rounded-xl bg-foreground px-4 py-3 text-sm font-semibold text-background shadow-[var(--shadow-lift)] transition hover:brightness-110 active:scale-[0.98]">
-                <MessageSquareText className="size-5" aria-hidden />Ask about this patient
+                className="inline-flex w-full items-center gap-2.5 rounded-xl bg-foreground px-4 py-2.5 text-left text-sm font-semibold text-background shadow-[var(--shadow-lift)] transition hover:brightness-110 active:scale-[0.98]">
+                <MessageSquareText className="size-5 shrink-0" aria-hidden />
+                <span className="flex min-w-0 flex-col leading-tight">Ask about this patient<span className="mt-0.5 text-[11px] font-normal opacity-80">or ask PubMed a general question</span></span>
               </button>
             </aside>
             <main className="min-w-0" aria-label={sectionTitle} data-print-area>
@@ -437,21 +441,21 @@ export default function GuidedCaseFilePage() {
       ) : body}
 
       {steps && wide ? null : (
-        <button type="button" onClick={() => setSide({ kind: "ask" })} data-testid="ask-bubble" aria-label="Ask about this patient"
+        <button type="button" onClick={() => setSide({ kind: "ask" })} data-testid="ask-bubble" aria-label="Ask about this patient, or ask PubMed"
           className="fixed bottom-28 right-4 z-40 inline-flex size-12 items-center justify-center rounded-full bg-foreground text-background shadow-[var(--shadow-lift)] transition hover:brightness-110 active:scale-95 print:hidden">
           <MessageSquareText className="size-5" aria-hidden />
         </button>
       )}
 
       <SidePanel open={!!side} onClose={() => setSide(null)} title={panelTitle} width={side?.kind === "source" ? "wide" : "normal"}
-        subtitle={side?.kind === "source" ? "Shown as printed; nothing is interpreted." : side?.kind === "ask" ? "Answers come only from this patient's reports, each with the line it came from." : undefined}>
+        subtitle={side?.kind === "source" ? "Shown as printed; nothing is interpreted." : side?.kind === "ask" ? "This patient's records, or PubMed for a general question. Each answer shows where it comes from." : undefined}>
         {side?.kind === "panel" && side.panel === "team" ? <TeamPanel caseId={id} team={teamq.data} derived={teamq.derived} isOwner={teamq.data?.can?.manage ?? !!cf.permissions?.manage_participants} resident={resident} onChanged={refresh} me={role.me?.user ?? ""} /> : null}
         {side?.kind === "panel" && side.panel === "board" ? <BoardDecisionsPanel cf={cf} coordinator={role.coordinator} onChanged={refresh} /> : null}
         {side?.kind === "source" ? <SourceViewer caseId={id} target={side.target} doc={cf.documents.find((d) => d.doc_id === side.target.docId)} /> : null}
         {side?.kind === "review" ? (reviewSlot ? <ReviewPanel caseId={id} cf={cf} slot={reviewSlot} queue={allSlots.filter((s) => s.status === "needs_confirmation")} derived={slotsq.derived} resident={resident} consultantName={consultantName}
           onOpenSource={openSource} onDone={refresh} onPropose={propose} onNext={(n) => setSide(n ? { kind: "review", slotId: n.id } : null)} /> : <EmptyState title="Nothing left to check here" className="py-6" />) : null}
         {side?.kind === "request" ? (requestSlot ? <RequestEditPanel caseId={id} slot={requestSlot} action={side.action} onSent={async () => { setSide(null); announce("Request sent."); await refresh(); }} /> : null) : null}
-        {side?.kind === "ask" ? <AskPanel caseId={id} docs={cf.documents} onOpenSource={openSource} compact /> : null}
+        {side?.kind === "ask" ? <AskPanel caseId={id} docs={cf.documents} onOpenSource={openSource} compact canSavePubmed={role.consultant && !bg && !teamq.data?.archived} /> : null}
       </SidePanel>
 
       <ArchiveDialog open={archiveOpen} onOpenChange={setArchiveOpen} patient={cf.case.patient?.name || id} onConfirm={async (reason) => { await archiveCase(id, reason); nav("/cases", { replace: true }); }} />

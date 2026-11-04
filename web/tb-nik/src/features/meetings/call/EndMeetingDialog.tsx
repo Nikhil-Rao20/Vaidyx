@@ -1,21 +1,26 @@
 // "End the meeting?": today's confirmation from the coordinator's control view, with the count of Case Files that have a saved
-// outcome. Ending sends the saved outcomes to the owners; Case Files without one keep their place.
+// outcome. Ending sends the saved outcomes to the owners; Case Files without one keep their place. Meetings-v2 5.2: while the recorder
+// is on, the last words are posted first (the end stops the recorder on the server and refuses a later part).
+import { useContext } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { LoadingButton, errorText } from "@/features/casefile/components/common";
 import { endMeeting } from "../api";
 import { useCall } from "./context";
+import { ShellContext } from "./useCallState";
 
 export function EndMeetingDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   const c = useCall();
-  const finish = useMutation({ mutationFn: () => endMeeting(c.mid), onSuccess: () => { onOpenChange(false); c.announce("The meeting has ended."); c.refresh(); } });
+  const rec = useContext(ShellContext).recorder;
+  const finish = useMutation({ mutationFn: async () => { if (rec && rec.state === "on") await rec.cut(); return endMeeting(c.mid); }, onSuccess: () => { onOpenChange(false); c.announce("The meeting has ended."); c.refresh(); } });
   const done = c.order.filter((r) => r.decided || r.outcome).length;
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!finish.isPending) onOpenChange(o); }}>
-      <DialogContent aria-describedby="end-desc" data-testid="end-meeting-dialog" data-theme="dark" className="text-foreground">
+      <DialogContent aria-describedby="end-desc" data-testid="end-meeting-dialog" className="text-foreground">
         <DialogHeader><DialogTitle>End the meeting?</DialogTitle><DialogDescription id="end-desc">The outcomes already saved go to the owners. Case Files without a saved outcome keep their place; mark them Not discussed first to move them to the next meeting.</DialogDescription></DialogHeader>
         <p className="text-sm">{done} of {c.order.length} Case Files have a saved outcome.</p>
+        {rec && rec.state !== "off" ? <p className="text-sm text-muted-foreground" data-testid="end-stops-recording">Ending also stops the recorder. The text so far is kept; no audio is kept.</p> : null}
         {finish.isError ? <p role="alert" className="text-sm text-bad">{errorText(finish.error)}</p> : null}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={finish.isPending}>Keep going</Button>

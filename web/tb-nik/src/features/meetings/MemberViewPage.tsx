@@ -1,10 +1,13 @@
-// /meetings/:id/member: a member in the meeting, laid out like a video call (the call shell, call/CallShell.tsx): the shared screen
-// with the slide tabs (follow it, or step away to the other slides), the people and the agents beside it, one side panel at a time
-// (people, chat and questions, agenda, case, agents) and the control bar. Video goes through a pre-join screen (see your camera
+// /meetings/:id/member: a member in the meeting, laid out like a video call (the call shell, call/CallShell.tsx): the Board view of the
+// Case File on the floor, following the coordinator (meetings-v2 2.5: "Following <name>", Look around on one's own, Back to the room;
+// an outside expert reads the identity-stripped summary instead), the people and the agents beside it, one side panel at a time
+// (people, chat and questions, agenda, agents) and the control bar; on a phone the Board view full width, the tabs as chips. Video goes through a pre-join screen (see your camera
 // first). Members in the room keep video off on their own device. This page keeps the states before the call: not on this server,
 // loading, missing, not joined, waiting to be admitted, and the pre-join.
 // Voice (night-v3 4.4): the question box takes dictation; while the member dictates in the call, the call microphone is muted so
 // the room does not hear it twice, and it comes back after (only if it was on); the shell keeps that guard.
+// Meetings-v2 5.2: while the coordinator records the meeting as text, the waiting room and the pre-join say so; in the call the red
+// "Recording: text only, no audio kept" line shows (the shell). A member's screen never captures anything.
 import { useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { motion } from "motion/react";
@@ -18,8 +21,11 @@ import { BarButton, ControlBar, StageFrame, StageTopBar } from "./components/Sta
 import { LiveDot } from "./components/shared";
 import { CallShell } from "./call/CallShell";
 import { EmptyState, ErrorState, SkeletonLines, fmtDate, useAnnounce } from "@/features/casefile/components/common";
+import { useLightForMeeting } from "@/lib/appearance";
+import { RecordingNotice } from "./recorder/notice";
 
 export default function MemberViewPage() {
+  useLightForMeeting();  // the meeting is always light (owner, 2 Nov 2026)
   const { id = "" } = useParams();
   const nav = useNavigate();
   const { me } = useSession();
@@ -72,6 +78,7 @@ export default function MemberViewPage() {
             <span className="relative mx-auto mb-4 grid size-14 place-items-center rounded-full bg-stage-raised"><span className="absolute inline-flex size-full animate-ping rounded-full bg-primary/30" /><Users className="relative size-6 text-primary" /></span>
             <h1 className="text-xl text-stage-fg">Waiting for the coordinator to admit you</h1>
             <p className="mt-1 text-sm text-stage-muted">Keep this page open; it moves on by itself.</p>
+            <RecordingNotice state={s.recording?.state} className="mt-4 text-left" />
           </motion.div>
         </main>
         <ControlBar right={<span className="text-xs text-stage-muted">{s.meeting.room ?? ""}</span>}>
@@ -82,7 +89,7 @@ export default function MemberViewPage() {
   }
 
   if (videoAvailable && !choice) {
-    return <PreJoin title={`Tumour Board, ${fmtDate(s.meeting.date)}${s.meeting.time ? ` at ${s.meeting.time}` : ""}`} subtitle={row ? `On the screen now: ${row.patient_line}` : "Check your camera and microphone, then join."} onJoin={(c) => setChoice(c)} onSkip={() => setChoice("skipped")} />;
+    return <PreJoin title={`Tumour Board, ${fmtDate(s.meeting.date)}${s.meeting.time ? ` at ${s.meeting.time}` : ""}`} subtitle={row ? `On the screen now: ${row.patient_line}` : "Check your camera and microphone, then join."} onJoin={(c) => setChoice(c)} onSkip={() => setChoice("skipped")} recording={s.recording?.state} />;
   }
 
   return (

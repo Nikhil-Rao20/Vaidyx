@@ -1,5 +1,6 @@
 // Before joining a meeting with video: see your own camera, check the microphone level, pick a device, then "Join now" with the
-// camera and microphone as chosen (or join without video). The choice is kept for the session.
+// camera and microphone as chosen (or join without video). The choice is kept for the session. Meetings-v2 5.2: while the meeting is
+// recorded, "This meeting is being recorded as text. No audio is kept." above the join buttons.
 import { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { Camera, CameraOff, Mic, MicOff, Settings2, Video, VideoOff } from "lucide-react";
@@ -9,8 +10,11 @@ import { MicLevel } from "@/components/MicLevel";
 import { isAudioTrack, isVideoTrack, listDevices, previewTracks, recallChoice, rememberChoice, stopTracks, type JoinChoice } from "@/lib/video";
 import type { LocalTrack } from "livekit-client";
 import { cn } from "@/lib/utils";
+import { RecordingNotice } from "../recorder/notice";
 
-export function PreJoin({ title, subtitle, onJoin, onSkip, allowSkip = true }: { title: string; subtitle?: string; onJoin: (c: JoinChoice) => void; onSkip?: () => void; allowSkip?: boolean }) {
+export function PreJoin({ title, subtitle, onJoin, onSkip, allowSkip = true, recording }: { title: string; subtitle?: string; onJoin: (c: JoinChoice) => void; onSkip?: () => void; allowSkip?: boolean;
+  /** The meeting recorder's state (off, on, paused): the notice shows while on or paused. */
+  recording?: string | null }) {
   const remembered = recallChoice();
   const [cam, setCam] = useState(remembered?.cam ?? true);
   const [mic, setMic] = useState(remembered?.mic ?? true);
@@ -53,9 +57,9 @@ export function PreJoin({ title, subtitle, onJoin, onSkip, allowSkip = true }: {
   return (
     <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-stage p-4 text-stage-fg" data-testid="prejoin">
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="grid w-full max-w-4xl gap-6 lg:grid-cols-[3fr_2fr] lg:items-center">
-        <div className="relative aspect-video overflow-hidden rounded-2xl bg-stage-panel ring-1 ring-stage-line">
+        <div className="relative aspect-video overflow-hidden rounded-2xl bg-stage-video ring-1 ring-stage-line">
           <video ref={videoRef} autoPlay muted playsInline className={cn("h-full w-full -scale-x-100 object-cover", !cam && "hidden")} />
-          {!cam ? <div className="grid h-full w-full place-items-center text-stage-muted"><span className="flex flex-col items-center gap-2"><CameraOff className="size-10" />Camera is off</span></div> : null}
+          {!cam ? <div className="grid h-full w-full place-items-center text-white/80"><span className="flex flex-col items-center gap-2"><CameraOff className="size-10" />Camera is off</span></div> : null}
           <div className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-3 bg-gradient-to-t from-black/60 to-transparent px-4 pb-4 pt-10">
             <button type="button" onClick={() => setMic((v) => !v)} aria-pressed={mic} aria-label={mic ? "Turn the microphone off" : "Turn the microphone on"} className={cn("grid size-12 place-items-center rounded-full border transition", mic ? "border-white/30 bg-white/10 text-white hover:bg-white/20" : "border-[#d64545] bg-[#d64545] text-white")}>{mic ? <Mic className="size-5" /> : <MicOff className="size-5" />}</button>
             <button type="button" onClick={() => setCam((v) => !v)} aria-pressed={cam} aria-label={cam ? "Turn the camera off" : "Turn the camera on"} className={cn("grid size-12 place-items-center rounded-full border transition", cam ? "border-white/30 bg-white/10 text-white hover:bg-white/20" : "border-[#d64545] bg-[#d64545] text-white")}>{cam ? <Camera className="size-5" /> : <CameraOff className="size-5" />}</button>
@@ -64,7 +68,7 @@ export function PreJoin({ title, subtitle, onJoin, onSkip, allowSkip = true }: {
           <div className="absolute left-3 top-3 flex items-center gap-2 rounded-full bg-black/50 px-2.5 py-1 text-xs text-white">{mic ? <Mic className="size-3.5" /> : <MicOff className="size-3.5" />}<MicLevel track={mic ? audio?.mediaStreamTrack ?? null : null} /></div>
         </div>
         <div className="space-y-4">
-          <div className="flex items-center gap-2"><VaidyxIcon tone="white" className="h-6" /><VaidyxWordmark tone="white" className="h-5" /></div>
+          <div className="flex items-center gap-2"><VaidyxIcon className="h-6" /><VaidyxWordmark className="h-5" /></div>
           <div>
             <h1 className="text-2xl text-stage-fg">{title}</h1>
             {subtitle ? <p className="mt-1 text-sm text-stage-muted">{subtitle}</p> : null}
@@ -83,12 +87,13 @@ export function PreJoin({ title, subtitle, onJoin, onSkip, allowSkip = true }: {
               </label>
             </div>
           ) : null}
-          {err ? <p role="alert" className="rounded-md bg-bad/15 px-3 py-2 text-sm text-[#ffb4a8]">{/[.!?]$/.test(err.trim()) ? err.trim() : `${err.trim()}.`} You can still join and follow the shared screen.</p> : null}
+          <RecordingNotice state={recording} />
+          {err ? <p role="alert" className="rounded-md bg-bad-soft px-3 py-2 text-sm text-bad">{/[.!?]$/.test(err.trim()) ? err.trim() : `${err.trim()}.`} You can still join and follow the shared screen.</p> : null}
           <div className="flex flex-wrap items-center gap-2">
             <Button size="lg" className="h-11 rounded-full px-6" onClick={() => join(true)} data-testid="prejoin-join"><Video className="size-4" />Join now</Button>
             {allowSkip ? <Button size="lg" variant="ghost" className="h-11 rounded-full text-stage-fg hover:bg-stage-raised hover:text-stage-fg" onClick={() => join(false)}><VideoOff className="size-4" />Join without video</Button> : null}
           </div>
-          <p className="text-xs text-stage-muted">Video and sound stay on the hospital's own server. Nothing is recorded.</p>
+          <p className="text-xs text-stage-muted">Video and sound stay on the hospital's own server. No audio is ever kept.</p>
         </div>
       </motion.div>
     </div>

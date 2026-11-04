@@ -1,14 +1,11 @@
-// The meeting stage, the way a video call is laid out: a dark frame over the whole window, a thin top bar, the shared screen
-// in the middle, the people beside it, panels that slide in from the right, and a round-button control bar at the bottom.
-// The member view, the coordinator's conduct view and the room screen all build on these pieces.
+// The meeting stage, the way a video call is laid out: a light frame over the whole window, a thin top bar, the shared screen
+// in the middle (the Board view of the Case File on the floor, meetings-v2 2.5), the people beside it, panels that come in from the
+// right, and a round-button control bar at the bottom. The member view, the coordinator's conduct view and the room screen all build on
+// these pieces.
 import { useEffect, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import type { Opened } from "@/lib/live";
-import type { Slide } from "../types";
-import { recordPageUrl, viewerSrc } from "../api";
-import { SlideContent } from "./shared";
 import { VaidyxIcon } from "@/components/Wordmark";
 import { cn } from "@/lib/utils";
 
@@ -27,7 +24,7 @@ export function StageFrame({ children, className, testId, attrs }: { children: R
   return (
     // overflow-clip, not hidden: a script scroll (a focus or a scroll-into-view of something wider than the frame) can never shift the
     // whole call sideways (seen once in the live check at 1366 with video on, night-v3 6.3); the inner panels keep their own scrolling
-    <div className={cn("fixed inset-0 z-50 flex flex-col overflow-clip bg-stage text-stage-fg", className)} data-theme="dark" data-testid={testId} {...attrs}>
+    <div className={cn("fixed inset-0 z-50 flex flex-col overflow-clip bg-stage text-stage-fg", className)} data-testid={testId} {...attrs}>
       {children}
     </div>
   );
@@ -38,7 +35,7 @@ export function StageTopBar({ left, center, right, className }: { left?: ReactNo
     <header className={cn("flex min-h-12 items-center gap-3 border-b border-stage-line px-3 py-1.5 lg:px-4", className)}>
       {/* the meeting line may shrink: the case on the floor in the middle must stay readable at laptop width (2 Nov test pass) */}
       <div className="flex min-w-0 max-w-[22%] items-center gap-2.5">
-        <VaidyxIcon tone="white" className="h-5 shrink-0 opacity-90" />
+        <VaidyxIcon className="h-5 shrink-0" />
         {left}
       </div>
       <div className="min-w-0 flex-1">{center}</div>
@@ -64,7 +61,7 @@ export function BarButton({ icon: Icon, label, onClick, active, tone = "default"
     >
       <span className={cn(
         "relative grid size-11 place-items-center rounded-full transition-[background-color,transform] duration-150 group-active:scale-95 group-focus-visible:ring-2 group-focus-visible:ring-primary",
-        tone === "danger" ? "bg-[#d64545] text-white hover:bg-[#c23b3b]" : tone === "primary" ? "bg-primary text-primary-foreground hover:bg-primary-hover" : active ? "bg-stage-fg text-stage" : "bg-stage-raised text-stage-fg hover:bg-[#232d38]",
+        tone === "danger" ? "bg-[#d64545] text-white hover:bg-[#c23b3b]" : tone === "primary" ? "bg-primary text-primary-foreground hover:bg-primary-hover" : active ? "bg-stage-fg text-stage" : "bg-stage-raised text-stage-fg hover:bg-stage-line",
       )}>
         <Icon className="size-5" aria-hidden />
         {badge ? <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-primary px-1.5 text-center text-[11px] font-bold leading-5 text-primary-foreground">{badge}</span> : null}
@@ -108,47 +105,6 @@ export function StagePanel({ open, title, onClose, children, width = "w-[22rem]"
         </motion.aside>
       ) : null}
     </AnimatePresence>
-  );
-}
-
-/** What the room shows: the image viewer, a record page, a slide, or a waiting word. */
-export function SharedScreen({ cid, opened, slide, empty, big, children, className, label }: {
-  cid: string | null; opened: Opened | null | undefined; slide: Slide | null; empty: string; big?: boolean; children?: ReactNode; className?: string; label?: ReactNode;
-}) {
-  const viewer = opened?.kind === "images" ? viewerSrc(opened) : null;
-  return (
-    <section className={cn("relative min-h-0 flex-1 overflow-hidden rounded-xl border border-stage-line bg-stage-panel", className)} aria-label="Shared screen" data-testid="shared-screen" data-opened={opened?.kind ?? "slide"}>
-      <AnimatePresence mode="wait" initial={false}>
-        {viewer ? (
-          <motion.iframe key={`img-${viewer}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} title={`Image viewer${opened?.title ? `: ${opened.title}` : ""}`} src={viewer} className="absolute inset-0 h-full w-full bg-black" allow="fullscreen" />
-        ) : opened?.kind === "record" && opened.doc_id && cid ? (
-          <motion.div key={`rec-${opened.doc_id}-${opened.page ?? 0}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="scroll-thin absolute inset-0 overflow-auto bg-[#1a1f26] p-3">
-            {opened.title ? <p className="sticky top-0 z-10 mb-2 inline-block rounded-md bg-stage-raised/90 px-2 py-1 text-sm font-medium text-stage-fg shadow">{opened.title}</p> : null}
-            <img src={recordPageUrl(cid, opened.doc_id, opened.page ?? 0)} alt={`${opened.title ?? "Record"}, page ${(opened.page ?? 0) + 1}`} className="mx-auto h-auto max-w-full rounded-md bg-white" />
-          </motion.div>
-        ) : slide ? (
-          <motion.div key={`slide-${slide.id}`} initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -24 }} transition={{ duration: 0.22 }} className={cn("scroll-thin absolute inset-0 overflow-y-auto stage-slide", big ? "p-6 lg:p-8" : "p-4 lg:p-5")}>
-            <SlideContent slide={slide} big={big} />
-          </motion.div>
-        ) : (
-          <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 grid place-items-center p-6 text-center">
-            <p className={cn("text-stage-muted", big ? "text-2xl" : "text-base")}>{empty}</p>
-          </motion.div>
-        )}
-      </AnimatePresence>
-      {label ? <div className="pointer-events-none absolute right-3 top-3 z-10 flex items-center gap-2 [&>*]:pointer-events-auto">{label}</div> : null}
-      {children}
-    </section>
-  );
-}
-
-/** The dots under the shared screen: which slide is on. */
-export function SlideDots({ slides, index, className }: { slides: Slide[]; index: number; className?: string }) {
-  if (slides.length < 2) return null;
-  return (
-    <ol className={cn("flex items-center gap-1", className)} aria-label="Slides">
-      {slides.map((x, i) => <li key={x.id} className={cn("h-1.5 rounded-full transition-all", i === index ? "w-6 bg-primary" : "w-2 bg-stage-line")} aria-current={i === index ? "true" : undefined} title={x.title} />)}
-    </ol>
   );
 }
 

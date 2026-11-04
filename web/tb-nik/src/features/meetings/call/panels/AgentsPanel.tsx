@@ -75,7 +75,7 @@ function AgentRoster() {
     await act.run(`agent:${role}`, () => ctx.actions.setAgent(role, on));
     setWant((w) => { const { [role]: _drop, ...rest } = w; void _drop; return rest; });
   };
-  const askOn = askWant ?? s.can?.ask_agents !== false;
+  const askOn = askWant ?? s.can?.members_ask !== false;  // the switch's own value, not the coordinator's right to ask (review finding 4)
   const setAsk = async (on: boolean) => {
     setAskWant(on);
     await act.run("agents-ask", () => ctx.actions.setAgentsAsk(on));

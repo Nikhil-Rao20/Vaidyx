@@ -1,8 +1,10 @@
 // Every call the meeting pages make (meetings.py, checked against tumour_board/api/meetings.py). The old /sessions
 // routes are the read-only fallback when the new routes are not on the server.
 import { api, TB } from "@/lib/api";
-import { routeMissing, type AgentInfo, type ChatMessage, type MeetingInfo, type MeetingQuestion, type MeetingState, type MeetingTimer, type Opened } from "@/lib/live";
+import { routeMissing, type AgentInfo, type BoardTab, type BoardViewState, type ChatMessage, type MeetingInfo, type MeetingQuestion, type MeetingState, type MeetingTimer, type Opened } from "@/lib/live";
 import type { CardsResponse, DecisionBody, DecisionSpec, JoinResponse, MeetingsResponse, MemberCard, NewMeeting, OldSession, SlidesResponse } from "./types";
+import type { CaseListItem } from "@/lib/types";
+import type { ListKey, NewSeries, Series, SeriesList } from "./planner/types";
 
 const enc = encodeURIComponent;
 export const mUrl = (mid: string) => `${TB}/meetings/${enc(mid)}`;
@@ -27,8 +29,19 @@ export const admit = (mid: string, user: string) => api.post(`${mUrl(mid)}/admit
 export const present = (mid: string, mode: "room" | "remote") => api.post(`${mUrl(mid)}/present`, { mode });
 export const startMeeting = (mid: string) => api.post(`${mUrl(mid)}/start`, {});
 export const endMeeting = (mid: string) => api.post(`${mUrl(mid)}/end`, {});
-export const setCurrent = (mid: string, case_id: string, slide?: number) => api.post(`${mUrl(mid)}/current`, { case_id, slide });
-export const openOnScreen = (mid: string, kind: "record" | "images" | "none", doc_id?: string) => api.post<{ opened: Opened | null }>(`${mUrl(mid)}/open`, { kind, doc_id });
+/** Put a Case File on the floor (the Board view starts on its Summary for everyone). */
+export const setCurrent = (mid: string, case_id: string) => api.post(`${mUrl(mid)}/current`, { case_id });
+/** The Board view's follow state (meetings-v2 2.2 / 2.4): the coordinator, or the presenter of the Case File on the floor, moves every
+ *  follower to a tab, a report at a page with its line highlighted, or the images (the server grants the admitted members the viewer).
+ *  Refusals: 409 not_in_session, no_current, moved_on; 403 not_member, forbidden; 400 bad_tab, bad_record, bad_page, bad_quote; 404
+ *  no_record, no_images; 429. */
+export const setView = (mid: string, b: { tab: BoardTab; doc_id?: string | null; page?: number | null; quote?: string }) =>
+  api.post<{ view: BoardViewState }>(`${mUrl(mid)}/view`, {
+    tab: b.tab,
+    ...(b.doc_id ? { doc_id: b.doc_id } : {}),
+    ...(b.doc_id && typeof b.page === "number" ? { page: b.page } : {}),
+    ...(b.quote ? { quote: b.quote } : {}),
+  });
 export const timer = (mid: string, action: "start" | "stop" | "reset", minutes?: number) => api.post<{ timer: MeetingTimer | null }>(`${mUrl(mid)}/timer`, { action, minutes });
 /** A question to the board, or to one stand-in agent when `role` names it (night-v3 5.1: the chip row of the Chat panel). */
 export const askQuestion = (mid: string, text: string, role?: string) => api.post(`${mUrl(mid)}/questions`, role ? { text, role } : { text });
@@ -64,7 +77,8 @@ export const correctBoardRecord = (cid: string, recordId: string, changes: Parti
 export const endCase = (mid: string, cid: string) => api.post<{ case_id: string; cards_requested: string[] }>(`${mUrl(mid)}/cases/${enc(cid)}/end`, {});
 export const sendCard = (mid: string, cid: string, agree: boolean, note?: string) => api.post<{ card: MemberCard }>(`${mUrl(mid)}/cases/${enc(cid)}/card`, { agree, note });
 export const getCards = (mid: string) => api.get<CardsResponse>(`${mUrl(mid)}/cards`);
-export const meetingDeckUrl = (mid: string) => `${mUrl(mid)}/deck`;
+/** The summary of the Case File on the floor with the patient's identity removed, for an outside expert only (security review #9): the
+ *  Board view reads the Case File itself for everyone else (meetings-v2 2.6). */
 export const getSlides = (mid: string, cid: string) => api.get<SlidesResponse>(`${mUrl(mid)}/cases/${enc(cid)}/slides`);
 
 // Old sessions, read-only.
@@ -73,13 +87,40 @@ export const getOldSession = (sid: string) => api.get<{ session: { id: string; d
 
 /** The hospital image viewer for a study, served through the app so the viewer stays same-origin. */
 export const ohifUrl = (studyUid: string) => `${TB}/pacs/ohif/viewer?StudyInstanceUIDs=${enc(studyUid)}`;
-/** One page of a record as a PNG (pages are 0-based in the API). */
-export const recordPageUrl = (cid: string, doc: string, page = 0) => `${TB}/cases/${enc(cid)}/documents/${enc(doc)}/file?render=1&page=${page}`;
-
-/** Only a same-origin path is put in an iframe on the shared screen. */
+/** Only a same-origin path is put in an iframe (the Board view's Images tab). */
 export function viewerSrc(o: Opened | null | undefined): string | null {
   if (!o) return null;
   const u = o.viewer_url ?? (o.kind === "images" ? o.url : undefined);
   if (u && u.startsWith("/")) return u;
   return o.study_uid ? ohifUrl(o.study_uid) : null;
 }
+
+// ---- planning (meetings-v2 3.3): the weekly series, the agenda order, moving a Case File, the PDFs (4.1) -------------------------------
+/** The MDT Coordinator's weekly series: {series: [row], weekdays: [Monday .. Sunday]}; a row has its label ("Every week on Friday at
+ *  10:00"), its status (active, paused, stopped) and its meetings dated today or later. */
+export const listSeries = () => api.get<SeriesList>(`${TB}/meeting-series`);
+/** A new weekly series: the next four weeks of meetings are made at once (`made`: their ids, earliest first). 409 duplicate. */
+export const createSeries = (b: NewSeries) => api.post<{ series: Series; made: string[] }>(`${TB}/meeting-series`, b);
+/** Change the series (only the fields given): its future meetings follow, except a field changed by hand on one meeting. */
+export const updateSeries = (sid: string, b: Partial<NewSeries>) => api.put<{ series: Series; changed: string[]; cancelled: string[]; made: string[] }>(`${TB}/meeting-series/${enc(sid)}`, b);
+export const pauseSeries = (sid: string) => api.post<{ series: Series }>(`${TB}/meeting-series/${enc(sid)}/pause`, {});
+export const resumeSeries = (sid: string) => api.post<{ series: Series; made?: string[] }>(`${TB}/meeting-series/${enc(sid)}/resume`, {});
+/** No new meetings; the future meetings with no Case File are cancelled, those with Case Files stay (`kept`). */
+export const stopSeries = (sid: string) => api.post<{ series: Series; cancelled: string[]; kept: MeetingInfo[] }>(`${TB}/meeting-series/${enc(sid)}/stop`, {});
+/** The coordinator's order of the two lists; `byUrgency` puts those lists back in urgency order (5 first). A list put in an order that
+ *  is not the urgency order is arranged by hand from then on: new Case Files go at its end, marked new. */
+export const arrangeAgenda = (mid: string, discussion: string[], noting: string[], byUrgency: ListKey[] = []) =>
+  api.put<MeetingState>(`${mUrl(mid)}/agenda`, byUrgency.length ? { discussion, noting, by_urgency: byUrgency } : { discussion, noting });
+/** The meetings a Case File may still go to (planned, not cancelled, today or later, earliest first). */
+export const listOpenMeetings = () => api.get<{ meetings: MeetingInfo[] }>(`${TB}/meetings/open`);
+/** Move a Case File sent to the board to another open meeting (same list); 400 not_sent when it was never sent to the board. */
+export const moveToMeeting = (cid: string, meetingId: string, reason = "") => api.post(`${TB}/cases/${enc(cid)}/meeting/move`, { meeting_id: meetingId, reason });
+/** Take a Case File off the agenda with a reason (3 to 500 characters); it stays marked ready. 400 not_sent when it was never sent. */
+export const takeOffAgenda = (cid: string, reason: string) => api.post(`${TB}/cases/${enc(cid)}/meeting/withdraw`, { reason });
+/** The Case Files the coordinator may list, matched on the patient's name, UHID or the cancer (GET /case-list?q=). */
+export const findCaseFiles = (q: string) => api.get<{ cases: CaseListItem[] }>(`${TB}/case-list?q=${enc(q)}`);
+/** The meeting PDF (4.1): the agenda before the meeting, the record with the decisions and the minutes after it. The coordinator and the
+ *  admitted members; never an outside expert. */
+export const meetingPdfUrl = (mid: string) => `${mUrl(mid)}/pdf`;
+/** The board record PDF of one Case File (4.1): its full readers, never in a read-only window; 404 no_board_record before the board. */
+export const caseBoardPdfUrl = (cid: string) => `${TB}/cases/${enc(cid)}/board-pdf`;

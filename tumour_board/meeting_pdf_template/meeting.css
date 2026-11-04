@@ -1,0 +1,91 @@
+/* The meeting PDF (meetings-v2 item 4.1): A4 portrait, the light Vaidyx look. Ink text on white, one teal accent, quiet grey lines.
+   Read by tumour_board/meeting_pdf.py; the footer words and the running heads are filled there. WeasyPrint 69 (the pdf venv). */
+@page {
+  size: A4;
+  margin: 19mm 17mm 21mm 17mm;
+  @top-left { content: string(runhead); font-family: "Nimbus Sans", "DejaVu Sans", Arial, sans-serif; font-size: 7.5pt; color: #5F6B78; vertical-align: bottom; padding-bottom: 3mm; }
+  @top-right { content: string(casehead); font-family: "Nimbus Sans", "DejaVu Sans", Arial, sans-serif; font-size: 7.5pt; color: #5F6B78; vertical-align: bottom; padding-bottom: 3mm; }
+  @bottom-left { content: "__FOOTER__"; font-family: "Nimbus Sans", "DejaVu Sans", Arial, sans-serif; font-size: 7.5pt; color: #5F6B78; vertical-align: top; padding-top: 3mm; }
+  @bottom-right { content: "Page " counter(page) " of " counter(pages); font-family: "Nimbus Sans", "DejaVu Sans", Arial, sans-serif; font-size: 7.5pt; color: #5F6B78; vertical-align: top; padding-top: 3mm; }
+}
+@page cover {
+  @top-left { content: none; }
+  @top-right { content: none; }
+}
+
+html { font-family: "Nimbus Sans", "DejaVu Sans", Arial, sans-serif; font-size: 9.5pt; line-height: 1.42; color: #3B4754; background: #FFFFFF; }
+body { margin: 0; }
+h1, h2, h3 { color: #121A24; margin: 0; font-weight: bold; }
+p { margin: 0 0 2mm 0; }
+.runhead { string-set: runhead content(); height: 0; overflow: hidden; font-size: 0; }
+.casehead { string-set: casehead content(); height: 0; overflow: hidden; font-size: 0; }
+
+/* -- cover */
+.cover { page: cover; position: relative; height: 255mm; break-after: page; }
+.cover-top { overflow: hidden; }
+.hosp-logo { height: 20mm; max-width: 60mm; float: left; margin: 0 6mm 0 0; }
+.hosp-name { font-size: 12pt; font-weight: bold; color: #5F6B78; padding-top: 6mm; }
+.cover-main { margin-top: 30mm; }
+.rule { width: 34mm; height: 1.6mm; background: #00C0B5; margin-bottom: 7mm; }
+.cover h1 { font-size: 34pt; line-height: 1.05; letter-spacing: -0.3pt; }
+.cover .when { font-size: 15pt; color: #121A24; margin-top: 3mm; }
+.cover .subtitle { font-size: 11pt; color: #5F6B78; margin-top: 2mm; }
+.facts { margin-top: 12mm; border-collapse: collapse; width: 100%; }
+.facts th { text-align: left; font-weight: normal; color: #5F6B78; width: 42mm; padding: 2.4mm 0; border-top: 0.5pt solid #E2E8EF; vertical-align: top; }
+.facts td { color: #121A24; padding: 2.4mm 0; border-top: 0.5pt solid #E2E8EF; vertical-align: top; }
+.cover-bottom { position: absolute; bottom: 0; left: 0; right: 0; font-size: 8.5pt; color: #5F6B78; }
+.cover-bottom p { margin: 0 0 1.6mm 0; }
+.brand { margin-top: 5mm; overflow: hidden; }
+.brand img { height: 6mm; vertical-align: middle; margin-right: 2mm; }
+.brand span { vertical-align: middle; font-size: 7.5pt; }
+
+/* -- pills, notes, kickers */
+.pill { display: inline-block; font-size: 7.5pt; font-weight: bold; padding: 0.6mm 2.2mm; border-radius: 3mm; background: #F1F4F8; color: #5F6B78; }
+.pill.ok { background: #E4F4EA; color: #1D6A44; }
+.pill.warn { background: #FDF1D6; color: #8A5200; }
+.pill.teal { background: #E4F6F4; color: #006B65; }
+.pill.bad { background: #FBE8E5; color: #B2362B; }
+.kicker { font-size: 7.5pt; font-weight: bold; letter-spacing: 0.6pt; text-transform: uppercase; color: #006B65; margin-bottom: 1.6mm; }
+.muted { color: #5F6B78; }
+.small { font-size: 8pt; }
+.none { color: #5F6B78; font-style: italic; }
+
+/* -- sections */
+.section { break-before: page; }
+.section h2 { font-size: 17pt; line-height: 1.15; margin-bottom: 2mm; }
+h3 { font-size: 10pt; margin: 6mm 0 2mm 0; padding-bottom: 1mm; border-bottom: 0.5pt solid #E2E8EF; }
+.meta { color: #5F6B78; font-size: 8.5pt; margin-bottom: 1mm; }
+.meta b { color: #3B4754; font-weight: bold; }
+.question { margin: 5mm 0 2mm 0; padding: 3mm 4mm; background: #F2FAF9; border-left: 1.2mm solid #00C0B5; }
+.question .kicker { margin-bottom: 1mm; }
+.question .text { font-size: 11pt; color: #121A24; }
+.outcome-row { margin-top: 5mm; }
+.outcome-row .pill { font-size: 8.5pt; padding: 0.8mm 2.6mm; }
+.decision { margin: 2.5mm 0 1mm 0; padding: 3mm 4mm; border: 0.5pt solid #E2E8EF; border-radius: 1.5mm; white-space: pre-wrap; color: #121A24; font-size: 10pt; }
+.lead { font-size: 7.5pt; font-weight: bold; letter-spacing: 0.4pt; text-transform: uppercase; color: #5F6B78; margin-top: 3mm; }
+table.grid { width: 100%; border-collapse: collapse; margin-top: 1mm; }
+table.grid th { text-align: left; font-size: 7.5pt; font-weight: bold; letter-spacing: 0.3pt; text-transform: uppercase; color: #5F6B78; padding: 1.6mm 2mm; background: #F5F7FA; border-bottom: 0.5pt solid #E2E8EF; }
+table.grid td { padding: 1.8mm 2mm; border-bottom: 0.5pt solid #E2E8EF; vertical-align: top; color: #3B4754; }
+table.grid td.strong { color: #121A24; }
+table.grid tr { break-inside: avoid; }
+table.fixed { table-layout: fixed; }
+table.kv { width: 100%; border-collapse: collapse; margin-top: 1mm; }
+table.kv th { text-align: left; font-weight: normal; color: #5F6B78; width: 52mm; padding: 1.5mm 3mm 1.5mm 0; border-bottom: 0.5pt solid #E2E8EF; vertical-align: top; }
+table.kv td { color: #121A24; padding: 1.5mm 0; border-bottom: 0.5pt solid #E2E8EF; vertical-align: top; white-space: pre-wrap; }
+table.kv tr { break-inside: avoid; }
+ul.plain { margin: 1mm 0 0 0; padding-left: 4.5mm; }
+ul.plain li { margin-bottom: 1.2mm; }
+.version { margin-top: 4mm; padding: 2.4mm 3.5mm; background: #FDF1D6; color: #5C3700; border-radius: 1.5mm; font-size: 8.5pt; }
+.restricted { margin-top: 5mm; padding: 3mm 4mm; background: #F5F7FA; color: #5F6B78; border-radius: 1.5mm; font-size: 8.5pt; }
+.agent { margin-top: 1mm; }
+.agent-tag { display: inline-block; font-size: 7pt; font-weight: bold; padding: 0.4mm 1.8mm; border-radius: 2mm; background: #EEEBFF; color: #4A3399; margin-left: 1.5mm; }
+.notes { margin-top: 5mm; padding: 3mm 4mm; border: 0.5pt dashed #B9C3CF; border-radius: 1.5mm; }
+.notes .said { color: #5F6B78; font-size: 8pt; margin: 0.6mm 0 1.6mm 3mm; }
+.record { margin-top: 6mm; padding-top: 4mm; border-top: 0.8pt solid #E2E8EF; }
+.record:first-of-type { border-top: none; padding-top: 0; }
+.case-head { margin-bottom: 4mm; }
+.case-head h1 { font-size: 22pt; line-height: 1.1; margin: 2mm 0; }
+.case-top { overflow: hidden; margin-bottom: 6mm; }
+.case-top img { height: 12mm; max-width: 40mm; float: left; margin-right: 4mm; }
+.case-top .hosp-name { padding-top: 3mm; font-size: 10pt; }
+.synthetic { color: #B2362B; font-weight: bold; }

@@ -1,0 +1,889 @@
+{
+ "question": "What did trials report about induction chemotherapy before chemoradiation in locally advanced cervical cancer?",
+ "label": "From PubMed. Every line is quoted word for word from the paper's abstract. Published evidence, not advice for any patient.",
+ "status": "answered",
+ "message": "",
+ "search": {
+  "query": "(\"induction chemotherapy\" OR \"neoadjuvant chemotherapy\") AND (\"chemoradiation\" OR \"chemoradiotherapy\") AND (\"locally advanced cervical cancer\" OR \"cervical neoplasia\")",
+  "broader_query": "\"induction chemotherapy\" AND \"cervical cancer\"",
+  "by": "model",
+  "attempts": [
+   {
+    "term": "(\"induction chemotherapy\" OR \"neoadjuvant chemotherapy\") AND (\"chemoradiation\" OR \"chemoradiotherapy\") AND (\"locally advanced cervical cancer\" OR \"cervical neoplasia\")",
+    "years": null,
+    "count": 146,
+    "warnings": []
+   }
+  ],
+  "used": "(\"induction chemotherapy\" OR \"neoadjuvant chemotherapy\") AND (\"chemoradiation\" OR \"chemoradiotherapy\") AND (\"locally advanced cervical cancer\" OR \"cervical neoplasia\")",
+  "years": null,
+  "translation": "(\"induction chemotherapy\"[All Fields] OR \"neoadjuvant chemotherapy\"[All Fields]) AND (\"chemoradiation\"[All Fields] OR \"chemoradiotherapy\"[All Fields]) AND (\"locally advanced cervical cancer\"[All Fields] OR \"cervical neoplasia\"[All Fields])"
+ },
+ "statements": [
+  {
+   "text": "A phase 3 trial reported that short-course induction chemotherapy followed by chemoradiotherapy significantly improved 5-year progression-free survival (72% vs 64%) and overall survival (80% vs 72%) compared to chemoradiotherapy alone.",
+   "citations": [
+    {
+     "pmid": "39419054",
+     "quote": "After a median follow-up of 67 months, 5-year progression-free survival rates were 72% in the induction chemotherapy with chemoradiotherapy group and 64% in the chemoradiotherapy alone group with a hazard ratio (HR) of 0\u00b765 (95% CI 0\u00b746-0\u00b791, p=0\u00b7013). 5-year overall survival rates were 80% in the induction chemotherapy with chemoradiotherapy group and 72% in the chemoradiotherapy alone group, with an HR of 0\u00b760 (95% CI 0\u00b740-0\u00b791, p=0\u00b7015).",
+     "where": "FINDINGS"
+    }
+   ]
+  },
+  {
+   "text": "A meta-analysis found that adding induction chemotherapy to chemoradiotherapy significantly improves progression-free survival and overall survival, provided the induction chemotherapy is a platinum doublet with paclitaxel administered within 6 weeks.",
+   "citations": [
+    {
+     "pmid": "40408847",
+     "quote": "In patients with LACC, ICT + CCRT significantly improves PFS and OS compared to CCRT alone, provided that the ICT involves a platinum doublet with paclitaxel and is administered within \u2264 6 weeks.",
+     "where": "CONCLUSION"
+    }
+   ]
+  },
+  {
+   "text": "A report on 50 patients receiving weekly cisplatin and paclitaxel followed by chemoradiation showed a 3-year overall survival rate of 83.9% and a 3-year progression-free survival rate of 73.6%.",
+   "citations": [
+    {
+     "pmid": "36641433",
+     "quote": "After a median follow-up of 28 months, the 3-year OS rate was 83.9%, and the 3-year PFS rate was 73.6%.",
+     "where": "RESULTS"
+    }
+   ]
+  },
+  {
+   "text": "The addition of induction chemotherapy to chemoradiation did not adversely impact quality of life compared to chemoradiation alone.",
+   "citations": [
+    {
+     "pmid": "40139003",
+     "quote": "IC added to CRT does not adversely impact QoL compared to CRT, either during IC, during CRT or later.",
+     "where": "CONCLUSION"
+    }
+   ]
+  }
+ ],
+ "removed": [],
+ "invented_pmids": 0,
+ "papers": [
+  {
+   "pmid": "40408847",
+   "title": "Induction chemotherapy followed by chemoradiotherapy for locally advanced cervical cancer: A systematic review and meta-analysis.",
+   "journal": "Cancer treatment reviews",
+   "journal_abbr": "Cancer Treat Rev",
+   "year": "2025",
+   "authors_line": "Andrade MO, Al-Alam OCM, Kim HJS, et al.",
+   "study_type": "Meta-analysis",
+   "tier": 1,
+   "types": [
+    "Journal Article",
+    "Systematic Review",
+    "Meta-Analysis"
+   ],
+   "preprint": false,
+   "retracted": false,
+   "retraction_notice": false,
+   "concern": false,
+   "erratum": false,
+   "india": false,
+   "doi": "10.1016/j.ctrv.2025.102959",
+   "pmcid": "",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/40408847/",
+   "has_abstract": true,
+   "rank": 14,
+   "read": true,
+   "why_not_read": "",
+   "provenance": {
+    "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=39419054%2C38651760%2C38048802%2C29432076%2C35325372%2C40441923%2C30534016%2C31898673%2C32878770%2C40274459%2C33622931%2C33387427%2C40300942%2C40408847%2C36641433%2C27199522%2C12576919%2C40139003%2C11848519%2C39475968&retmode=xml&tool=vaidyx-tb",
+    "at": "2026-11-03T14:10:12+00:00",
+    "status": 200,
+    "bytes": 281200,
+    "sha256": "d76505e74ff5449867b9124283166efec1d9914839be331921de50d722ae20fd",
+    "tries": 1,
+    "seconds": 1.15,
+    "cached": false
+   },
+   "cited": true
+  },
+  {
+   "pmid": "39419054",
+   "title": "Induction chemotherapy followed by standard chemoradiotherapy versus standard chemoradiotherapy alone in patients with locally advanced cervical cancer (GCIG INTERLACE): an international, multicentre, randomised phase 3 trial.",
+   "journal": "Lancet (London, England)",
+   "journal_abbr": "Lancet",
+   "year": "2024",
+   "authors_line": "McCormack M, Eminowicz G, Gallardo D, et al.",
+   "study_type": "Randomised trial",
+   "tier": 2,
+   "types": [
+    "Journal Article",
+    "Clinical Trial, Phase III",
+    "Randomized Controlled Trial",
+    "Multicenter Study",
+    "Research Support, Non-U.S. Gov't"
+   ],
+   "preprint": false,
+   "retracted": false,
+   "retraction_notice": false,
+   "concern": false,
+   "erratum": true,
+   "india": true,
+   "doi": "10.1016/S0140-6736(24)01438-7",
+   "pmcid": "",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/39419054/",
+   "has_abstract": true,
+   "rank": 1,
+   "read": true,
+   "why_not_read": "",
+   "provenance": {
+    "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=39419054%2C38651760%2C38048802%2C29432076%2C35325372%2C40441923%2C30534016%2C31898673%2C32878770%2C40274459%2C33622931%2C33387427%2C40300942%2C40408847%2C36641433%2C27199522%2C12576919%2C40139003%2C11848519%2C39475968&retmode=xml&tool=vaidyx-tb",
+    "at": "2026-11-03T14:10:12+00:00",
+    "status": 200,
+    "bytes": 281200,
+    "sha256": "d76505e74ff5449867b9124283166efec1d9914839be331921de50d722ae20fd",
+    "tries": 1,
+    "seconds": 1.15,
+    "cached": false
+   },
+   "cited": true
+  },
+  {
+   "pmid": "38048802",
+   "title": "Neoadjuvant chemotherapy plus camrelizumab for locally advanced cervical cancer (NACI study): a multicentre, single-arm, phase 2 trial.",
+   "journal": "The Lancet. Oncology",
+   "journal_abbr": "Lancet Oncol",
+   "year": "2024",
+   "authors_line": "Li K, Chen J, Hu Y, et al.",
+   "study_type": "Clinical trial",
+   "tier": 2,
+   "types": [
+    "Multicenter Study",
+    "Clinical Trial, Phase II",
+    "Journal Article",
+    "Research Support, Non-U.S. Gov't"
+   ],
+   "preprint": false,
+   "retracted": false,
+   "retraction_notice": false,
+   "concern": false,
+   "erratum": false,
+   "india": false,
+   "doi": "10.1016/S1470-2045(23)00531-4",
+   "pmcid": "",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/38048802/",
+   "has_abstract": true,
+   "rank": 3,
+   "read": true,
+   "why_not_read": "",
+   "provenance": {
+    "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=39419054%2C38651760%2C38048802%2C29432076%2C35325372%2C40441923%2C30534016%2C31898673%2C32878770%2C40274459%2C33622931%2C33387427%2C40300942%2C40408847%2C36641433%2C27199522%2C12576919%2C40139003%2C11848519%2C39475968&retmode=xml&tool=vaidyx-tb",
+    "at": "2026-11-03T14:10:12+00:00",
+    "status": 200,
+    "bytes": 281200,
+    "sha256": "d76505e74ff5449867b9124283166efec1d9914839be331921de50d722ae20fd",
+    "tries": 1,
+    "seconds": 1.15,
+    "cached": false
+   },
+   "cited": false
+  },
+  {
+   "pmid": "29432076",
+   "title": "Neoadjuvant Chemotherapy Followed by Radical Surgery Versus Concomitant Chemotherapy and Radiotherapy in Patients With Stage IB2, IIA, or IIB Squamous Cervical Cancer: A Randomized Controlled Trial.",
+   "journal": "Journal of clinical oncology : official journal of the American Society of Clinical Oncology",
+   "journal_abbr": "J Clin Oncol",
+   "year": "2018",
+   "authors_line": "Gupta S, Maheshwari A, Parab P, et al.",
+   "study_type": "Randomised trial",
+   "tier": 2,
+   "types": [
+    "Clinical Trial, Phase III",
+    "Comparative Study",
+    "Journal Article",
+    "Randomized Controlled Trial",
+    "Research Support, Non-U.S. Gov't"
+   ],
+   "preprint": false,
+   "retracted": false,
+   "retraction_notice": false,
+   "concern": false,
+   "erratum": false,
+   "india": true,
+   "doi": "10.1200/JCO.2017.75.9985",
+   "pmcid": "",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/29432076/",
+   "has_abstract": true,
+   "rank": 4,
+   "read": true,
+   "why_not_read": "",
+   "provenance": {
+    "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=39419054%2C38651760%2C38048802%2C29432076%2C35325372%2C40441923%2C30534016%2C31898673%2C32878770%2C40274459%2C33622931%2C33387427%2C40300942%2C40408847%2C36641433%2C27199522%2C12576919%2C40139003%2C11848519%2C39475968&retmode=xml&tool=vaidyx-tb",
+    "at": "2026-11-03T14:10:12+00:00",
+    "status": 200,
+    "bytes": 281200,
+    "sha256": "d76505e74ff5449867b9124283166efec1d9914839be331921de50d722ae20fd",
+    "tries": 1,
+    "seconds": 1.15,
+    "cached": false
+   },
+   "cited": false
+  },
+  {
+   "pmid": "31898673",
+   "title": "Locally advanced cervical cancer - neoadjuvant chemotherapy followed by concurrent chemoradiation and targeted therapy as maintenance: A phase II study.",
+   "journal": "Journal of cancer research and therapeutics",
+   "journal_abbr": "J Cancer Res Ther",
+   "year": "2019",
+   "authors_line": "Benson R, Pathy S, Kumar L, et al.",
+   "study_type": "Clinical trial",
+   "tier": 2,
+   "types": [
+    "Clinical Trial, Phase II",
+    "Journal Article"
+   ],
+   "preprint": false,
+   "retracted": false,
+   "retraction_notice": false,
+   "concern": false,
+   "erratum": false,
+   "india": true,
+   "doi": "10.4103/jcrt.JCRT_39_18",
+   "pmcid": "",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/31898673/",
+   "has_abstract": true,
+   "rank": 8,
+   "read": true,
+   "why_not_read": "",
+   "provenance": {
+    "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=39419054%2C38651760%2C38048802%2C29432076%2C35325372%2C40441923%2C30534016%2C31898673%2C32878770%2C40274459%2C33622931%2C33387427%2C40300942%2C40408847%2C36641433%2C27199522%2C12576919%2C40139003%2C11848519%2C39475968&retmode=xml&tool=vaidyx-tb",
+    "at": "2026-11-03T14:10:12+00:00",
+    "status": 200,
+    "bytes": 281200,
+    "sha256": "d76505e74ff5449867b9124283166efec1d9914839be331921de50d722ae20fd",
+    "tries": 1,
+    "seconds": 1.15,
+    "cached": false
+   },
+   "cited": false
+  },
+  {
+   "pmid": "33387427",
+   "title": "Influence of neoadjuvant chemoradiotherapy for locally advanced cervical cancer.",
+   "journal": "Polski merkuriusz lekarski : organ Polskiego Towarzystwa Lekarskiego",
+   "journal_abbr": "Pol Merkur Lekarski",
+   "year": "2020",
+   "authors_line": "Klyuchko KO, Gargin VV",
+   "study_type": "Randomised trial",
+   "tier": 2,
+   "types": [
+    "Journal Article",
+    "Randomized Controlled Trial"
+   ],
+   "preprint": false,
+   "retracted": false,
+   "retraction_notice": false,
+   "concern": false,
+   "erratum": false,
+   "india": false,
+   "doi": "",
+   "pmcid": "",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/33387427/",
+   "has_abstract": true,
+   "rank": 12,
+   "read": true,
+   "why_not_read": "",
+   "provenance": {
+    "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=39419054%2C38651760%2C38048802%2C29432076%2C35325372%2C40441923%2C30534016%2C31898673%2C32878770%2C40274459%2C33622931%2C33387427%2C40300942%2C40408847%2C36641433%2C27199522%2C12576919%2C40139003%2C11848519%2C39475968&retmode=xml&tool=vaidyx-tb",
+    "at": "2026-11-03T14:10:12+00:00",
+    "status": 200,
+    "bytes": 281200,
+    "sha256": "d76505e74ff5449867b9124283166efec1d9914839be331921de50d722ae20fd",
+    "tries": 1,
+    "seconds": 1.15,
+    "cached": false
+   },
+   "cited": false
+  },
+  {
+   "pmid": "12576919",
+   "title": "Induction chemotherapy with gemcitabine and oxaliplatin for locally advanced cervical carcinoma.",
+   "journal": "American journal of clinical oncology",
+   "journal_abbr": "Am J Clin Oncol",
+   "year": "2003",
+   "authors_line": "Due\u00f1as-Gonz\u00e1lez A, L\u00f3pez-Graniel C, Gonz\u00e1lez A, et al.",
+   "study_type": "Clinical trial",
+   "tier": 2,
+   "types": [
+    "Clinical Trial",
+    "Journal Article"
+   ],
+   "preprint": false,
+   "retracted": false,
+   "retraction_notice": false,
+   "concern": false,
+   "erratum": false,
+   "india": false,
+   "doi": "10.1097/00000421-200302000-00005",
+   "pmcid": "",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/12576919/",
+   "has_abstract": true,
+   "rank": 17,
+   "read": true,
+   "why_not_read": "",
+   "provenance": {
+    "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=39419054%2C38651760%2C38048802%2C29432076%2C35325372%2C40441923%2C30534016%2C31898673%2C32878770%2C40274459%2C33622931%2C33387427%2C40300942%2C40408847%2C36641433%2C27199522%2C12576919%2C40139003%2C11848519%2C39475968&retmode=xml&tool=vaidyx-tb",
+    "at": "2026-11-03T14:10:12+00:00",
+    "status": 200,
+    "bytes": 281200,
+    "sha256": "d76505e74ff5449867b9124283166efec1d9914839be331921de50d722ae20fd",
+    "tries": 1,
+    "seconds": 1.15,
+    "cached": false
+   },
+   "cited": false
+  },
+  {
+   "pmid": "40139003",
+   "title": "Induction chemotherapy followed by chemoradiation in locally advanced cervical cancer: Quality of life outcomes of the GCIG INTERLACE trial.",
+   "journal": "European journal of cancer (Oxford, England : 1990)",
+   "journal_abbr": "Eur J Cancer",
+   "year": "2025",
+   "authors_line": "Eminowicz G, Vaja S, Gallardo D, et al.",
+   "study_type": "Randomised trial",
+   "tier": 2,
+   "types": [
+    "Clinical Trial, Phase III",
+    "Journal Article",
+    "Multicenter Study",
+    "Randomized Controlled Trial"
+   ],
+   "preprint": false,
+   "retracted": false,
+   "retraction_notice": false,
+   "concern": false,
+   "erratum": false,
+   "india": false,
+   "doi": "10.1016/j.ejca.2025.115375",
+   "pmcid": "",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/40139003/",
+   "has_abstract": true,
+   "rank": 18,
+   "read": true,
+   "why_not_read": "",
+   "provenance": {
+    "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=39419054%2C38651760%2C38048802%2C29432076%2C35325372%2C40441923%2C30534016%2C31898673%2C32878770%2C40274459%2C33622931%2C33387427%2C40300942%2C40408847%2C36641433%2C27199522%2C12576919%2C40139003%2C11848519%2C39475968&retmode=xml&tool=vaidyx-tb",
+    "at": "2026-11-03T14:10:12+00:00",
+    "status": 200,
+    "bytes": 281200,
+    "sha256": "d76505e74ff5449867b9124283166efec1d9914839be331921de50d722ae20fd",
+    "tries": 1,
+    "seconds": 1.15,
+    "cached": false
+   },
+   "cited": true
+  },
+  {
+   "pmid": "38651760",
+   "title": "Top advances of the year: Cervical cancer.",
+   "journal": "Cancer",
+   "journal_abbr": "Cancer",
+   "year": "2024",
+   "authors_line": "Duska LR, Podwika SE, Randall LM",
+   "study_type": "Review",
+   "tier": 4,
+   "types": [
+    "Journal Article",
+    "Review"
+   ],
+   "preprint": false,
+   "retracted": false,
+   "retraction_notice": false,
+   "concern": false,
+   "erratum": false,
+   "india": false,
+   "doi": "10.1002/cncr.35334",
+   "pmcid": "",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/38651760/",
+   "has_abstract": true,
+   "rank": 2,
+   "read": true,
+   "why_not_read": "",
+   "provenance": {
+    "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=39419054%2C38651760%2C38048802%2C29432076%2C35325372%2C40441923%2C30534016%2C31898673%2C32878770%2C40274459%2C33622931%2C33387427%2C40300942%2C40408847%2C36641433%2C27199522%2C12576919%2C40139003%2C11848519%2C39475968&retmode=xml&tool=vaidyx-tb",
+    "at": "2026-11-03T14:10:12+00:00",
+    "status": 200,
+    "bytes": 281200,
+    "sha256": "d76505e74ff5449867b9124283166efec1d9914839be331921de50d722ae20fd",
+    "tries": 1,
+    "seconds": 1.15,
+    "cached": false
+   },
+   "cited": false
+  },
+  {
+   "pmid": "35325372",
+   "title": "Radiomics-based prediction of two-year clinical outcome in locally advanced cervical cancer patients undergoing neoadjuvant chemoradiotherapy.",
+   "journal": "La Radiologia medica",
+   "journal_abbr": "Radiol Med",
+   "year": "2022",
+   "authors_line": "Autorino R, Gui B, Panza G, et al.",
+   "study_type": "Review",
+   "tier": 4,
+   "types": [
+    "Journal Article",
+    "Review"
+   ],
+   "preprint": false,
+   "retracted": false,
+   "retraction_notice": false,
+   "concern": false,
+   "erratum": false,
+   "india": false,
+   "doi": "10.1007/s11547-022-01482-9",
+   "pmcid": "PMC9098600",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/35325372/",
+   "has_abstract": true,
+   "rank": 5,
+   "read": true,
+   "why_not_read": "",
+   "provenance": {
+    "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=39419054%2C38651760%2C38048802%2C29432076%2C35325372%2C40441923%2C30534016%2C31898673%2C32878770%2C40274459%2C33622931%2C33387427%2C40300942%2C40408847%2C36641433%2C27199522%2C12576919%2C40139003%2C11848519%2C39475968&retmode=xml&tool=vaidyx-tb",
+    "at": "2026-11-03T14:10:12+00:00",
+    "status": 200,
+    "bytes": 281200,
+    "sha256": "d76505e74ff5449867b9124283166efec1d9914839be331921de50d722ae20fd",
+    "tries": 1,
+    "seconds": 1.15,
+    "cached": false
+   },
+   "cited": false
+  },
+  {
+   "pmid": "30534016",
+   "title": "Neoadjuvant chemotherapy in woman with early or locally advanced cervical cancer.",
+   "journal": "Reports of practical oncology and radiotherapy : journal of Greatpoland Cancer Center in Poznan and Polish Society of Radiation Oncology",
+   "journal_abbr": "Rep Pract Oncol Radiother",
+   "year": "2018",
+   "authors_line": "de la Torre M",
+   "study_type": "Review",
+   "tier": 4,
+   "types": [
+    "Journal Article",
+    "Review"
+   ],
+   "preprint": false,
+   "retracted": false,
+   "retraction_notice": false,
+   "concern": false,
+   "erratum": false,
+   "india": false,
+   "doi": "10.1016/j.rpor.2018.09.005",
+   "pmcid": "PMC6277351",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/30534016/",
+   "has_abstract": true,
+   "rank": 7,
+   "read": true,
+   "why_not_read": "",
+   "provenance": {
+    "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=39419054%2C38651760%2C38048802%2C29432076%2C35325372%2C40441923%2C30534016%2C31898673%2C32878770%2C40274459%2C33622931%2C33387427%2C40300942%2C40408847%2C36641433%2C27199522%2C12576919%2C40139003%2C11848519%2C39475968&retmode=xml&tool=vaidyx-tb",
+    "at": "2026-11-03T14:10:12+00:00",
+    "status": 200,
+    "bytes": 281200,
+    "sha256": "d76505e74ff5449867b9124283166efec1d9914839be331921de50d722ae20fd",
+    "tries": 1,
+    "seconds": 1.15,
+    "cached": false
+   },
+   "cited": false
+  },
+  {
+   "pmid": "32878770",
+   "title": "Neoadjuvant Chemotherapy in Locally Advanced Cervical Cancer: Review of the Literature and Perspectives of Clinical Research.",
+   "journal": "Anticancer research",
+   "journal_abbr": "Anticancer Res",
+   "year": "2020",
+   "authors_line": "Gadducci A, Cosio S",
+   "study_type": "Review",
+   "tier": 4,
+   "types": [
+    "Journal Article",
+    "Review"
+   ],
+   "preprint": false,
+   "retracted": false,
+   "retraction_notice": false,
+   "concern": false,
+   "erratum": false,
+   "india": false,
+   "doi": "10.21873/anticanres.14485",
+   "pmcid": "",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/32878770/",
+   "has_abstract": true,
+   "rank": 9,
+   "read": true,
+   "why_not_read": "",
+   "provenance": {
+    "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=39419054%2C38651760%2C38048802%2C29432076%2C35325372%2C40441923%2C30534016%2C31898673%2C32878770%2C40274459%2C33622931%2C33387427%2C40300942%2C40408847%2C36641433%2C27199522%2C12576919%2C40139003%2C11848519%2C39475968&retmode=xml&tool=vaidyx-tb",
+    "at": "2026-11-03T14:10:12+00:00",
+    "status": 200,
+    "bytes": 281200,
+    "sha256": "d76505e74ff5449867b9124283166efec1d9914839be331921de50d722ae20fd",
+    "tries": 1,
+    "seconds": 1.15,
+    "cached": false
+   },
+   "cited": false
+  },
+  {
+   "pmid": "11848519",
+   "title": "Neoadjuvant chemotherapy and concurrent chemoradiation in the treatment of advanced cervical cancer.",
+   "journal": "Anticancer research",
+   "journal_abbr": "Anticancer Res",
+   "year": "2001",
+   "authors_line": "Gadducci A, Cosio S, Cionini L, et al.",
+   "study_type": "Review",
+   "tier": 4,
+   "types": [
+    "Journal Article",
+    "Review"
+   ],
+   "preprint": false,
+   "retracted": false,
+   "retraction_notice": false,
+   "concern": false,
+   "erratum": false,
+   "india": false,
+   "doi": "",
+   "pmcid": "",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/11848519/",
+   "has_abstract": true,
+   "rank": 19,
+   "read": true,
+   "why_not_read": "",
+   "provenance": {
+    "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=39419054%2C38651760%2C38048802%2C29432076%2C35325372%2C40441923%2C30534016%2C31898673%2C32878770%2C40274459%2C33622931%2C33387427%2C40300942%2C40408847%2C36641433%2C27199522%2C12576919%2C40139003%2C11848519%2C39475968&retmode=xml&tool=vaidyx-tb",
+    "at": "2026-11-03T14:10:12+00:00",
+    "status": 200,
+    "bytes": 281200,
+    "sha256": "d76505e74ff5449867b9124283166efec1d9914839be331921de50d722ae20fd",
+    "tries": 1,
+    "seconds": 1.15,
+    "cached": false
+   },
+   "cited": false
+  },
+  {
+   "pmid": "33622931",
+   "title": "Response to Neoadjuvant Chemotherapy in Locally Advanced Cervical Cancer: The Role of Immune-related Factors.",
+   "journal": "In vivo (Athens, Greece)",
+   "journal_abbr": "In Vivo",
+   "year": "2021",
+   "authors_line": "Palaia I, Tomao F, DI Pinto A, et al.",
+   "study_type": "Journal article",
+   "tier": 5,
+   "types": [
+    "Journal Article"
+   ],
+   "preprint": false,
+   "retracted": false,
+   "retraction_notice": false,
+   "concern": false,
+   "erratum": false,
+   "india": false,
+   "doi": "10.21873/invivo.12379",
+   "pmcid": "PMC8045068",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/33622931/",
+   "has_abstract": true,
+   "rank": 11,
+   "read": true,
+   "why_not_read": "",
+   "provenance": {
+    "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=39419054%2C38651760%2C38048802%2C29432076%2C35325372%2C40441923%2C30534016%2C31898673%2C32878770%2C40274459%2C33622931%2C33387427%2C40300942%2C40408847%2C36641433%2C27199522%2C12576919%2C40139003%2C11848519%2C39475968&retmode=xml&tool=vaidyx-tb",
+    "at": "2026-11-03T14:10:12+00:00",
+    "status": 200,
+    "bytes": 281200,
+    "sha256": "d76505e74ff5449867b9124283166efec1d9914839be331921de50d722ae20fd",
+    "tries": 1,
+    "seconds": 1.15,
+    "cached": false
+   },
+   "cited": false
+  },
+  {
+   "pmid": "36641433",
+   "title": "Neoadjuvant chemotherapy with weekly cisplatin and paclitaxel followed by chemoradiation for locally advanced cervical cancer.",
+   "journal": "BMC cancer",
+   "journal_abbr": "BMC Cancer",
+   "year": "2023",
+   "authors_line": "Li J, Li Y, Wang H, et al.",
+   "study_type": "Journal article",
+   "tier": 5,
+   "types": [
+    "Journal Article"
+   ],
+   "preprint": false,
+   "retracted": false,
+   "retraction_notice": false,
+   "concern": false,
+   "erratum": false,
+   "india": false,
+   "doi": "10.1186/s12885-023-10517-x",
+   "pmcid": "PMC9840535",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/36641433/",
+   "has_abstract": true,
+   "rank": 15,
+   "read": true,
+   "why_not_read": "",
+   "provenance": {
+    "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=39419054%2C38651760%2C38048802%2C29432076%2C35325372%2C40441923%2C30534016%2C31898673%2C32878770%2C40274459%2C33622931%2C33387427%2C40300942%2C40408847%2C36641433%2C27199522%2C12576919%2C40139003%2C11848519%2C39475968&retmode=xml&tool=vaidyx-tb",
+    "at": "2026-11-03T14:10:12+00:00",
+    "status": 200,
+    "bytes": 281200,
+    "sha256": "d76505e74ff5449867b9124283166efec1d9914839be331921de50d722ae20fd",
+    "tries": 1,
+    "seconds": 1.15,
+    "cached": false
+   },
+   "cited": true
+  },
+  {
+   "pmid": "27199522",
+   "title": "Neoadjuvant chemotherapy for locally advanced cervical cancer.",
+   "journal": "Chinese journal of cancer research = Chung-kuo yen cheng yen chiu",
+   "journal_abbr": "Chin J Cancer Res",
+   "year": "2016",
+   "authors_line": "Iwata T, Miyauchi A, Suga Y, et al.",
+   "study_type": "Journal article",
+   "tier": 5,
+   "types": [
+    "Journal Article"
+   ],
+   "preprint": false,
+   "retracted": false,
+   "retraction_notice": false,
+   "concern": false,
+   "erratum": false,
+   "india": false,
+   "doi": "10.21147/j.issn.1000-9604.2016.02.13",
+   "pmcid": "PMC4865617",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/27199522/",
+   "has_abstract": true,
+   "rank": 16,
+   "read": true,
+   "why_not_read": "",
+   "provenance": {
+    "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=39419054%2C38651760%2C38048802%2C29432076%2C35325372%2C40441923%2C30534016%2C31898673%2C32878770%2C40274459%2C33622931%2C33387427%2C40300942%2C40408847%2C36641433%2C27199522%2C12576919%2C40139003%2C11848519%2C39475968&retmode=xml&tool=vaidyx-tb",
+    "at": "2026-11-03T14:10:12+00:00",
+    "status": 200,
+    "bytes": 281200,
+    "sha256": "d76505e74ff5449867b9124283166efec1d9914839be331921de50d722ae20fd",
+    "tries": 1,
+    "seconds": 1.15,
+    "cached": false
+   },
+   "cited": false
+  },
+  {
+   "pmid": "39475968",
+   "title": "Locally advanced cervical cancer: Neoadjuvant chemotherapy plus radical surgery an alternative approach to chemo-radiation in a low-income setting: A descriptive study.",
+   "journal": "PloS one",
+   "journal_abbr": "PLoS One",
+   "year": "2024",
+   "authors_line": "Birara M, Urgie T, Sium AF",
+   "study_type": "Journal article",
+   "tier": 5,
+   "types": [
+    "Journal Article"
+   ],
+   "preprint": false,
+   "retracted": false,
+   "retraction_notice": false,
+   "concern": false,
+   "erratum": false,
+   "india": false,
+   "doi": "10.1371/journal.pone.0310457",
+   "pmcid": "PMC11524450",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/39475968/",
+   "has_abstract": true,
+   "rank": 20,
+   "read": true,
+   "why_not_read": "",
+   "provenance": {
+    "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=39419054%2C38651760%2C38048802%2C29432076%2C35325372%2C40441923%2C30534016%2C31898673%2C32878770%2C40274459%2C33622931%2C33387427%2C40300942%2C40408847%2C36641433%2C27199522%2C12576919%2C40139003%2C11848519%2C39475968&retmode=xml&tool=vaidyx-tb",
+    "at": "2026-11-03T14:10:12+00:00",
+    "status": 200,
+    "bytes": 281200,
+    "sha256": "d76505e74ff5449867b9124283166efec1d9914839be331921de50d722ae20fd",
+    "tries": 1,
+    "seconds": 1.15,
+    "cached": false
+   },
+   "cited": false
+  },
+  {
+   "pmid": "40441923",
+   "title": "Letter Re: Induction chemotherapy followed by chemoradiation in locally advanced cervical cancer: Quality of life outcomes of the GCIG INTERLACE trial.",
+   "journal": "European journal of cancer (Oxford, England : 1990)",
+   "journal_abbr": "Eur J Cancer",
+   "year": "2025",
+   "authors_line": "Wang H, Wang N",
+   "study_type": "Comment or letter",
+   "tier": 7,
+   "types": [
+    "Letter"
+   ],
+   "preprint": false,
+   "retracted": false,
+   "retraction_notice": false,
+   "concern": false,
+   "erratum": false,
+   "india": false,
+   "doi": "10.1016/j.ejca.2025.115515",
+   "pmcid": "",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/40441923/",
+   "has_abstract": false,
+   "rank": 6,
+   "read": false,
+   "why_not_read": "no abstract in PubMed",
+   "provenance": {
+    "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=39419054%2C38651760%2C38048802%2C29432076%2C35325372%2C40441923%2C30534016%2C31898673%2C32878770%2C40274459%2C33622931%2C33387427%2C40300942%2C40408847%2C36641433%2C27199522%2C12576919%2C40139003%2C11848519%2C39475968&retmode=xml&tool=vaidyx-tb",
+    "at": "2026-11-03T14:10:12+00:00",
+    "status": 200,
+    "bytes": 281200,
+    "sha256": "d76505e74ff5449867b9124283166efec1d9914839be331921de50d722ae20fd",
+    "tries": 1,
+    "seconds": 1.15,
+    "cached": false
+   },
+   "cited": false
+  },
+  {
+   "pmid": "40274459",
+   "title": "Letter comments on: \"Induction chemotherapy followed by chemoradiation in locally advanced cervical cancer: Quality of life outcomes of the GCIG INTERLACE trial\".",
+   "journal": "European journal of cancer (Oxford, England : 1990)",
+   "journal_abbr": "Eur J Cancer",
+   "year": "2025",
+   "authors_line": "Onal C, Elmali A, Demirhan B, et al.",
+   "study_type": "Comment or letter",
+   "tier": 7,
+   "types": [
+    "Letter"
+   ],
+   "preprint": false,
+   "retracted": false,
+   "retraction_notice": false,
+   "concern": false,
+   "erratum": false,
+   "india": false,
+   "doi": "10.1016/j.ejca.2025.115448",
+   "pmcid": "",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/40274459/",
+   "has_abstract": false,
+   "rank": 10,
+   "read": false,
+   "why_not_read": "no abstract in PubMed",
+   "provenance": {
+    "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=39419054%2C38651760%2C38048802%2C29432076%2C35325372%2C40441923%2C30534016%2C31898673%2C32878770%2C40274459%2C33622931%2C33387427%2C40300942%2C40408847%2C36641433%2C27199522%2C12576919%2C40139003%2C11848519%2C39475968&retmode=xml&tool=vaidyx-tb",
+    "at": "2026-11-03T14:10:12+00:00",
+    "status": 200,
+    "bytes": 281200,
+    "sha256": "d76505e74ff5449867b9124283166efec1d9914839be331921de50d722ae20fd",
+    "tries": 1,
+    "seconds": 1.15,
+    "cached": false
+   },
+   "cited": false
+  },
+  {
+   "pmid": "40300942",
+   "title": "Response to letter Re: Induction chemotherapy followed by chemoradiation in locally advanced cervical cancer: Quality of life outcomes of the GCIG INTERLACE trial.",
+   "journal": "European journal of cancer (Oxford, England : 1990)",
+   "journal_abbr": "Eur J Cancer",
+   "year": "2025",
+   "authors_line": "Eminowicz G, Vaja S, Hackshaw A, et al.",
+   "study_type": "Comment or letter",
+   "tier": 7,
+   "types": [
+    "Letter"
+   ],
+   "preprint": false,
+   "retracted": false,
+   "retraction_notice": false,
+   "concern": false,
+   "erratum": false,
+   "india": false,
+   "doi": "10.1016/j.ejca.2025.115449",
+   "pmcid": "",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/40300942/",
+   "has_abstract": false,
+   "rank": 13,
+   "read": false,
+   "why_not_read": "no abstract in PubMed",
+   "provenance": {
+    "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=39419054%2C38651760%2C38048802%2C29432076%2C35325372%2C40441923%2C30534016%2C31898673%2C32878770%2C40274459%2C33622931%2C33387427%2C40300942%2C40408847%2C36641433%2C27199522%2C12576919%2C40139003%2C11848519%2C39475968&retmode=xml&tool=vaidyx-tb",
+    "at": "2026-11-03T14:10:12+00:00",
+    "status": 200,
+    "bytes": 281200,
+    "sha256": "d76505e74ff5449867b9124283166efec1d9914839be331921de50d722ae20fd",
+    "tries": 1,
+    "seconds": 1.15,
+    "cached": false
+   },
+   "cited": false
+  }
+ ],
+ "counts": {
+  "found": 146,
+  "fetched": 20,
+  "read": 17
+ },
+ "calls": [
+  {
+   "what": "search",
+   "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=%28%22induction+chemotherapy%22+OR+%22neoadjuvant+chemotherapy%22%29+AND+%28%22chemoradiation%22+OR+%22chemoradiotherapy%22%29+AND+%28%22locally+advanced+cervical+cancer%22+OR+%22cervical+neoplasia%22%29&retmax=20&retmode=json&sort=relevance&tool=vaidyx-tb",
+   "at": "2026-11-03T14:10:11+00:00",
+   "status": 200,
+   "bytes": 631,
+   "sha256": "e59a77b90202af4f56428998cb8bd7cda702c709b8e5cb32b38cddd97d820f27",
+   "tries": 1,
+   "seconds": 0.51
+  },
+  {
+   "what": "fetch",
+   "url": "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=39419054%2C38651760%2C38048802%2C29432076%2C35325372%2C40441923%2C30534016%2C31898673%2C32878770%2C40274459%2C33622931%2C33387427%2C40300942%2C40408847%2C36641433%2C27199522%2C12576919%2C40139003%2C11848519%2C39475968&retmode=xml&tool=vaidyx-tb",
+   "at": "2026-11-03T14:10:12+00:00",
+   "status": 200,
+   "bytes": 281200,
+   "sha256": "d76505e74ff5449867b9124283166efec1d9914839be331921de50d722ae20fd",
+   "tries": 1,
+   "seconds": 1.15
+  }
+ ],
+ "model": "Gemma-4-31B-it (non-medical)",
+ "searched_at": "2026-11-03T14:10:09+00:00",
+ "steps": [
+  {
+   "step": "words",
+   "detail": "writing the PubMed search words",
+   "seconds": 0.0
+  },
+  {
+   "step": "search",
+   "detail": "searching PubMed: (\"induction chemotherapy\" OR \"neoadjuvant chemotherapy\") AND (\"chemoradiation\" OR \"chemoradiotherapy\") AND (\"locally advanced cervical cancer\" OR \"cervical neoplasia\") (all years)",
+   "seconds": 1.65
+  },
+  {
+   "step": "fetch",
+   "detail": "146 papers found, fetching the top 20 records",
+   "seconds": 2.17
+  },
+  {
+   "step": "read",
+   "detail": "the model is reading 17 abstracts",
+   "seconds": 3.34
+  },
+  {
+   "step": "check",
+   "detail": "checking every quote against PubMed's text",
+   "seconds": 12.65
+  }
+ ],
+ "seconds": 12.66
+}

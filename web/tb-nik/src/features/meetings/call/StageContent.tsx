@@ -1,31 +1,51 @@
 // The main stage of the call (night-v3 5.1, research/04 section 6.6): one item at a time. A pinned person or the spotlight; else a
 // screen someone presents (night-v3 5.2: the LiveKit screen share, full on the stage, "<name> is presenting", Stop for the sharer and
-// the coordinator; its audio plays through the room's audio renderer); else the active speaker when the layout asks for it; else what the coordinator opened (the images in the hospital viewer, only when a
-// same-origin viewer path exists, or a record page); else the slide; else, with nothing on the floor, a grid of every tile with
-// the next case named. Layout "grid" shows every tile with the shared content as the first tile. The connection banner and the
-// call's audio live here so every variant has them once. Overlays from the shell come as children.
+// the coordinator; its audio plays through the room's audio renderer); else the active speaker when the layout asks for it; else the
+// Board view of the Case File on the floor (meetings-v2 2.5, owner decisions D1 to D5: the Case File itself, read-only, led by the
+// coordinator or the presenter, followed by the room and every remote member; an outside expert sees the identity-stripped summary
+// instead); else, with nothing on the floor, a grid of every tile with the next case named. Layout "grid" shows every tile with the
+// shared content as the first tile. The connection banner and the call's audio live here so every variant has them once. Overlays from
+// the shell come as children. No slides (D5).
 import type { ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { RoomAudioRenderer, VideoTrack } from "@livekit/components-react";
-import { ImageOff, MonitorUp } from "lucide-react";
-import { recordPageUrl, viewerSrc } from "../api";
-import { SlideContent } from "../components/shared";
-import { errorText } from "@/features/casefile/components/common";
+import { FileText, MonitorUp } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { BoardView } from "../board/BoardView";
+import { ExpertSummary } from "../board/ExpertSummary";
 import { useCall } from "./context";
 import { ConnectionBanner } from "./ConnectionBanner";
 import { AgentCallTile, CallTile, ContentTile, UnpinChip, nextCaseLine, presenterName, screenShareRef, useCallAgents, useCallPeople, useStageMode, type CallPerson } from "./Strip";
 import type { CallCtx } from "./types";
 
-/** The words on an empty stage. */
-export function emptyStageText(ctx: Pick<CallCtx, "cid" | "variant" | "slidesStatus" | "slidesError" | "state">): string {
-  if (ctx.cid) {
-    if (ctx.slidesStatus === "loading" || ctx.slidesStatus === "idle") return "Loading the slides";
-    if (ctx.slidesStatus === "error") return `The slides could not be loaded: ${errorText(ctx.slidesError)}`;
-    return ctx.variant === "coordinator" ? "Pick a slide, a record or the images." : ctx.variant === "room" ? "The coordinator can show a slide, a record or the images here." : "Nothing on the screen yet";
-  }
+/** The words on a stage with no Case File on the floor. */
+export function emptyStageText(ctx: Pick<CallCtx, "cid" | "variant" | "state">): string {
   const st = ctx.state.meeting.status;
-  return st === "planned" ? "The meeting has not started" : st === "closed" ? "The meeting is closed" : st === "cancelled" ? "The meeting was cancelled" : "Waiting for the first case";
+  if (st === "planned") return ctx.variant === "room" ? "Waiting for the coordinator to start" : "The meeting has not started";
+  if (st === "closed") return "The meeting is closed";
+  if (st === "cancelled") return "The meeting was cancelled";
+  if (ctx.cid) return "No Case File on the floor yet";
+  return ctx.variant === "coordinator" ? "No Case File on the floor yet: pick one from the agenda or press First case." : "Waiting for the first case";
+}
+
+/** The Board view on the stage: the Case File on the floor as this screen follows, leads or looks around; the outside expert's summary;
+ *  or the plain words when nothing is on the floor yet. */
+function BoardOnStage({ big }: { big: boolean }) {
+  const ctx = useCall();
+  const f = ctx.follow;
+  if (ctx.expert && ctx.cid) return <ExpertSummary mid={ctx.mid} caseId={ctx.cid} big={big} />;
+  if (!f.caseId) {
+    return (
+      <div className="grid h-full place-items-center p-6 text-center" data-testid="board-empty">
+        <p className={cn("flex flex-col items-center gap-3 text-stage-muted", big ? "text-3xl" : "text-xl")}><FileText className={big ? "size-12" : "size-9"} aria-hidden />{emptyStageText(ctx)}</p>
+      </div>
+    );
+  }
+  return (
+    <BoardView caseId={f.caseId} view={f.view} mode={f.mode} onNavigate={f.navigate} followingName={f.followingName}
+      onLookAround={f.canLook ? f.lookAround : undefined} onBackToRoom={f.backToRoom} presenter={ctx.state.current?.presenter?.name}
+      error={f.error} pending={f.pending} className={cn("h-full min-h-0", big && "board-big")} />
+  );
 }
 
 const fade = { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 } };
@@ -53,7 +73,7 @@ function ShareBadge({ name, user }: { name: string; user: string }) {
   return (
     <p className={cn("absolute left-3 top-3 z-10 flex items-center gap-2 rounded-full bg-black/70 py-1 pl-3 font-medium text-white", canStop ? "pr-1" : "pr-3", big ? "text-lg" : "text-xs")} data-testid="share-badge">
       <MonitorUp className={big ? "size-5" : "size-3.5"} aria-hidden />{name} presenting
-      {canStop ? <button type="button" onClick={stop} className="rounded-full bg-[#d64545] px-2.5 py-0.5 text-xs font-semibold text-white outline-none hover:bg-[#c23b3b] focus-visible:ring-2 focus-visible:ring-white" aria-label={mine ? "Stop presenting" : "Stop the share for everyone"} title={mine ? "Stop presenting (Ctrl+Alt+T)" : "Stop the share for everyone"} data-testid="share-stop">Stop</button> : null}
+      {canStop ? <button type="button" onClick={stop} className="rounded-full bg-[#c23b3b] px-2.5 py-0.5 text-xs font-semibold text-white outline-none hover:bg-[#ad3434] focus-visible:ring-2 focus-visible:ring-white" aria-label={mine ? "Stop presenting" : "Stop the share for everyone"} title={mine ? "Stop presenting (Ctrl+Alt+T)" : "Stop the share for everyone"} data-testid="share-stop">Stop</button> : null}
     </p>
   );
 }
@@ -64,9 +84,6 @@ export function StageContent({ className, children }: { className?: string; chil
   const agents = useCallAgents();
   const mode = useStageMode(people);
   const big = ctx.variant === "room";
-  const opened = ctx.variant === "member" && !ctx.following ? null : ctx.opened;
-  const slide = ctx.slides[ctx.shownSlide] ?? null;
-  const viewer = opened?.kind === "images" ? viewerSrc(opened) : null;
   const byKey = new Map(people.map((p) => [p.key, p]));
   const room = ctx.video.room;
 
@@ -81,7 +98,7 @@ export function StageContent({ className, children }: { className?: string; chil
     stage = mine ? "share-self" : track ? "share" : "share-waiting";
     bodyKey = `${stage}-${user}`;
     body = (
-      <motion.div key={bodyKey} {...fade} className="absolute inset-0 bg-black" data-testid="stage-share">
+      <motion.div key={bodyKey} {...fade} className={cn("absolute inset-0", track && "bg-black")} data-testid="stage-share">
         {track ? <VideoTrack trackRef={track} className="h-full w-full bg-black object-contain" /> : (
           <div className="grid h-full place-items-center p-6 text-center">
             <p className={cn("flex flex-col items-center gap-2 text-stage-muted", big ? "text-2xl" : "text-base")}>
@@ -120,31 +137,15 @@ export function StageContent({ className, children }: { className?: string; chil
             {next ? <p className={cn("mt-0.5 text-stage-muted", big ? "text-lg" : "text-sm")} data-testid="next-case">{next}</p> : null}
           </div>
         ) : null}
-        {people.length || agents.length || mode.kind === "grid" ? <div className="flex min-h-0 flex-1 flex-col justify-center"><TileWall people={people} withContent={mode.kind === "grid" && (!!ctx.cid || !!opened)} big={big} /></div> : null}
+        {people.length || agents.length || mode.kind === "grid" ? <div className="flex min-h-0 flex-1 flex-col justify-center"><TileWall people={people} withContent={mode.kind === "grid" && !!ctx.cid} big={big} /></div> : null}
       </motion.div>
     );
-  } else if (mode.kind === "opened" && opened?.kind === "images") {
-    bodyKey = `img-${viewer ?? "none"}`;
-    body = viewer ? (
-      <motion.iframe key={bodyKey} {...fade} title={`Image viewer${opened.title ? `: ${opened.title}` : ""}`} src={viewer} className="absolute inset-0 h-full w-full bg-black" allow="fullscreen" />
-    ) : (
-      <motion.div key={bodyKey} {...fade} className="absolute inset-0 grid place-items-center p-6 text-center" data-testid="no-images">
-        <p className={cn("flex flex-col items-center gap-2 text-stage-muted", big ? "text-2xl" : "text-base")}><ImageOff className={big ? "size-10" : "size-7"} aria-hidden />No images are linked to this Case File yet</p>
-      </motion.div>
-    );
-  } else if (mode.kind === "opened" && opened?.kind === "record" && opened.doc_id && ctx.cid) {
-    bodyKey = `rec-${opened.doc_id}-${opened.page ?? 0}`;
+  } else if (mode.kind === "board") {
+    // one key per Case File: a tab or a report changes inside the Board view, it never fades the whole stage
+    bodyKey = `board-${ctx.cid ?? ""}`;
     body = (
-      <motion.div key={bodyKey} {...fade} className="scroll-thin absolute inset-0 overflow-auto bg-[#1a1f26] p-3 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary" tabIndex={0} role="region" aria-label="Record">
-        {opened.title ? <p className="sticky top-0 z-10 mb-2 inline-block rounded-md bg-stage-raised/90 px-2 py-1 text-sm font-medium text-stage-fg shadow">{opened.title}</p> : null}
-        <img src={recordPageUrl(ctx.cid, opened.doc_id, opened.page ?? 0)} alt={`${opened.title ?? "Record"}, page ${(opened.page ?? 0) + 1}`} className="mx-auto h-auto max-w-full rounded-md bg-white" />
-      </motion.div>
-    );
-  } else if (slide) {
-    bodyKey = `slide-${slide.id}`;
-    body = (
-      <motion.div key={bodyKey} initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -24 }} transition={{ duration: 0.22 }} className={cn("scroll-thin stage-slide absolute inset-0 overflow-y-auto outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary", big ? "p-6 lg:p-8" : "p-4 lg:p-5")} tabIndex={0} role="region" aria-label="Slide">
-        <SlideContent slide={slide} big={big} />
+      <motion.div key={bodyKey} {...fade} className={cn("absolute inset-0 flex min-h-0 flex-col bg-background", big ? "p-4 lg:p-5" : "p-3 lg:p-4")} data-testid="stage-board">
+        <BoardOnStage big={big} />
       </motion.div>
     );
   } else {
@@ -161,7 +162,6 @@ export function StageContent({ className, children }: { className?: string; chil
       className={cn("relative min-h-0 flex-1 overflow-hidden rounded-xl border border-stage-line bg-stage-panel", className)}
       aria-label="Shared screen"
       data-testid="shared-screen"
-      data-opened={opened?.kind ?? "slide"}
       data-stage={stage}
     >
       <AnimatePresence mode="wait" initial={false}>{body}</AnimatePresence>

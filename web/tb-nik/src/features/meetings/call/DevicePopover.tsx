@@ -98,7 +98,7 @@ export function DeviceSettings({ focus = "audio", open = true, className }: { fo
   ) : null;
   const test = (
     <button key="test" type="button" onClick={() => { setTesting(true); void playTone(speaker).finally(() => setTesting(false)); }} disabled={testing}
-      className="inline-flex items-center gap-1.5 rounded-full border border-stage-line bg-stage-raised px-3 py-1 text-xs font-medium text-stage-fg outline-none hover:bg-[#232d38] focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60"
+      className="inline-flex items-center gap-1.5 rounded-full border border-stage-line bg-stage-raised px-3 py-1 text-xs font-medium text-stage-fg outline-none hover:bg-stage-line focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60"
       title="Play a short tone through the speaker" data-testid="test-speaker">
       <Volume2 className="size-3.5" aria-hidden />{testing ? "Playing a tone" : "Test the speaker"}
     </button>
@@ -111,7 +111,7 @@ export function DeviceSettings({ focus = "audio", open = true, className }: { fo
     <div className={cn("space-y-3 text-stage-fg", className)} data-testid="device-settings">
       {!connected ? <p className="text-xs text-stage-muted">Join the video to change the devices.</p> : null}
       {parts}
-      {video.error ? <p role="alert" className="text-xs text-[#ffb4a8]">{video.error}</p> : null}
+      {video.error ? <p role="alert" className="text-xs text-bad">{video.error}</p> : null}
     </div>
   );
 }
@@ -122,7 +122,7 @@ export function DevicePopover({ kind, children }: { kind: "audio" | "video"; chi
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
-      <PopoverContent side="top" align="start" className="w-80 border-stage-line bg-stage-panel text-stage-fg" data-theme="dark" aria-label={kind === "audio" ? "Microphone and speaker" : "Camera"}>
+      <PopoverContent side="top" align="start" className="w-80 border-stage-line bg-stage-panel text-stage-fg" aria-label={kind === "audio" ? "Microphone and speaker" : "Camera"}>
         <h2 className="mb-2 text-sm font-semibold">{kind === "audio" ? "Microphone and speaker" : "Camera"}</h2>
         <DeviceSettings focus={kind} open={open} />
       </PopoverContent>

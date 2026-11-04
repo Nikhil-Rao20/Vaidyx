@@ -1,21 +1,25 @@
-// /meetings/:id: the agenda page before the meeting, the coordinator's control view during it, a read-only agenda for
-// everyone else, and the old session read-only when the new route is not on the server.
-import { useEffect, useRef, useState } from "react";
+// /meetings/:id. The MDT Coordinator: the one-page planner while the meeting is planned (meetings-v2 3.3, planner/Planner.tsx), the
+// meeting screen while it is in session (ControlView). Everyone else, and every meeting that is closed or cancelled: the read view (when
+// and where, the series line, the agenda without its controls, the members, the meeting PDF for the admitted members and the coordinator).
+// The old board session shows read-only when the new route is not on the server.
+import { useRef } from "react";
 import { Link, useParams } from "react-router-dom";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Check, Copy, KeyRound, ListPlus, MonitorPlay, Play, Presentation, Send, Users, Video, XCircle } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { ArrowLeft, KeyRound, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { notify } from "@/components/Toasts";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { api, TB } from "@/lib/api";
 import { useSession } from "@/lib/session";
-import { useMeetingLive, type AgendaRow, type LiveEvent, type MeetingState } from "@/lib/live";
-import { addToAgenda, cancelMeeting, getOldSession, meetingDeckUrl, newCode, putAgenda, remindCase, sendAgenda, startMeeting } from "./api";
-import { AgendaLists, JustAddedContext } from "./components/AgendaLists";
+import { useMeetingLive, type LiveEvent } from "@/lib/live";
+import { getOldSession } from "./api";
 import { ControlView } from "./components/ControlView";
-import { LiveDot, MeetingStatusChip, MembersStrip } from "./components/shared";
-import { EmptyState, ErrorState, LoadingButton, NotYetState, SkeletonLines, errorText, fmtDate, fmtDateTime, useAnnounce, useCopy } from "@/features/casefile/components/common";
+import { MeetingStatusChip } from "./components/shared";
+import { EmptyState, ErrorState, NotYetState, SkeletonLines, fmtDate } from "@/features/casefile/components/common";
+import { useLightForMeeting } from "@/lib/appearance";
+import { Planner } from "./planner/Planner";
+import { PlanHeader } from "./planner/PlanHeader";
+import { PlanLists } from "./planner/PlanLists";
+import { MembersCard, PdfCard } from "./planner/PlanSide";
+import type { PlanState } from "./planner/types";
+import { useCancerLabel } from "./planner/util";
 
 function OldSessionView({ sid }: { sid: string }) {
   const q = useQuery({ queryKey: ["old-session", sid], queryFn: () => getOldSession(sid), retry: false });
@@ -34,97 +38,17 @@ function OldSessionView({ sid }: { sid: string }) {
   );
 }
 
-/** Case Files listed for the board on the meeting's date that are not on the agenda yet (old route /sessions/candidates). */
-function AddCaseDialog({ open, onOpenChange, date, onAgenda, onAdd }: { open: boolean; onOpenChange: (o: boolean) => void; date: string; onAgenda: Set<string>; onAdd: (cid: string, list: "discussion" | "noting", name?: string) => Promise<void> }) {
-  const q = useQuery({ queryKey: ["candidates", date], queryFn: () => api.get<{ cases: Array<{ case_id: string; patient?: { name?: string; agesex?: string; mrn?: string }; protocol_label?: string; protocol?: string; ready?: unknown; gate?: { satisfied?: number; total?: number } }> }>(`${TB}/sessions/candidates?date=${encodeURIComponent(date)}`), enabled: open, retry: false });
-  const [typed, setTyped] = useState("");
-  const [busy, setBusy] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-  const add = async (cid: string, list: "discussion" | "noting", name?: string) => { setBusy(cid + list); setErr(null); try { await onAdd(cid, list, name); } catch (e) { setErr(errorText(e)); } finally { setBusy(null); } };
-  const rows = (q.data?.cases ?? []).filter((c) => !onAgenda.has(c.case_id));
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent aria-describedby="add-desc" data-testid="add-case-dialog">
-        <DialogHeader>
-          <DialogTitle>Add a Case File to the agenda</DialogTitle>
-          <DialogDescription id="add-desc">Case Files listed for the board on {fmtDate(date)}. Added after the agenda was sent, they are flagged to the members.</DialogDescription>
-        </DialogHeader>
-        {q.isLoading ? <SkeletonLines n={3} /> : null}
-        {q.isError ? <p className="text-sm text-muted-foreground">The list of Case Files for this date could not be read ({errorText(q.error)}). Type the Case File id below.</p> : null}
-        {q.data && rows.length === 0 ? <p className="text-sm text-muted-foreground">Every Case File listed for this date is already on the agenda.</p> : null}
-        <ul className="max-h-64 overflow-y-auto divide-y divide-border rounded-md border border-border empty:hidden">
-          {rows.map((c) => (
-            <li key={c.case_id} className="flex items-center gap-2 px-2 py-1.5 text-sm">
-              <span className="flex-1 min-w-0 truncate">{c.patient?.name ?? c.case_id}{c.patient?.agesex ? `, ${c.patient.agesex}` : ""}<span className="text-xs text-muted-foreground"> {(c.protocol_label ?? c.protocol ?? "").replace(/_/g, " ")}{c.ready ? ", ready" : ", not marked ready"}{typeof c.gate?.total === "number" ? `, ${c.gate.satisfied ?? 0} of ${c.gate.total} records` : ""}</span></span>
-              <LoadingButton size="xs" loading={busy === c.case_id + "discussion"} onClick={() => void add(c.case_id, "discussion", c.patient?.name)}>Discussion</LoadingButton>
-              <LoadingButton size="xs" variant="outline" loading={busy === c.case_id + "noting"} onClick={() => void add(c.case_id, "noting", c.patient?.name)}>Noting</LoadingButton>
-            </li>
-          ))}
-        </ul>
-        <form className="flex gap-1.5" onSubmit={(e) => { e.preventDefault(); if (typed.trim()) void add(typed.trim(), "discussion"); }}>
-          <label htmlFor="add-cid" className="sr-only">Case File id</label>
-          <Input id="add-cid" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="or type a Case File id, for example TB-005" className="h-8 text-sm" maxLength={60} />
-          <LoadingButton size="sm" type="submit" loading={busy === typed.trim() + "discussion"} disabled={!typed.trim()}>Add</LoadingButton>
-        </form>
-        {err ? <p role="alert" className="text-sm text-bad">{err}</p> : null}
-        <DialogFooter><Button variant="outline" onClick={() => onOpenChange(false)}>Done</Button></DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function reorderLocally(s: MeetingState, discussion: string[], noting: string[]): MeetingState {
-  const all = new Map<string, AgendaRow>([...s.agenda.discussion, ...s.agenda.noting].map((r) => [r.case_id, r]));
-  const pick = (ids: string[]) => ids.map((id) => all.get(id)).filter((r): r is AgendaRow => !!r);
-  return { ...s, agenda: { ...s.agenda, discussion: pick(discussion), noting: pick(noting) } };
-}
-
 export default function MeetingAgendaPage() {
+  useLightForMeeting();  // the meeting is always light (owner, 2 Nov 2026)
   const { id = "" } = useParams();
   const { me } = useSession();
   const controlEvents = useRef<((ev: LiveEvent) => void) | null>(null);  // the control view's shell takes every event in order
   const live = useMeetingLive(id, { onEvent: (ev) => controlEvents.current?.(ev) });
-  const [copied, copy] = useCopy();
-  const [announce, liveNode] = useAnnounce();
-  const [err, setErr] = useState<string | null>(null);
-  const [addOpen, setAddOpen] = useState(false);
-  const [cancelOpen, setCancelOpen] = useState(false);
-  const [cancelReason, setCancelReason] = useState("");
-  // The row just added stays ringed for a few seconds and is scrolled into view, beside the toast (the owner, 18 Oct: the
-  // coordinator saw no confirmation of an add).
-  const [justAdded, setJustAdded] = useState<string | null>(null);
-  useEffect(() => {
-    if (!justAdded) return;
-    const still = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    const show = window.setTimeout(() => document.querySelector('[data-testid="agenda-row"][data-just-added="true"]')?.scrollIntoView({ block: "center", behavior: still ? "auto" : "smooth" }), 60);
-    const done = window.setTimeout(() => setJustAdded(null), 5000);
-    return () => { window.clearTimeout(show); window.clearTimeout(done); };
-  }, [justAdded]);
-  const s = live.state;
-  const canManage = !!(s?.can?.manage ?? me?.roles?.coordinator);
-  const wrap = <T,>(fn: () => Promise<T>, said?: string) => async () => { setErr(null); try { const r = await fn(); if (said) announce(said); await live.refresh(); return r; } catch (e) { setErr(errorText(e)); await live.refresh(); throw e; } };
-  const reorder = useMutation({
-    mutationFn: (x: { d: string[]; n: string[] }) => {
-      live.setState((old) => (old ? reorderLocally(old, x.d, x.n) : old));
-      return wrap(() => putAgenda(id, x.d, x.n), "Agenda order saved.")();
-    },
-  });
-  const send = useMutation({ mutationFn: () => wrap(() => sendAgenda(id), "Agenda sent to the members.")() });
-  const remind = useMutation({ mutationFn: (cid: string) => wrap(() => remindCase(id, cid), "Reminder sent to the owner.")() });
-  const code = useMutation({ mutationFn: () => wrap(() => newCode(id), "New join code ready.")() });
-  const start = useMutation({ mutationFn: () => wrap(() => startMeeting(id), "The meeting has started. This page is now the control view.")() });
-  const cancel = useMutation({ mutationFn: () => wrap(() => cancelMeeting(id, cancelReason.trim() || undefined), "Meeting cancelled.")(), onSuccess: () => setCancelOpen(false) });
-  const addCase = async (cid: string, list: "discussion" | "noting", known?: string) => {
-    await wrap(() => addToAgenda(id, cid, list), `Added for ${list}.`)();
-    setAddOpen(false);
-    setJustAdded(cid);
-    // The name from the dialog's row or the agenda as this render saw it (a "To discussion" move from Not ready).
-    const name = known || [...(live.state?.agenda.discussion ?? []), ...(live.state?.agenda.noting ?? []), ...(live.state?.agenda.not_ready ?? [])].find((r) => r.case_id === cid)?.patient_line || cid;
-    notify.success(`Added for ${list}`, `${name} is on the agenda${live.state?.meeting.agenda_sent_at ? "; the members see it flagged as added later" : ""}.`);
-  };
+  const cancer = useCancerLabel();
 
   if (live.notBuilt) return <div className="max-w-4xl mx-auto"><OldSessionView sid={id} /></div>;
   if (live.isLoading) return <div className="max-w-5xl mx-auto space-y-3" aria-busy="true"><div className="skeleton-line h-8 w-1/3" /><div className="surface p-4"><SkeletonLines n={5} /></div></div>;
+  const s = live.state as PlanState | null;
   if (!s) {
     return (
       <div className="max-w-xl mx-auto py-8">
@@ -135,102 +59,62 @@ export default function MeetingAgendaPage() {
     );
   }
 
-  const inSession = s.meeting.status === "in_session";
-  const closed = s.meeting.status === "closed";
-  const cancelled = s.meeting.status === "cancelled";
-  const total = s.agenda.discussion.length + s.agenda.noting.length;
-  const onAgenda = new Set([...s.agenda.discussion, ...s.agenda.noting, ...s.agenda.not_ready].map((r) => r.case_id));
+  const canManage = !!(s.can?.manage ?? me?.roles?.coordinator);
+  const status = s.meeting.status;
+  const inSession = status === "in_session";
+  const closed = status === "closed";
+  const cancelled = status === "cancelled";
   const amIn = s.me?.status === "present" || s.me?.status === "remote";
 
+  if (inSession && canManage) {
+    return (
+      <div className="max-w-6xl mx-auto" data-testid="meeting-page" data-meeting-status={status}>
+        <ControlView mid={id} state={live.state!} onChanged={() => void live.refresh()} liveStatus={live.status} liveDetail={live.statusDetail} lastEvent={live.lastEvent} events={controlEvents} />
+      </div>
+    );
+  }
+  if (canManage && status === "planned") {
+    return <Planner mid={id} state={s} setState={live.setState} refresh={() => live.refresh()} liveStatus={live.status} liveDetail={live.statusDetail} />;
+  }
+
+  // The read view: members before and during the meeting; everyone (the coordinator too) after it or when it was cancelled.
+  const mayPdf = (canManage || amIn) && !cancelled && !me?.roles?.outside_expert;
   return (
-    <div className="space-y-4 max-w-6xl mx-auto pb-24 lg:pb-8" data-testid="meeting-page" data-meeting-status={s.meeting.status}>
-      {liveNode}
-      <header className="surface p-4 flex flex-wrap items-start gap-3">
-        <div className="min-w-0 flex-1">
-          <p className="text-xs text-muted-foreground"><Link to="/meetings" className="hover:underline inline-flex items-center gap-1"><ArrowLeft className="size-3" aria-hidden />Meetings</Link></p>
-          <h1 className="break-words sm:truncate">Tumour Board, {fmtDate(s.meeting.date)}{s.meeting.time ? ` at ${s.meeting.time}` : ""}</h1>
-          <p className="text-sm text-muted-foreground flex flex-wrap gap-x-3">
-            {s.meeting.room ? <span>{s.meeting.room}</span> : null}
-            <span>{total} on the agenda{s.meeting.minutes_per_case ? `, ${s.meeting.minutes_per_case} min each` : ""}</span>
-            {s.meeting.video ? <span className="inline-flex items-center gap-1"><Video className="size-3.5" aria-hidden />video on</span> : null}
-            {s.meeting.agenda_sent_at ? <span>agenda sent {fmtDateTime(s.meeting.agenda_sent_at)}</span> : <span>agenda not sent</span>}
-          </p>
-          <div className="mt-1 flex flex-wrap items-center gap-2"><MeetingStatusChip status={s.meeting.status} /><LiveDot status={live.status} detail={live.statusDetail} /></div>
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          {(canManage || amIn) && !cancelled && !me?.roles?.outside_expert ? <Button asChild size="sm" variant="ghost" title={closed ? "The deck with the outcomes and the minutes (.pptx)" : "The agenda deck (.pptx)"}><a href={meetingDeckUrl(id)} download><Presentation className="size-4" />{closed ? "Deck with minutes" : "Deck"}</a></Button> : null}
-          {!closed && !cancelled && (amIn || !canManage) ? <Button asChild size="sm" variant="outline"><Link to={`/meetings/${id}/member`}><Users className="size-4" />Member view</Link></Button> : null}
-          {canManage && !closed && !cancelled ? <Button asChild size="sm" variant="outline"><Link to={`/meetings/${id}/room`} target="_blank" rel="noopener" title="Opens the full-screen room screen in a new tab, for the room computer"><MonitorPlay className="size-4" />Room screen</Link></Button> : null}
-          {canManage && !inSession && !closed && !cancelled ? <LoadingButton size="sm" loading={start.isPending} loadingText="Starting" onClick={() => start.mutate()} disabled={total === 0} title={total === 0 ? "Add a Case File to the agenda first" : "Starts the meeting; this page becomes the control view"} data-testid="start-meeting"><Play className="size-4" />Start meeting</LoadingButton> : null}
-          {canManage && !inSession && !closed && !cancelled && total === 0 ? <p className="basis-full text-right text-xs text-muted-foreground">Add a Case File to the agenda to start.</p> : null}
-        </div>
-      </header>
-      {err ? <p role="alert" className="text-sm text-bad rounded-md bg-bad-soft px-3 py-2">{err}</p> : null}
-      {cancelled ? <div className="surface p-4"><EmptyState kind="wait" title="This meeting was cancelled" text={s.meeting.cancelled?.reason ? `Reason: ${s.meeting.cancelled.reason}` : "The members were told."} /></div> : null}
-
-      {inSession && canManage ? <ControlView mid={id} state={s} onChanged={() => void live.refresh()} liveStatus={live.status} liveDetail={live.statusDetail} lastEvent={live.lastEvent} events={controlEvents} /> : null}
-
-      {!inSession && !closed && !cancelled || (inSession && !canManage) ? (
-        <div className="grid gap-4 lg:grid-cols-12 items-start">
-          <div className="lg:col-span-8 min-w-0 space-y-2">
-            {inSession ? <p className="text-sm status-ok rounded-md px-3 py-2">The meeting is in session. <Link className="underline font-medium" to={`/meetings/${id}/member`}>Open the member view</Link> to follow the shared screen.</p> : null}
-            <JustAddedContext.Provider value={justAdded}>
-              <AgendaLists agenda={s.agenda} canManage={canManage && !inSession} onChange={(d, n) => reorder.mutate({ d, n })} onRemind={canManage ? (cid) => remind.mutate(cid) : undefined} remindBusy={remind.isPending} currentId={s.current?.case_id} onAddFromNotReady={canManage && !inSession ? (cid) => void addCase(cid, "discussion").catch(() => undefined) : undefined} />
-            </JustAddedContext.Provider>
-            {canManage && !inSession ? <Button size="sm" variant="outline" onClick={() => setAddOpen(true)} data-testid="add-case"><ListPlus className="size-4" />Add a Case File</Button> : null}
+    <div className="space-y-4 max-w-6xl mx-auto pb-24 lg:pb-8" data-testid="meeting-page" data-meeting-status={status} data-planner="read">
+      <PlanHeader m={s.meeting} canEdit={false} onSeriesChanged={() => undefined} onSave={async () => undefined} liveStatus={live.status} liveDetail={live.statusDetail}
+        extra={!closed && !cancelled ? (
+          <div className="flex flex-wrap gap-2 pt-1">
+            <Button asChild size="sm" variant="outline"><Link to={`/meetings/${id}/member`}><Users className="size-4" />{inSession ? "Open the member view" : "Member view"}</Link></Button>
+            {!amIn ? <Button asChild size="sm" variant="ghost"><Link to="/meetings/join"><KeyRound className="size-4" />Join with a code</Link></Button> : null}
           </div>
-          <div className="lg:col-span-4 min-w-0 space-y-3">
-            {canManage && !inSession ? (
-              <section className="surface p-3 space-y-2" aria-label="Before the meeting">
-                <h2 className="text-sm font-semibold">Before the meeting</h2>
-                <LoadingButton size="sm" className="w-full" loading={send.isPending} loadingText="Sending" onClick={() => send.mutate()} disabled={total === 0} data-testid="send-agenda"><Send className="size-4" />{s.meeting.agenda_sent_at ? "Send the agenda again" : "Send agenda"}</LoadingButton>
-                <p className="text-xs text-muted-foreground">Members get the list in-app; Case Files added later are flagged to them.</p>
-                <div className="rounded-md border border-border p-2">
-                  <p className="text-xs font-medium flex items-center gap-1"><KeyRound className="size-3.5" aria-hidden />Join code</p>
-                  {s.code ? (
-                    <div className="mt-1 flex items-center gap-2 flex-wrap">
-                      <span className="mono text-2xl tracking-[0.3em]" data-testid="meeting-code">{s.code.value}</span>
-                      <Button size="sm" variant="outline" onClick={() => copy(s.code!.value)} aria-label="Copy the join code">{copied ? <Check className="size-4" /> : <Copy className="size-4" />}{copied ? "Copied" : "Copy"}</Button>
-                    </div>
-                  ) : <p className="text-xs text-muted-foreground mt-1">No code yet. Members join with it from Meetings, Join with a code.</p>}
-                  {s.code ? <p className="text-xs text-muted-foreground mt-0.5">expires {fmtDateTime(s.code.expires_at)}</p> : null}
-                  <LoadingButton size="xs" variant={s.code ? "ghost" : "outline"} className="mt-1.5" loading={code.isPending} loadingText="Making the code" onClick={() => code.mutate()} data-testid="new-code"><KeyRound className="size-3" aria-hidden />{s.code ? "New code (the old one stops working)" : "Create a code"}</LoadingButton>
-                </div>
-                <Button size="xs" variant="ghost" className="text-bad" onClick={() => setCancelOpen(true)}><XCircle className="size-3" />Cancel this meeting</Button>
-              </section>
-            ) : null}
-            <section className="surface p-3" aria-label="Members">
-              <h2 className="text-sm font-semibold mb-1">Members</h2>
-              <MembersStrip attendance={s.attendance} hands={s.hands} />
-              {!canManage && !amIn ? <p className="text-xs text-muted-foreground mt-2">Join with the 6-digit code from the coordinator: <Link className="text-link underline" to="/meetings/join">Join with a code</Link>.</p> : null}
-            </section>
-          </div>
-        </div>
-      ) : null}
+        ) : null} />
+      {cancelled ? <div className="surface p-4" data-testid="meeting-cancelled"><EmptyState kind="wait" title="This meeting was cancelled" text={s.meeting.cancelled?.reason ? `Reason: ${s.meeting.cancelled.reason}` : "The members were told."} /></div> : null}
 
       {closed ? (
-        <div className="surface p-4" data-testid="meeting-closed">
-          <h2 className="text-base">This meeting is closed</h2>
-          <p className="text-sm text-muted-foreground">Outcomes were sent to the owners. The Case Files keep their board records.</p>
-          <ol className="mt-2 space-y-1 text-sm">
-            {[...s.agenda.discussion, ...s.agenda.noting].map((r) => <li key={r.case_id} className="flex items-center gap-2"><Link className="text-link underline" to={`/cases/${r.case_id}`}>{r.patient_line || r.case_id}</Link><span className="text-xs text-muted-foreground">{r.outcome_label ?? (r.outcome ? r.outcome.replace(/_/g, " ") : "no outcome saved")}</span></li>)}
-          </ol>
+        <div className="grid items-start gap-4 lg:grid-cols-12">
+          <div className="surface p-4 lg:col-span-8" data-testid="meeting-closed">
+            <h2 className="text-base">This meeting is closed</h2>
+            <p className="text-sm text-muted-foreground">Outcomes were sent to the owners. The Case Files keep their board records.</p>
+            <ol className="mt-2 space-y-1 text-sm">
+              {[...s.agenda.discussion, ...s.agenda.noting].map((r) => <li key={r.case_id} className="flex flex-wrap items-center gap-x-2"><Link className="text-link underline" to={`/cases/${r.case_id}`}>{r.patient_line || r.case_id}</Link><span className="text-xs text-muted-foreground">{r.outcome_label ?? (r.outcome ? r.outcome.replace(/_/g, " ") : "no outcome saved")}</span></li>)}
+            </ol>
+          </div>
+          {mayPdf ? <div className="lg:col-span-4"><PdfCard mid={id} after /></div> : null}
         </div>
       ) : null}
 
-      <AddCaseDialog open={addOpen} onOpenChange={setAddOpen} date={s.meeting.date} onAgenda={onAgenda} onAdd={addCase} />
-      <Dialog open={cancelOpen} onOpenChange={(o) => { if (!cancel.isPending) setCancelOpen(o); }}>
-        <DialogContent aria-describedby="cancel-desc">
-          <DialogHeader><DialogTitle>Cancel this meeting?</DialogTitle><DialogDescription id="cancel-desc">The members of the agenda departments are told. The Case Files stay ready for the next meeting.</DialogDescription></DialogHeader>
-          <label htmlFor="cancel-reason" className="text-sm font-medium">Reason (shown to the members)</label>
-          <Input id="cancel-reason" value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} maxLength={300} placeholder="for example: holiday declared" />
-          {cancel.isError ? <p role="alert" className="text-sm text-bad">{errorText(cancel.error)}</p> : null}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCancelOpen(false)} disabled={cancel.isPending}>Keep the meeting</Button>
-            <LoadingButton variant="destructive" loading={cancel.isPending} onClick={() => cancel.mutate()}>Cancel the meeting</LoadingButton>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {!closed && !cancelled ? (
+        <div className="grid items-start gap-4 lg:grid-cols-12">
+          <div className="min-w-0 space-y-2 lg:col-span-8">
+            {inSession ? <p className="rounded-md px-3 py-2 text-sm status-ok">The meeting is in session. <Link className="font-medium underline" to={`/meetings/${id}/member`}>Open the member view</Link> to follow the Case File on the board.</p> : null}
+            <PlanLists state={s} canManage={false} cancer={cancer} />
+          </div>
+          <aside className="min-w-0 space-y-3 lg:col-span-4" aria-label="The meeting's members">
+            <MembersCard state={s} />
+            {mayPdf ? <PdfCard mid={id} after={false} /> : null}
+          </aside>
+        </div>
+      ) : null}
     </div>
   );
 }

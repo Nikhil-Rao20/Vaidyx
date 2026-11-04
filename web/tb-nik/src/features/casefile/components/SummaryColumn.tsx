@@ -7,7 +7,7 @@ import { Bot, CheckCheck, ChevronDown, ChevronsDownUp, ChevronsUpDown, CircleAle
 import type { Citation, DocFinal, ProseSection, Slot, SlotSection, SlotsResponse } from "../types";
 import { SlotLine, type SlotContext, type SlotHandlers } from "./SlotLine";
 import { LoadingButton, NotYetState, SkeletonLines, StatusChip, NotSigned, docTitleOf, finalWordOf, fmtDate, fmtDateTime, indianDates, modelLabel } from "./common";
-import type { CaseCitation } from "../steps/types";
+import type { CaseCitation, SaidCitation } from "../steps/types";
 import { fieldOf } from "@/features/meetings/components/DecisionForm";
 import { cn } from "@/lib/utils";
 import { consultantTitle } from "@/lib/format";
@@ -20,9 +20,37 @@ const isQuestion = (s: Slot) => (s.fact_id ?? s.id.replace(/^fact:/, "")) === "c
 const BOARD_FIELD: Record<string, string> = { board_date: "Date", outcome_type: "Outcome", outcome: "Outcome", versions: "Correction", intent_as_recorded: "Treatment intent", divergent_opinions: "Divergent views", deferred_reason: "What is awaited" };
 const ACTION_FIELD: Record<string, string> = { label: "task", department: "department", due: "due date", completed: "done", status: "status" };
 
+/** HH:MM of an ISO time ("2026-10-23T10:42:05" -> "10:42"); "" when there is none. */
+const clock = (iso?: string) => (iso && /T\d{2}:\d{2}/.test(iso) ? iso.slice(11, 16) : "");
+
+/** What was said at the board (meetings-v2 5.4): the chip reads "Board discussion DD/MM/YYYY" (or `label`); the speaker and the exact words
+ *  show on hover and, on click, in a line under the sentence. Text only: no audio is ever kept. */
+export function SaidChip({ c, label }: { c: SaidCitation; label?: string }) {
+  const [open, setOpen] = useState(false);
+  const who = c.speaker === "room" ? "Board room (speaker not known)" : c.speaker_name || "A member";
+  const when = [c.board_date ? fmtDate(c.board_date) : "", clock(c.at)].filter(Boolean).join(", ");
+  const words = label ?? `Board discussion${c.board_date ? ` ${fmtDate(c.board_date)}` : ""}`;
+  const said = `${who} said${when ? ` (${when})` : ""}: “${c.quote}”`;
+  return (
+    <>
+      <button type="button" className="quote-chip ml-1 align-middle active:scale-95" title={said} aria-expanded={open} onClick={() => setOpen((v) => !v)}
+        onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }} data-cite="said">
+        <MessageSquareQuote className="mr-0.5 inline size-3 align-[-1px]" aria-hidden />{words}
+      </button>
+      {open ? (
+        <span className="mb-1 mt-1 block rounded-md border border-border bg-muted/40 px-2.5 py-1.5 text-xs leading-relaxed" role="note" data-testid="said-words">
+          <span className="block font-medium text-foreground">{who}{when ? <span className="font-normal text-muted-foreground">, {when}</span> : null}</span>
+          <span className="block text-foreground">“{c.quote}”</span>
+          <span className="block text-muted-foreground">The exact words, from the AI notes of the meeting. Text only: no audio is kept.</span>
+        </span>
+      ) : null}
+    </>
+  );
+}
+
 /** One citation chip: a record line opens its report with the quote marked (as before); the Case summary (night-v3 3.4) also cites a
  *  board-record field ("Board DD/MM/YYYY, Decision", opens Board decisions when `onBoard` is given), an action, the stage confirmation
- *  or a member's card (no click: the quote shows on hover). */
+ *  or a member's card (no click: the quote shows on hover), and what was said at the board (SaidChip, meetings-v2 5.4). */
 export function CiteChip({ c, docs, h, onBoard }: { c: Citation | CaseCitation; docs?: Docs; h: Pick<SlotHandlers, "openSource">; onBoard?: () => void }) {
   const kind = "kind" in c ? c.kind : undefined;
   if (!kind) {
@@ -35,6 +63,7 @@ export function CiteChip({ c, docs, h, onBoard }: { c: Citation | CaseCitation; 
     );
   }
   const x = c as Exclude<CaseCitation, { kind?: undefined }>;
+  if (x.kind === "said") return <SaidChip c={x} />;
   const quote = x.quote ? `Quoted: ${x.quote}` : undefined;
   if (x.kind === "board") {
     const words = `Board${x.board_date ? ` ${fmtDate(x.board_date)}` : ""}, ${x.label || BOARD_FIELD[x.field] || fieldOf(x.field).label}`;

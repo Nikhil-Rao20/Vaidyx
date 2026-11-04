@@ -1,11 +1,11 @@
-// Pieces the meeting pages share: the meeting status chip, the live-channel dot, the case timer, the slide renderer,
-// the members strip, the questions list and the stand-in agent tile with its true states.
-import { useEffect, useState, type ReactNode } from "react";
+// Pieces the meeting pages share: the meeting status chip, the live-channel dot, the case timer, the members strip, the questions
+// list and the stand-in agent tile with its true states. (No slide renderer: the meeting shows the Case File itself, meetings-v2 2.6.)
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { Bot, FileText, Hand, Images, Radio, Timer as TimerIcon, Wifi, WifiOff } from "lucide-react";
+import { Bot, FileText, Hand, Radio, Timer as TimerIcon, Wifi, WifiOff } from "lucide-react";
 import { answerText, handUsers, type AgentState, type Attendee, type LiveStatus, type MeetingQuestion, type MeetingState, type MeetingTimer, type QuestionAnswer } from "@/lib/live";
-import type { Slide, SlideCitation, SlideContentMap, SlideSentence } from "../types";
-import { NotSigned, StatusChip, fmtDate, indianDates, initials, modelLabel, niceTitle } from "@/features/casefile/components/common";
+import type { SlideCitation } from "../types";
+import { NotSigned, StatusChip, indianDates, initials, modelLabel, niceTitle } from "@/features/casefile/components/common";
 import { cn } from "@/lib/utils";
 
 export function MeetingStatusChip({ status }: { status: string }) {
@@ -178,138 +178,3 @@ export function QuestionsList({ questions, big, emptyText = "No questions yet.",
   );
 }
 
-// ---- slides -------------------------------------------------------------------------------------------------------------
-function Sentence({ s, big }: { s: SlideSentence | string; big?: boolean }) {
-  if (typeof s === "string") return <li className={cn("text-foreground", big ? "text-xl leading-snug" : "text-sm")}>{indianDates(s)}</li>;
-  return <li className={cn("text-foreground", big ? "text-xl leading-snug" : "text-sm")}>{indianDates(s.text)}{(s.citations ?? []).slice(0, 3).map((c, j) => <Cite key={j} c={c} big={big} />)}</li>;
-}
-
-const GAP_WORD: Record<string, string> = { missing: "not found in the file", needs_confirmation: "needs confirmation", not_final: "not final", waived: "not needed", not_applicable: "not applicable" };
-
-function SlideBody({ slide, c, big }: { slide: Slide; c: SlideContentMap; big?: boolean }) {
-  const t = big ? "text-xl leading-snug" : "text-sm";
-  const small = big ? "text-base" : "text-xs";
-  const kind = slide.kind;
-  if (kind === "summary" && c.from === "gate") {
-    return (
-      <div className="space-y-2">
-        {c.board_question ? <p className={cn("text-foreground", t)}><span className="text-muted-foreground">Board question: </span>{c.board_question}</p> : null}
-        {typeof c.satisfied === "number" && typeof c.total === "number" ? <p className={cn("text-foreground", t)}>{c.satisfied} of {c.total} records in the file</p> : null}
-        <ul className="space-y-1">
-          {(c.requirements ?? []).map((r) => (
-            <li key={r.id} className={cn("flex items-baseline gap-2", t)}>
-              <span className={cn("shrink-0 rounded-md border border-dashed px-1.5 font-mono", small, r.status === "satisfied" ? "text-ok border-ok/40" : r.status === "missing" ? "text-muted-foreground" : "text-warn")}>{r.status === "satisfied" ? "found" : `[ ${GAP_WORD[r.status] ?? r.status.replace(/_/g, " ")} ]`}</span>
-              <span className="text-foreground">{r.label}</span>
-            </li>
-          ))}
-        </ul>
-        {c.note ? <p className={cn("text-muted-foreground", small)}>{c.note}</p> : null}
-      </div>
-    );
-  }
-  if (kind === "summary" || c.sections) {
-    return (
-      <div className="space-y-3">
-        {c.label ? <span className={cn("inline-block rounded-full px-2 py-0.5 font-medium", small, c.reviewed ? "status-ok" : "status-review")}>{c.label}</span> : null}
-        {c.stale ? <p className={cn("status-warn rounded-md px-2 py-1", small)}>Records changed since this draft: {c.stale}</p> : null}
-        {(c.sections ?? []).filter((s) => s.text || (s.sentences ?? s.items ?? []).length).map((s, i) => (
-          <section key={s.id ?? i}>
-            <h4 className={cn("font-semibold text-foreground", big ? "text-xl" : "text-sm")}>{s.title ?? s.heading}</h4>
-            {s.text ? <p className={cn("text-foreground", t)}>{indianDates(s.text)}</p> : null}
-            <ul className="space-y-1">{(s.sentences ?? s.items ?? []).map((x, j) => <Sentence key={j} s={x} big={big} />)}</ul>
-          </section>
-        ))}
-      </div>
-    );
-  }
-  if (kind === "values" || c.values) {
-    const vals = c.values ?? [];
-    if (!vals.length) return <p className={cn("text-muted-foreground", t)}>No verified values yet.</p>;
-    return (
-      <dl className={cn("grid gap-x-4 gap-y-1.5", big ? "grid-cols-[minmax(12rem,auto)_1fr]" : "grid-cols-[minmax(8rem,auto)_1fr]")}>
-        {vals.map((v) => (
-          <div key={v.id} className="contents">
-            <dt className={cn("text-muted-foreground", t)}>{v.label}</dt>
-            <dd className={cn("text-foreground", t)}>{v.value}{v.doc_title ? <Cite c={{ doc_id: v.doc_id ?? "", doc_title: v.doc_title, page: v.page, quote: v.quote }} big={big} /> : null}{v.date ? <span className={cn("ml-2 text-muted-foreground", small)}>{fmtDate(v.date)}</span> : null}</dd>
-          </div>
-        ))}
-      </dl>
-    );
-  }
-  if (kind === "gaps" || c.gaps) {
-    const gaps = c.gaps ?? [];
-    const waivers = c.waivers ?? [];
-    return (
-      <div className="space-y-3">
-        {typeof c.satisfied === "number" && typeof c.total === "number" ? <p className={cn("text-foreground", t)}>{c.satisfied} of {c.total} required records in the file</p> : null}
-        {gaps.length === 0 ? <p className={cn("text-ok", t)}>No gaps: every required record is in the file or marked not needed.</p> : (
-          <ul className="space-y-1">{gaps.map((g) => <li key={g.id} className={cn("text-foreground", t)}><span className={cn("mr-2 rounded-md border border-dashed px-1.5 font-mono text-muted-foreground", small)}>[ {GAP_WORD[g.status] ?? g.status.replace(/_/g, " ")} ]</span>{g.label}{g.department ? <span className="text-muted-foreground">, {g.department}</span> : null}</li>)}</ul>
-        )}
-        {waivers.length ? (
-          <div>
-            <h4 className={cn("font-semibold text-foreground", big ? "text-xl" : "text-sm")}>Marked not needed</h4>
-            <ul className="space-y-1">{waivers.map((w, i) => <li key={i} className={cn("text-foreground", t)}>{w.requirement.replace(/_/g, " ")}{w.reason ? `: ${w.reason}` : ""}{w.by ? <span className="text-muted-foreground"> ({w.by})</span> : null}</li>)}</ul>
-          </div>
-        ) : null}
-      </div>
-    );
-  }
-  if (kind === "imaging" || kind === "pathology" || c.documents) {
-    const docs = c.documents ?? [];
-    if (!docs.length) return <p className={cn("text-muted-foreground", t)}>No {kind === "imaging" ? "imaging" : "pathology"} reports in the file.</p>;
-    return (
-      <div className="space-y-2">
-        <ul className="space-y-2">
-          {docs.map((d) => (
-            <li key={d.doc_id} className={cn("text-foreground", t)}>
-              <span className="font-medium">{niceTitle(d.title)}</span>
-              <span className={cn("ml-2 text-muted-foreground", small)}>{[d.date ? fmtDate(d.date) : "", (d.status ?? "").toLowerCase(), d.signed === "yes" ? "signed" : ""].filter(Boolean).join(", ")}</span>
-              {d.images ? <span className={cn("ml-2 inline-flex items-center gap-1 text-link", small)}><Images className="size-3.5" aria-hidden />{d.viewer_available ? "images in the viewer" : "images listed"}</span> : null}
-              {(d.facts ?? []).length ? <ul className="mt-0.5 pl-4 space-y-0.5">{d.facts!.map((f) => <li key={f.id} className={cn("text-foreground", big ? "text-lg" : "text-sm")}><span className="text-muted-foreground">{f.label}: </span>{f.value}</li>)}</ul> : null}
-            </li>
-          ))}
-        </ul>
-        {c.note ? <p className={cn("text-muted-foreground", small)}>{c.note}</p> : null}
-      </div>
-    );
-  }
-  if (kind === "points" || c.points) {
-    const pts = c.points ?? [];
-    if (!pts.length) return <p className={cn("text-muted-foreground", t)}>No points for review yet.</p>;
-    return (
-      <div className="space-y-2">
-        <ol className="space-y-1.5 list-decimal pl-6">{pts.map((p, i) => <li key={i} className={cn("text-foreground", t)}>{indianDates(p.text)}{(p.citations ?? []).slice(0, 2).map((c2, j) => <Cite key={j} c={c2} big={big} />)}{p.label ? <span className={cn("ml-2 text-muted-foreground", small)}>({p.label})</span> : null}</li>)}</ol>
-        {c.note ? <p className={cn("text-muted-foreground", small)}>{c.note}</p> : null}
-      </div>
-    );
-  }
-  if (kind === "published" || c.items) {
-    return (
-      <div className="space-y-2">
-        <span className={cn("inline-block rounded-full px-2 py-0.5 bg-muted text-muted-foreground font-medium", small)}>Published case, not advice for this patient</span>
-        <ul className="space-y-2">{(c.items ?? []).map((p, i) => <li key={p.id ?? i} className={cn("text-foreground", t)}><span className="font-medium">{p.title}</span><span className={cn("block text-muted-foreground", small)}>{[p.authors, p.journal, p.year].filter(Boolean).join(", ")}{p.peer_reviewed === false ? ", not peer-reviewed" : ""}</span>{(p.quotes ?? []).map((q, j) => <blockquote key={j} className={cn("border-l-2 border-border pl-2 mt-0.5", big ? "text-lg" : "text-sm")}>{q.text}</blockquote>)}</li>)}</ul>
-      </div>
-    );
-  }
-  return (
-    <div className="space-y-2">
-      {(c.paragraphs ?? []).map((p, i) => <p key={i} className={cn("text-foreground", t)}>{p}</p>)}
-      {c.note ? <p className={cn("text-muted-foreground", small)}>{c.note}</p> : null}
-    </div>
-  );
-}
-
-export function SlideContent({ slide, big }: { slide: Slide; big?: boolean }) {
-  const c = slide.content;
-  const body: ReactNode = c == null ? <p className={cn("text-muted-foreground", big ? "text-xl" : "text-sm")}>Nothing to show on this slide.</p>
-    : typeof c === "string" ? c.split(/\n{2,}/).map((p, i) => <p key={i} className={cn("text-foreground", big ? "text-2xl leading-snug" : "text-sm")}>{p}</p>)
-    : Array.isArray(c) ? <ul className="space-y-1.5 list-disc pl-5">{c.map((it, i) => <Sentence key={i} s={it} big={big} />)}</ul>
-    : <SlideBody slide={slide} c={c} big={big} />;
-  return (
-    <div data-testid="slide" data-slide-kind={slide.kind}>
-      <h3 className={cn("font-bold text-foreground mb-2", big ? "text-3xl" : "text-base")}>{slide.title}</h3>
-      {body}
-      {slide.kind === "summary" || slide.kind === "points" ? <p className={cn("mt-3 text-muted-foreground", big ? "text-sm" : "text-[10px]")}>From the records, with quotes. Vaidyx checks, routes, summarises and flags; the decision is the board's.</p> : null}
-    </div>
-  );
-}

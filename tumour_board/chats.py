@@ -3,6 +3,7 @@ the answer of qa.ask (statements, each with its verified quotes: document, title
 was computed from (a later change marks the thread stale: "records changed since"), and a pin. Visible to the owner's team and the
 participating departments with FULL scope, never to a supporting-only doctor and never in REQUESTS scope; "View as" stays general.
 Audited "chat_asked" / "chat_pinned". The model is called only through qa.ask."""
+import re
 import threading
 import uuid
 
@@ -78,6 +79,7 @@ def public(t, sig_hash) -> dict:
     stale = bool(t.get("signature") and sig_hash and t["signature"].get("hash") != sig_hash)
     return {**{k: t.get(k) for k in ("id", "by", "by_name", "at", "question", "status", "statements", "message", "pinned", "seconds", "dropped_unverified", "category",
                                      "model")},
+            "suggest_pubmed": bool(t.get("suggest_pubmed")),
             "stale": stale, "stale_reason": "The records changed since this answer was computed" if stale else "", "signature": (t.get("signature") or {}).get("hash")}
 
 
@@ -104,6 +106,7 @@ async def ask(case_id, question, user, history=None) -> dict:
          "statements": _citations(res.get("statements")), "message": res.get("message") or "", "pinned": False, "seconds": res.get("seconds"),
          "dropped_unverified": res.get("dropped_unverified", 0), "category": res.get("category"), "model": _model(res), "signature": {k: sig.get(k) for k in ("hash", "documents", "ready", "confirmations")},
          "shared": True}
+    t["suggest_pubmed"] = suggest_pubmed(t["status"], q, store.get_case(case_id))  # kept with the thread: the list shows the offer too
     with _lock:
         data = load(case_id)
         data["threads"].append(t)
@@ -115,6 +118,24 @@ async def ask(case_id, question, user, history=None) -> dict:
     store.audit(case_id, {"kind": "chat_asked", "by": user, "thread": t["id"], "question": q[:300], "status": t["status"], "statements": len(t["statements"]),
                           "dropped_unverified": t["dropped_unverified"]})
     return public(t, sig["hash"])
+
+
+# A question that names a record or the patient stays a records question. "report", "record", "note", "letter", "document" count as the
+# record only as a noun ("the report", "her biopsy report"): "What did trials report ...?" is the design's own general question.
+RECORD_WORDS = re.compile(
+    r"\b(?:the|a|an|this|that|these|those|her|his|its|their|any|which|latest|last|recent|previous|final|pathology|histopathology|"
+    r"biopsy|scan|ct|mri|pet|radiology|lab|laboratory|blood|discharge|opd|clinic|referral|ihc|outside)\s+"
+    r"(?:reports?|records?|notes?|letters?|documents?)\b|\b(?:documented|recorded|discharge\w*|this patient|his)\b|"
+    r"\bher\b(?!\s*-?\s*2\b)", re.I)
+
+
+def suggest_pubmed(status, question, case=None) -> bool:
+    """The records found nothing and the question reads as a general one (Ask PubMed's scope allows it, it names no record and not
+    the patient): the screen offers "This is a general question. Ask PubMed?" (docs/pubmed-ask/DESIGN.md section 8)."""
+    if status != "not_documented" or not question or RECORD_WORDS.search(question):
+        return False
+    from . import published, pubmed_ask
+    return bool(pubmed_ask.scope(question, published._identifiers(case) if isinstance(case, dict) else ())["allowed"])
 
 
 def pin(case_id, thread_id, pinned, user) -> dict:

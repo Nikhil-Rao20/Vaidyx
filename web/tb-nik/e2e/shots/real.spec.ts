@@ -467,7 +467,7 @@ test.describe("treating doctor (tb-breast-doc)", () => {
     await snap(page, role, "meetings", "list");
     const list = await (await page.request.get("/api/tb/meetings")).json();
     const live = (list.meetings || []).find((m: { status: string; current?: string }) => m.status === "in_session" && m.current === P19) || (list.meetings || []).find((m: { status: string }) => m.status === "in_session");
-    const review = (list.meetings || []).find((m: { room?: string; title?: string }) => (m.room || m.title || "").includes(MEETING_ROOM_NAME));
+    const review = (list.meetings || []).find((m: { room?: string; title?: string; status?: string }) => (m.room || m.title || "").includes(MEETING_ROOM_NAME) && (m.status === "planned" || m.status === "in_session"));
     if (review) {
       await go(page, `/meetings/${review.id}`);
       await expect(page.getByTestId("meeting-page").or(page.getByTestId("control-view")).first()).toBeVisible({ timeout: 20_000 });
@@ -522,10 +522,11 @@ test.describe("MDT Coordinator (tb-mdt)", () => {
     await go(page, "/meetings");
     await expect(page.getByTestId("meetings-page")).toBeVisible({ timeout: 20_000 });
     let list = await (await page.request.get("/api/tb/meetings")).json();
-    let review = (list.meetings || []).find((m: { room?: string; title?: string }) => (m.room || m.title || "").includes(MEETING_ROOM_NAME));
+    let review = (list.meetings || []).find((m: { room?: string; title?: string; status?: string }) => (m.room || m.title || "").includes(MEETING_ROOM_NAME) && (m.status === "planned" || m.status === "in_session"));
     // The new meeting dialog is always shot; the meeting is created only when the UI review meeting does not exist yet.
     await page.getByTestId("new-meeting").click();
     await expect(page.getByTestId("new-meeting-dialog")).toBeVisible();
+    await page.getByTestId("plan-once").click();  // the planner's chooser (meetings-v2 3.3): the date fields show on Once
     const d = new Date(Date.now() + 7 * 864e5);
     await page.locator("#nm-date").fill(`${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`);
     await page.locator("#nm-time").fill("16:00");
@@ -536,7 +537,7 @@ test.describe("MDT Coordinator (tb-mdt)", () => {
       await page.getByTestId("new-meeting-dialog").getByRole("button", { name: /Create/ }).click();
       await page.waitForTimeout(2000);
       list = await (await page.request.get("/api/tb/meetings")).json();
-      review = (list.meetings || []).find((m: { room?: string; title?: string }) => (m.room || m.title || "").includes(MEETING_ROOM_NAME));
+      review = (list.meetings || []).find((m: { room?: string; title?: string; status?: string }) => (m.room || m.title || "").includes(MEETING_ROOM_NAME) && (m.status === "planned" || m.status === "in_session"));
     } else {
       await page.getByTestId("new-meeting-dialog").getByRole("button", { name: "Cancel" }).click();
     }

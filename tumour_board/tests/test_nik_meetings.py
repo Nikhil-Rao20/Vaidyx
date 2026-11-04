@@ -661,6 +661,9 @@ def test_slides_summary_first_from_the_gate_then_from_the_summary(tc):
     join_and_admit(tc, mid, "priya")
     assert As(tc, "priya").get(f"/meetings/{mid}/cases/TB-999/slides").status_code == 404
     assert As(tc, "ravi").get(f"/meetings/{mid}/cases/TB-002/slides").status_code == 403
+    # only the Case File on the floor, for anyone without the whole Case File (meetings-v2 2.6 and the API check)
+    assert As(tc, "priya").get(f"/meetings/{mid}/cases/TB-002/slides").json()["detail"]["code"] == "not_current"
+    As(tc, "anil").post(f"/meetings/{mid}/current", json={"case_id": "TB-002"})
     r = As(tc, "priya").get(f"/meetings/{mid}/cases/TB-002/slides")
     assert r.status_code == 200, r.text
     slides = r.json()["slides"]
@@ -1024,3 +1027,126 @@ def test_withdrawing_a_presenting_coordinators_right_does_not_stop_the_share(tc,
     assert As(tc, "anil").post(f"/meetings/{mid}/present-allow", json={"user": "anil", "allowed": False}).status_code == 200
     assert As(tc, "anil").get(f"/meetings/{mid}").json()["presenting"] == "anil"  # the coordinator presents by right, not by permission
     assert events[-1]["type"] == "present_allowed"
+
+
+# ---- meetings-v2 review fixes (2 Nov 2026, docs/meetings-v2/research/01_code_review.md) -------------------------------------------------
+
+def test_opening_images_keeps_what_changed_while_the_hospital_system_answered(tc, monkeypatch):
+    """Finding 1: the images lookup waits on the hospital system; a Next pressed meanwhile is kept, not undone by the late save."""
+    mid = started(tc)
+    As(tc, "anil").post(f"/meetings/{mid}/current", json={"case_id": "TB-001"})
+    doc = store.add_document_file("TB-001", "ct_thorax.pdf", b"synthetic")
+    doc["classification"] = {"title": "CT THORAX", "doc_type": "ct"}
+    doc["his"] = {"imaging_study_ref": "ImagingStudy/img-1"}
+    store.save_doc("TB-001", doc)
+    monkeypatch.setattr(his_client, "client", lambda: object())
+
+    async def slow_study(cid, d, client):
+        meetings.set_current(mid, "anil", "TB-002")  # the coordinator moves on while the hospital system answers
+        return {"available": True, "study_uid": UID, "modality": "CT"}
+    monkeypatch.setattr(pacs, "study_for_doc", slow_study)
+    r = As(tc, "anil").post(f"/meetings/{mid}/open", json={"kind": "images", "doc_id": doc["doc_id"]})
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "moved_on"
+    s = board.get(mid)
+    assert s["current"] == "TB-002" and not (s.get("live") or {}).get("opened")
+
+
+def test_a_concern_given_after_the_outcome_reaches_the_board_record(tc):
+    """Finding 5: a Concern card after the outcome was saved corrects the record (a new version with its reason) and the minutes."""
+    owned("TB-002")
+    mid = started(tc)
+    join_and_admit(tc, mid, "suresh")
+    As(tc, "anil").post(f"/meetings/{mid}/current", json={"case_id": "TB-002"})
+    body = {"outcome": "decision", "decision_text": "Neoadjuvant chemotherapy, then surgery.", "intent_as_stated": "Curative",
+            "responsible_doctor": "Dr Priya Nair", "next_step": "Medical Oncology consult", "next_step_date": "25/10/2026", "members_present": ["Dr Suresh"]}
+    rec = As(tc, "anil").post(f"/meetings/{mid}/cases/TB-002/decision", json=body).json()["record"]
+    assert not rec.get("concerns")
+    r = As(tc, "suresh").post(f"/meetings/{mid}/cases/TB-002/card", json={"agree": False, "note": "Repeat the axillary ultrasound"})
+    assert r.status_code == 200, r.text
+    st = store.get_state("TB-002")
+    now = next(b for b in st["board_records"] if b["id"] == rec["id"])
+    assert [c["text"] for c in now["concerns"]] == ["Repeat the axillary ultrasound"] and "Repeat the axillary ultrasound" in now["divergent_opinions"]
+    assert len(now["versions"]) == 2 and "after the outcome was recorded" in now["versions"][-1]["reason"]
+    # the same card again changes nothing more
+    As(tc, "suresh").post(f"/meetings/{mid}/cases/TB-002/card", json={"agree": False, "note": "Repeat the axillary ultrasound"})
+    assert len(next(b for b in store.get_state("TB-002")["board_records"] if b["id"] == rec["id"])["versions"]) == 2
+    m = As(tc, "anil").get(f"/sessions/{mid}/minutes?format=json").json()
+    assert "Repeat the axillary ultrasound" in str(next(c for c in m["cases"] if c["case_id"] == "TB-002"))
+
+
+def test_an_outside_expert_gets_no_ask_or_card_buttons(tc):
+    """Finding 8: those routes refuse a login that is not placed, so the view does not offer them."""
+    mid = started(tc)
+    code = As(tc, "anil").post(f"/meetings/{mid}/code").json()["value"]
+    As(tc, "guest").post("/meetings/join", json={"code": code})
+    As(tc, "anil").post(f"/meetings/{mid}/admit", json={"user": "guest"})
+    As(tc, "anil").post(f"/meetings/{mid}/current", json={"case_id": "TB-001"})
+    can = As(tc, "guest").get(f"/meetings/{mid}").json()["can"]
+    assert can["member"] is True and can["ask"] is False and can["ask_agents"] is False and can["card"] is False
+    join_and_admit(tc, mid, "suresh")
+    can = As(tc, "suresh").get(f"/meetings/{mid}").json()["can"]
+    assert can["ask"] is True and can["card"] is True
+
+
+def test_moving_a_meeting_moves_its_case_files_and_tells_the_members(tc):
+    """Finding 10: a new date reaches the Case Files on the agenda (their board date), the 15-minute notice is sent again for the new time,
+    and the member departments are told once the agenda was sent."""
+    mid = with_agenda(tc)
+    assert store.get_case("TB-001")["board_date"] == board.get(mid)["date"]
+    As(tc, "anil").post(f"/meetings/{mid}/send-agenda")
+    s = board.get(mid); s["starting_notified_at"] = store.now_iso(); board.save_session(s)
+    new = (date.today() + timedelta(days=9)).isoformat()
+    r = As(tc, "anil").put(f"/meetings/{mid}", json={"date": new, "time": "15:00"})
+    assert r.status_code == 200, r.text
+    assert store.get_case("TB-001")["board_date"] == new and store.get_case("TB-003")["board_date"] == new
+    assert "starting_notified_at" not in board.get(mid)
+    assert any(n["kind"] == "agenda" and "moved to" in n["title"] for n in notify.for_roles({"user": "x", "known": True, "departments": {"radiology": "member"}}, limit=None))
+
+
+def test_not_discussed_keeps_an_agenda_change_made_while_the_record_was_saved(tc, monkeypatch):
+    """Finding 13: the next meeting is read after the board record is saved (seconds), so a Case File added to it meanwhile stays."""
+    mid = started(tc)
+    nxt = new_meeting(tc, date_=(date.today() + timedelta(days=8)).isoformat(), time_="09:00")
+    real = meetings.postboard.record_decision
+
+    async def slow_record(cid, rec, user):
+        meetings.add_to_agenda(nxt, "anil", "TB-003", "noting", "added meanwhile")
+        return await real(cid, rec, user)
+    monkeypatch.setattr(meetings.postboard, "record_decision", slow_record)
+    r = As(tc, "anil").post(f"/meetings/{mid}/cases/TB-001/decision", json={"outcome": "not_discussed", "not_discussed_reason": "information_missing"})
+    assert r.status_code == 200, r.text
+    v = As(tc, "anil").get(f"/meetings/{nxt}").json()
+    assert [x["case_id"] for x in v["agenda"]["discussion"]] == ["TB-001"] and [x["case_id"] for x in v["agenda"]["noting"]] == ["TB-003"]
+
+
+def test_a_join_code_lasts_through_the_meeting_it_was_made_for(tc):
+    """Finding 2: a code made days before the meeting still works on the day (12 hours after the start at least)."""
+    day = (date.today() + timedelta(days=3)).isoformat()
+    mid = new_meeting(tc, date_=day, time_="14:00")
+    code = As(tc, "anil").post(f"/meetings/{mid}/code").json()
+    assert datetime.fromisoformat(code["expires_at"]) >= datetime.fromisoformat(f"{day}T14:00") + timedelta(hours=12)
+
+
+def test_the_api_check_rules(tc, monkeypatch):
+    """The meetings-v2 API check (1.2): no meeting in the past; a planned meeting is cancelled, not ended; no card or decision before the
+    start; an over-long question is refused, not cut; a spotlight that is not a list is refused; a refusal says the action in words."""
+    past = (date.today() - timedelta(days=1)).isoformat()
+    r = As(tc, "anil").post("/meetings", json={"date": past, "time": "10:00"})
+    assert r.status_code == 400 and r.json()["detail"]["code"] == "past"
+    mid = with_agenda(tc)
+    assert As(tc, "anil").put(f"/meetings/{mid}", json={"date": past}).json()["detail"]["code"] == "past"
+    r = As(tc, "anil").post(f"/meetings/{mid}/end")
+    assert r.status_code == 409 and r.json()["detail"]["code"] == "not_started"
+    join_and_admit(tc, mid, "suresh")
+    assert As(tc, "suresh").post(f"/meetings/{mid}/cases/TB-001/card", json={"agree": True}).json()["detail"]["code"] == "not_started"
+    assert As(tc, "anil").post(f"/meetings/{mid}/cases/TB-001/decision", json={"outcome": "noted"}).json()["detail"]["code"] == "not_started"
+    assert As(tc, "anil").post(f"/meetings/{mid}/start").status_code == 200
+    As(tc, "anil").post(f"/meetings/{mid}/current", json={"case_id": "TB-001"})
+    monkeypatch.setattr(meetings, "answer_in_background", lambda *a, **k: None)
+    r = As(tc, "suresh").post(f"/meetings/{mid}/questions", json={"text": "x" * 1001})
+    assert r.status_code == 400 and r.json()["detail"]["code"] == "too_long"
+    r = As(tc, "anil").post(f"/meetings/{mid}/spotlight", json={"users": "suresh"})
+    assert r.status_code == 400 and r.json()["detail"]["code"] == "bad_users"
+    r = As(tc, "suresh").post(f"/meetings/{mid}/start")
+    msg = str(r.json()["detail"])
+    assert r.status_code == 403 and "plan or run a meeting" in msg and "'session'" not in msg

@@ -1,0 +1,143 @@
+# Ask PubMed: design (3 Nov 2026)
+
+The prof's suggestion, through the owner: general questions are answered from PubMed only. Owner's answers (3 Nov 2026):
+shown proudly in the screens, not hidden; the Case File agents keep their scope (records and guidelines); Ask PubMed is an add-on
+with its own label; the papers come from the PubMed API, never from the model; it must work without backend errors.
+
+## 1. Decisions
+
+| # | Decision | Owner's answer |
+|---|---|---|
+| 1 | Scope | The agents answer only from the records and the guideline library, as now. Ask PubMed is a separate add-on, labelled "Published evidence, not advice for this patient". |
+| 2 | Sources | General questions: PubMed only. Patient questions: the records, with guideline references beside them, as now. |
+| 3 | Who picks PubMed | Vaidyx suggests it for a general question, the doctor confirms with one click. In the meeting the agent says "From PubMed" aloud. |
+| 4 | Text read | Abstracts first; PubMed Central free full text later. |
+| 5 | Without a Case File | Yes: an "Ask PubMed" page on Home. Same engine; inside a Case File it knows the cancer and the documented biomarkers, outside it knows nothing else. |
+
+Wording (label under every PubMed answer):
+"From PubMed. Every line is quoted word for word from the paper's abstract. Published evidence, not advice for this patient."
+Wording (records answer, unchanged scope): "From this patient's records only."
+
+## 2. Where it shows (proudly)
+
+| Place | What the doctor sees |
+|---|---|
+| Case File, Ask | Two equal tabs at the top: **This patient's records** and **PubMed**. A general question typed in Records gets "This is a general question. Ask PubMed?" (one click). |
+| Home | An **Ask PubMed** card and its own page (`/pubmed`), in the nav and the phone Dock. Each user's own history. |
+| Meeting, AI agents | An **Ask PubMed** tab beside the agents. A voice answer starts "From PubMed:" and names the first author, journal and year. |
+| Published panel | **Save** on any paper card puts it in the Case File's Published list (existing panel). |
+
+While it works, the steps are shown live: "Searching PubMed... 305 papers found, reading the top 20 abstracts... writing... checking
+every quote". The answer card: the search words (editable, run again), 2 to 5 lines each with a quote chip and a paper number, then
+the paper cards (title, authors, journal, year, study type, peer reviewed, India mark, PMID link, Save), "N papers read, searched <time>".
+
+## 3. How an answer is made
+
+| Step | Rule |
+|---|---|
+| 1. Sort | About this patient: records (unchanged). General: PubMed. Advice for this patient ("should we give her..."): refused (unchanged). |
+| 2. Search words | The model writes PubMed search words from the question (in a Case File it may add the cancer site and the documented histology, stage and biomarkers). Never sent: name, UHID, IP / OP No., ABHA, dates, age, place, hospital, long digit runs (the published.py filter, extended). The words are shown. |
+| 3. Papers | Only from NCBI E-utilities: esearch (Best Match, every year by default so a landmark trial such as the 2015 Tata Memorial neck dissection trial is found; the doctor may limit the years), then efetch XML for the top 20. Plain words only: field tags the model writes are taken out (a wrong tag such as "breast cancer"[MeSH] made PubMed drop that part, 3 Nov live run). Fewer than 5 papers widens the search (broader words, then the question's own words). Retracted papers dropped. Order: meta-analysis and systematic review, trial, guideline, review, cohort, case report. India mark from the authors' affiliations. |
+| 4. Answer | The model writes 2 to 5 short lines; each cites a PMID and an exact quote. A PMID not in the fetched set, or a quote not found word for word in that abstract, drops the line. |
+| 5. Output check | No advice and no "this patient" in Vaidyx's own words (quotes are the papers' words and may say "recommended"). Conflicting papers are shown side by side, never resolved. |
+| 6. Nothing | "No answer found in the PubMed abstracts read." PubMed down: "PubMed could not be reached (reason). Try again." Never the model's own memory. |
+
+Paper details (title, authors, journal, year, type, DOI, PMCID) come from the API record, never from the model.
+
+## 4. Backend
+
+| Piece | What |
+|---|---|
+| `tumour_board/pubmed.py` | The client: esearch, efetch XML parsing (structured abstract sections, publication types, retraction, affiliations, MeSH), a rate limit (3 calls/s, 10 with an NCBI API key), retries with back-off on 429 / 5xx / time-outs, 15 s per call, `tool=vaidyx-tb` and a contact email (NCBI policy), a disk cache of public abstracts by PMID (30 days). published.py moves onto it. |
+| `tumour_board/pubmed_ask.py` | The pipeline of section 3; its own guardrail policy (section 6, item 1). |
+| Routes | `POST /cases/{id}/pubmed/ask` (saved in the team chat as a PubMed thread), `POST /pubmed/ask` and `GET /pubmed/history` (Home, per user), Save to Published (existing route), the meeting agents' tab uses the Case File route. |
+| Audit | Every search: who, the words sent, papers found, seconds. |
+| Models | Reasoner Gemma-4-31B (non-medical), labelled on every answer. |
+
+## 5. Checks
+
+| Check | How |
+|---|---|
+| Unit | Recorded PubMed XML: normal, structured abstract, no abstract, retracted, empty result, malformed XML, 429, 500, time-out, identifier in the question. |
+| Live | 20 fixed general questions (breast, lung, cervix, head and neck) against real PubMed: every paper from the API, every quote verified, zero backend errors, time per answer. |
+| Screens | Playwright: Case File tabs, Home page, meeting tab, Save; all roles; desktop and phone. |
+
+## 6. Open points for the owner
+
+1. Guardrail: today the rules refuse "survival" and "best treatment" questions. Ask PubMed would allow them when asked about published
+   results ("What survival did trials report for ...?") and still refuse them about this patient ("What is her survival?").
+2. NCBI API key and contact email: free key from an NCBI account (10 calls/s instead of 3); which email goes to NCBI.
+3. The public website wording is the owner's (content.ts); the public demo only on the owner's word.
+4. Branding: the word "PubMed" with a link and "U.S. National Library of Medicine", no NLM logo (NLM asks that its logo is not used to
+   suggest endorsement).
+
+## 7. Part 1 (backend only) status, 3 Nov 2026
+
+The owner split the work: Part 1 the backend on its own with worst-case testing and a proof that the papers come from PubMed only;
+Part 2 the platform (routes, Case File Ask, Home, meeting) only after the owner has seen Part 1.
+
+| Piece | File |
+|---|---|
+| PubMed client | `tumour_board/pubmed.py` |
+| Ask PubMed pipeline | `tumour_board/pubmed_ask.py` (`python -m tumour_board.pubmed_ask "question"`) |
+| Unit tests (no network, no model) | `tumour_board/tests/test_pubmed.py`, `tumour_board/tests/test_pubmed_ask.py` |
+| Proof (two independent PubMed routes) | `docs/pubmed-ask/tools/prove.py` -> `PROOF.md`, `proof/q1-4.json` |
+| Live worst-case run | `docs/pubmed-ask/tools/live_eval.py` -> `LIVE_EVAL.md`, `proof/live_eval.json` |
+
+Added in Part 1 beyond section 3: a quote the model shortened is shown as the paper's whole sentence when it is clearly that sentence
+(90% of its words in order, every number, the same negation); a number the quote lacks is shown by one more sentence of the same
+paper only when that sentence states it the same way ("phase 2", "36 months", the % sign); an elided quote may not leave out a negation;
+a paper's year excuses a year, never a count; dates in any form, "her 2 cycles" and the patient's own name are refused; the contact
+email and the key never appear in stored provenance. Settings: `data/tumour_board/pubmed.json` (email; NCBI API key when the owner
+makes one).
+
+## 8. Part 2 contract (platform), 3 Nov 2026 (owner: "go ahead")
+
+### Backend (`tumour_board/pubmed_threads.py`, routes `tumour_board/api/pubmed.py`, router name "pubmed" in routes/tumour_board_routes.py)
+A question runs as a job (10 to 20 s), so the screen can show PubMed's steps live: start, then poll.
+
+| Route | Who | Body / answer |
+|---|---|---|
+| `POST /api/tb/pubmed/ask` | any signed-in clinical login (doctor, resident, MDT Coordinator, outside expert); not admin-only, auditor-only or department-admin-only logins | `{question, years?}` -> `202 {job_id}` (Home: no patient context, label LABEL_HOME) |
+| `POST /api/tb/cases/{case_id}/pubmed/ask` | anyone who may read the Case File's team chat (chats.may_read) or an admitted meeting member while the case is on the floor (the meeting READ window); never REQUESTS scope | `{question, years?}` -> `202 {job_id}` (context: the cancer and documented terms; identifiers: the patient's name and numbers; label LABEL) |
+| `GET /api/tb/pubmed/jobs/{job_id}` | only the login that started it | `{job_id, status: "running"|"done"|"failed", steps[{step, detail, seconds}], thread?, error?}` |
+| `GET /api/tb/pubmed/history` | own | `{threads[]}` newest first, the login's own Home questions (max 100 kept) |
+| `GET /api/tb/cases/{case_id}/pubmed` | as its ask route | `{threads[]}` pinned first, newest first (the whole team sees them) |
+| `POST /api/tb/cases/{case_id}/pubmed/{thread_id}/pin` | as its ask route | `{pinned}` -> the thread |
+| `POST /api/tb/cases/{case_id}/pubmed/{thread_id}/save` | as POST /cases/{id}/published (the owner consultant) | `{pmid}` -> the Published item (source pubmed, kind from the study type, the thread's verified quotes of that PMID as its quotes, where "Abstract, RESULTS") |
+
+Thread: `{id, kind: "pubmed", by, by_name, at, question, status: answered|not_found|no_papers|refused|unavailable, message, label,
+search{used, years, by, count, attempts}, statements[{text, citations[{pmid, quote, where, whole_sentence?, added_for_numbers?}]}],
+papers[{pmid, title, journal, journal_abbr, year, authors_line, study_type, tier, preprint, retracted, retraction_notice, concern,
+india, doi, pmcid, url, has_abstract, read, why_not_read, cited, rank}], counts{found, fetched, read}, model, seconds, dropped,
+invented_pmids, pinned?, saved_pmids[]}` (no provenance URLs to the screen; their SHA-256 stay in the stored thread).
+Storage: `cases/<id>/pubmed_threads.json` (max 300) and `data/tumour_board/pubmed_home/<login>.json` (mode 600). Jobs in memory,
+15 minutes, at most 2 running per login. Rate limit 12 questions per 10 minutes per login (both ask routes together). Audit:
+Case File `pubmed_asked` (who, question, words sent, status, counts), Home `org.audit("pubmed_asked", ...)`. A failed job is a
+thread with status "unavailable" and the reason, never a 500.
+
+Also: the records answer (`POST /cases/{id}/chats`) carries `suggest_pubmed: true` when it found nothing in the records and the
+question reads as a general one (pubmed_ask.scope allows it and it names no record, report, document or the patient); voice reads
+a PubMed thread through a new audio ref kind "pubmed" (`{kind: "pubmed", case_id?, id}`): "From PubMed." then the lines, each with
+the first author, journal and year of its paper; same access as reading the thread.
+
+### Frontend (`web/tb-nik/src/features/pubmed/`)
+- `PubMedAsk` (one component, three places): the question box with the mic, the live steps (words, search, fetch, read, check, as a
+  stepper), the answer card and the history. Props: `caseId?` (Case File mode), `compact?`, `variant?: "page"|"panel"|"meeting"`.
+- Answer card: the label line on top (always visible, the PubMed mark: the word "PubMed" with a book icon, never the NLM logo, and
+  "U.S. National Library of Medicine" in the footer with a link); the search words as an editable chip with Search again and a year
+  filter (All years / last 10 / last 5); the lines, each with numbered quote chips that open the exact quote with its section and a
+  link to the paper on pubmed.ncbi.nlm.nih.gov; the paper list (cited first, then read, then not read with why), each card with
+  title, first authors, journal, year, study type badge, India badge, retracted / no abstract marks, PMID link, Save (Case File,
+  the owner consultant) ; "N papers found, M read, searched <time>, <model line>".
+- Case File: AskPanel gets two equal tabs at the top, "This patient's records" and "PubMed"; a records answer with
+  `suggest_pubmed` shows "This is a general question. Ask PubMed?" (one click asks it in the PubMed tab).
+- Home: an "Ask PubMed" card on the Case Files home and a page `/pubmed` in the nav (BookOpen icon, after Meetings) and the Dock.
+- Meeting: a side panel kind "pubmed" ("Ask PubMed") beside Agents, Case File mode for the case on the floor; Read aloud.
+
+## 9. Part 2 status, 3 Nov 2026
+Built and checked: the routes and jobs (ffa5d59, 1ea7826), the screens (cf7ff51), the records offer kept with its thread and Escape on a
+quote closing the quote only (this commit). Live on :7000 with real PubMed and the model: Case File answer in 5 to 9 s, the offer and
+its one click, a refused question, the Home page, the phone, the meeting panel, access refusals (department admin 403, another login's
+job 404), no email, key or eutils URL in any answer: 0 problems. Mocked screens 157 passed; unit suite 4858 passed (backend helper run).
+How to try: HOW_TO_TRY.md. Not done: the public demo (only on the owner's word); the NCBI API key (the owner makes it).

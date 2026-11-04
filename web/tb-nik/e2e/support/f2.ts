@@ -9,6 +9,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Page, Route, WebSocketRoute } from "@playwright/test";
+import { pubmedDefaults } from "./pubmed_mock";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const load = <T = any>(f: string): T => JSON.parse(fs.readFileSync(path.join(HERE, "f2", f), "utf8")); // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -356,6 +357,7 @@ export function caseSummaryView(over: Record<string, unknown> = {}) {
   return {
     status: "ready", current: 2, built_at: "2026-10-24T10:20:00", trigger: { kind: "correction", by: "rao@vxh.example" }, model_line: "Written by Gemma-4-31B (non-medical)",
     label: "AI draft, not reviewed", stale_reason: "", review: { status: "ai_draft" }, removed: 1, edits: 1, first_board_date: "2026-10-09",
+    title: "Summary after the board", before_title: "Summary before the board", last_board_date: "2026-10-23",
     sections: [
       { id: "presentation", title: "Presentation and diagnosis", built_by: "model", context: "full", sentences: [
         { id: "presentation-1", text: "She presented with a lump in the right breast noticed 6 weeks before the OPD visit of 15/09/2026.", citations: [{ ...OPD, quote: "Presenting complaint: Lump in the right breast noticed 6 weeks ago" }],
@@ -397,6 +399,37 @@ export function caseSummaryView(over: Record<string, unknown> = {}) {
     can: { build: true, review: true, edit: true },
     ...over,
   };
+}
+
+// ---- the summary after the board (meetings-v2 5.4): what was said at the board, and the Case File's discussion notes -----------------
+const said = (line: string, speaker: string, speaker_name: string, at: string, quote: string) =>
+  ({ kind: "said", meeting_id: "M-1", line_id: line, speaker, speaker_name, department: speaker === "room" ? "" : "radiology", at, board_date: "2026-10-23", quote });
+
+/** The "What was said at the board" section of the Case summary (case_summary.discussion_section): two model sentences, each citing a
+ *  note line of the meeting of 23/10/2026 with the speaker's exact words. */
+export function discussionSection() {
+  return { id: "discussion", title: "What was said at the board", built_by: "model", note: "From the AI discussion notes of the board: what was said, attributed to the speakers; never the board's decision.",
+    sentences: [
+      { id: "sdiscussion-1", text: "At the board of 23/10/2026, Dr Thomas Joseph (Radiology) noted that the MRI breast shows a 1.8 cm lesion with no axillary nodes.",
+        citations: [said("n1a2b3c4", "joseph@vxh.example", "Dr Thomas Joseph", "2026-10-23T10:42:05", "the MRI breast shows a 1.8 cm lesion with no axillary nodes")] },
+      { id: "sdiscussion-2", text: "At the board of 23/10/2026, someone in the room asked: \"Is the bone scan report signed yet?\"",
+        citations: [said("n5d6e7f8", "room", "Board room", "2026-10-23T10:44:30", "Is the bone scan report signed yet?")] },
+    ] };
+}
+
+/** GET /cases/{id}/meeting-notes (meeting_notes.case_view): the notes of the meeting of 23/10/2026, an AI draft, one line edited. */
+export function caseMeetingNotes(over: Record<string, unknown> = {}) {
+  return { case_id: CID, label: "AI draft, not reviewed", meetings: [{
+    meeting_id: "M-1", date: "2026-10-23", time: "10:30", title: "Tumour Board", status: "closed", label_meeting: "Tumour Board 23/10/2026",
+    generated_at: "2026-10-23T11:05:00", model: "gemma-4-31b", model_line: "Written by Gemma-4-31B (non-medical)", label: "AI draft, not reviewed",
+    review: { status: "draft", by: null, by_name: "", at: null }, segments: 6, dropped: 1, edits: 1,
+    lines: [
+      { id: "n1a2b3c4", text: "Dr Thomas Joseph noted the size of the lesion in the MRI breast report.",
+        said: { segment_id: "g1", speaker: "joseph@vxh.example", speaker_name: "Dr Thomas Joseph", at: "2026-10-23T10:42:05", quote: "the MRI breast shows a 1.8 cm lesion with no axillary nodes" }, edited: null },
+      { id: "n5d6e7f8", text: "In the room, someone asked whether the bone scan report is signed.",
+        said: { segment_id: "g2", speaker: "room", speaker_name: "Board room", at: "2026-10-23T10:44:30", quote: "Is the bone scan report signed yet?" },
+        edited: { by: "mdt@vxh.example", by_name: "Anil Kumar", at: "2026-10-23T12:10:00", checked: true } },
+    ], ...over }] };
 }
 
 /** Version 1 in full, as GET /case-summary?n=1 answers it (the stored version). */
@@ -493,6 +526,8 @@ export type CaseRouteOptions = {
   /** GET /staging (default stagingDraft()); confirm and reject change this copy. */
   staging?: unknown | { status: number; body?: unknown };
   notBuilt?: Array<"slots" | "chats" | "helpers" | "published" | "similar" | "team" | "proposals" | "steps" | "staging">;
+  /** GET /meeting-notes (meetings-v2 5.4): the Case File's discussion notes; 403 not_full when not given (a reader of part of it). */
+  meetingNotes?: unknown;
   delayMs?: number;
 };
 
@@ -649,6 +684,7 @@ export async function routeCaseFile(page: Page, o: CaseRouteOptions = {}) {
       return json(rv);
     }
     if (p === "/case-summary" && m === "POST") return json({ n: 3, status: "ok" });
+    if (p === "/meeting-notes" && m === "GET") return o.meetingNotes ? json(o.meetingNotes) : json({ detail: { message: "The meeting notes are shown to the readers of the whole Case File.", code: "not_full" } }, 403);
     if (p === "/summary-line" && m === "POST") {
       const t = String(body().text ?? "").split(/\s+/).filter(Boolean).join(" ");
       if (t.length > 160) return json({ detail: { message: "The summary line: at most 160 characters.", code: "invalid" } }, 400);
@@ -681,6 +717,11 @@ export async function routeCaseFile(page: Page, o: CaseRouteOptions = {}) {
       return route.fulfill({ status: 200, contentType: "image/svg+xml", body: pageSvg(docTitle(file[1]), facts.length ? facts.slice(0, 18) : ["Report text (SYNTHETIC)."]) });
     }
     if (/^\/documents\/[^/]+\/images$/.test(p)) return json({ available: false, reason: "The study is not in the image viewer yet (SYNTHETIC test answer)." });
+    // Ask PubMed in the Case File (docs/pubmed-ask section 8): the team's threads, a question's job, pin and Save (pubmed_mock.ts
+    // routes them with live steps for the PubMed spec; these are the quiet defaults for every other Case File screen)
+    if (p === "/pubmed" && m === "GET") return json(pubmedDefaults.caseThreads());
+    if (p === "/pubmed/ask" && m === "POST") return json({ job_id: "PJ-mock" }, 202);
+    if (/^\/pubmed\/[^/]+\/(pin|save)$/.test(p) && m === "POST") return json(p.endsWith("/pin") ? { ...pubmedDefaults.caseThreads().threads[0], pinned: !!body().pinned } : { id: "PUB-1", source: "pubmed" });
     if (/^\/requests\/[^/]+\/draft$/.test(p)) return json({ action_id: p.split("/")[2], to: "Radiology", subject: "Request for MRI breast report (VXH/26/004219)", body: "Dear colleague,\n\nFor the Tumour Board Case File of the patient below, please share the final, signed MRI breast report.\n\nThank you.", due: dayIso(3), accession: "RAD/26/01021" });
     if (m !== "GET") return json({ ok: true });
     return json(NOT_FOUND, 404);
@@ -755,7 +796,7 @@ export function meetingState(status: "planned" | "in_session" | "closed" = "plan
     presenting: null, present_allowed: [],
     // night-v3 5.3: the meeting chat, kept with the meeting record (members only), apart from the questions
     chat: live ? [
-      { id: "C1", by: "rao@vxh.example", by_name: "Lakshmi Rao", text: "The final histopathology came in this morning; the slides are updated.", at: iso(9), case_id: CID },
+      { id: "C1", by: "rao@vxh.example", by_name: "Lakshmi Rao", text: "The final histopathology came in this morning; the Case File is updated.", at: iso(9), case_id: CID },
       { id: "C2", by: "shanthi@vxh.example", by_name: "Shanthi Raman", text: "Thanks. Could we look at the mammography images after the summary?", at: iso(7), case_id: CID },
       { id: "C3", by: "mdt@vxh.example", by_name: "Priya Nair", text: "Yes, the images come up next.", at: iso(3), case_id: CID },
     ] : [],
@@ -789,8 +830,38 @@ export function meetingState(status: "planned" | "in_session" | "closed" = "plan
     outcomes: status === "closed" ? { [CID]: { outcome: "decision", label: "Decision recorded" } } : {},
     ended: [], cards_given: {},
     heads: [], absent_roles: live ? ["pathology", "nuclear_medicine"] : [], status,
+    // meetings-v2 2.2: the follow state of the Board view, for the admitted members and the coordinator: the Case File on the floor on
+    // its Summary, last moved by the coordinator
+    view: live ? boardView({}) : null,
     ...over,
   };
+}
+
+/** The follow state (meetings.view_state) of the Case File on the floor: Summary unless a tab, a report, a page and a line are given. */
+export function boardView(over: Record<string, unknown> = {}) {
+  return { case_id: CID, tab: "summary", doc_id: null, page: null, quote: "", opened: null, by: "mdt@vxh.example", by_name: "Priya Nair", at: iso(2), ...over };
+}
+
+/** The other Case Files on the agenda, for the Board view when the meeting moves on: the same synthetic fixtures under their own
+ *  patient (the agenda rows' names). */
+const AGENDA_PATIENTS: Record<string, { name: string; agesex: string; mrn: string }> = {
+  "TB-2026-0030": { name: "Fatima B. (SYNTHETIC)", agesex: "46 Y / F", mrn: "VXH/2026/000118" },
+  "TB-2026-0029": { name: "Kamala S. (SYNTHETIC)", agesex: "61 Y / F", mrn: "VXH/2026/000102" },
+};
+
+/** Answers the Case File reads of the Board view (GET the Case File, /steps, /staging, the report pages) for the Case File on the floor
+ *  (sent to the board: the question written, the summary read) and the other Case Files on the agenda. Register after
+ *  helpers.prepare(). */
+export async function routeBoardCases(page: Page, o: CaseRouteOptions = {}) {
+  await routeCaseFile(page, { steps: stepsAfterSend(), ...o });
+  for (const [cid, p] of Object.entries(AGENDA_PATIENTS)) {
+    const cf: AnyObj = caseFile();
+    cf.case.case_id = cid;
+    cf.case.patient = { ...cf.case.patient, name: p.name, agesex: p.agesex, mrn: p.mrn, ids: [{ kind: "uhid", value: p.mrn, from: "his" }] };
+    const st: AnyObj = stepsAfterSend();
+    st.case_id = cid;
+    await routeCaseFile(page, { caseId: cid, caseFile: cf, steps: st });
+  }
 }
 
 /** The member's own view of the same meeting (a remote head of Radiology). */
@@ -821,6 +892,7 @@ export async function routeMeetings(page: Page, o: MeetingRouteOptions = {}): Pr
     if (o.missing && p.startsWith(`/${MID}`)) return json({ detail: { message: "Meeting not found.", code: "not_found" } }, 404);
     if (p === `/${MID}` && m === "GET") return json(state);
     if (p === `/${MID}/cards`) return json(cards);
+    // the identity-stripped summary, for an outside expert only (the Board view reads the Case File itself for everyone else)
     if (p === `/${MID}/cases/${CID}/slides`) return json(baseSlides);
     if (/\/cases\/[^/]+\/slides$/.test(p)) return json({ slides: [{ id: "summary", title: "Summary", kind: "summary", content: { from: "gate", board_question: "", requirements: [], note: "No Case File summary compiled yet." } }] });
     // night-v3 6.1: the coordinator adds or removes an agent ({role, on}) and opens or closes questions to the agents.
@@ -876,6 +948,20 @@ export async function routeMeetings(page: Page, o: MeetingRouteOptions = {}): Pr
       const st = state as { can?: Record<string, unknown> };
       if (st.can) st.can.ask_agents = !!body.members_ask;
       return json({ members_ask: !!body.members_ask });
+    }
+    // meetings-v2 2.2 / 2.4: the driver moves the Board view ({tab, doc_id?, page?, quote?}); the server answers the new follow state
+    // and sends it on the socket to every screen (the room and the members follow it)
+    if (p === `/${MID}/view` && m === "POST") {
+      const body = (route.request().postDataJSON() ?? {}) as { tab?: string; doc_id?: string; page?: number; quote?: string };
+      const st = state as { view?: Record<string, unknown> | null; current?: { case_id?: string | null } | null };
+      const doc = body.doc_id ? baseCase.documents.find((x: { doc_id: string }) => x.doc_id === body.doc_id) : null;
+      const opened = doc ? (body.tab === "images"
+        ? { kind: "images", doc_id: doc.doc_id, title: doc.classification?.title ?? doc.filename, study_uid: "1.2.826.0.1.3680043.8.498.SYNTHETIC", url: "", modality: "MG", granted: [] }
+        : { kind: "record", doc_id: doc.doc_id, title: doc.classification?.title ?? doc.filename, url: `/api/tb/cases/${CID}/documents/${doc.doc_id}/file`, page: body.page ?? 0 }) : null;
+      const view = { case_id: st.current?.case_id ?? CID, tab: body.tab ?? "summary", doc_id: body.doc_id ?? null, page: body.doc_id ? body.page ?? 0 : null, quote: body.quote ?? "", opened, by: "mdt@vxh.example", by_name: "Priya Nair", at: new Date().toISOString() };
+      st.view = view;
+      for (const ws of sockets) ws.send(JSON.stringify({ type: "view", view }));
+      return json({ view });
     }
     if (p === `/${MID}/video-token`) return json({ detail: { message: "Video is not set up on this server (ask the Vaidyx admin to run scripts/livekit.sh).", code: "video_off" } }, 503);
     if (m !== "GET") return json({ ok: true });

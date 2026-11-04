@@ -26,14 +26,26 @@ export function SidePanel({ open, onClose, title, subtitle, children, footer, wi
 
   useEffect(() => {
     if (!open) return;
+    // Escape on a popover inside the panel (Radix, listening on the document) closes the popover first, so by the time the key
+    // reaches the window nothing looks open: the capture phase notes that a dialog was open when the key went down, and the panel
+    // then stays. The panel itself still listens in the bubble phase, so a control that takes Escape for itself (the mic while
+    // listening stops it there) keeps it.
+    const hadDialog = new WeakSet<KeyboardEvent>();
+    const onDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && document.querySelector("[role=dialog][data-state=open]")) hadDialog.add(e);
+    };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
+      if (e.key !== "Escape" || hadDialog.has(e)) return;
       // A dialog on top handles its own Escape.
       if (document.querySelector("[role=dialog][data-state=open]")) return;
       onClose();
     };
+    window.addEventListener("keydown", onDown, true);
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onDown, true);
+      window.removeEventListener("keydown", onKey);
+    };
   }, [open, onClose]);
 
   return (

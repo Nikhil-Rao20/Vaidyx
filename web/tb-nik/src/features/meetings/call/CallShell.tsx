@@ -1,8 +1,13 @@
 // The call shell (night-v3 5.1, research/04 section 6): one in-call layout for the member view, the coordinator's control view and
 // (in its own variant) the room screen. It builds the call context (types.ts CallCtx) every piece reads, wires the actions to the
-// meeting API, and lays out the top bar, the agenda rail, the slide tabs, the stage with its overlays, the participant strip, the
-// decision strip, one side panel, the control bar, the More menu and the dialogs. The room variant has no control bar: a small bar
-// at the bottom right (room microphone and camera, the summary column, the agent voices, full screen, close).
+// meeting API, and lays out the top bar, the agenda rail, the stage with its overlays, the participant strip, the decision strip, one
+// side panel, the control bar, the More menu and the dialogs. The room variant has no control bar: a small bar at the bottom right
+// (room microphone and camera, the agent voices, full screen, close; in the footer line since meetings-v2 2.5).
+// Meetings-v2 2.5 and 2.6 (owner decisions D1 to D5): the stage shows the Board view of the Case File on the floor, led through the
+// follow state (board/useFollow.ts): the coordinator (or the presenter while presenting) leads, the room screen always follows, a remote
+// member follows and may look around. The coordinator's laptop is mirrored to the projector, so its screen is the Board view large in
+// the middle with the controls small around it: the slim agenda rail, the slim top bar (with the Record placeholder), a narrow
+// participant strip, the admit line under the stage (never over it), the side panels on demand from the bar. No slides anywhere.
 // Voice (night-v3 4.4): while the person dictates in the call, the call microphone is muted and comes back after (useDictationGuard).
 // Phone and room screen (night-v3 5.5, research/04 sections 6.4, 6.5 and 7): on a phone the top bar and the control bar fade after
 // 4 s without a touch and come back on a tap (never while a panel, a sheet or a dialog is open, the hand is raised, the person
@@ -17,31 +22,37 @@
 // Esc, voices off, the case changing, Leave and the meeting ending stop it. A browser that blocks sound until a tap shows
 // "Tap to allow agent voices". The coordinator's agent actions (add, remove, members may ask) and everyone's (listening, present
 // your points, stop for everyone) go through the meeting API like the other actions.
+// Meetings-v2 3.4: the coordinator takes up a Case File that is not on the agenda (TakeUpDialog: added as taken up during the meeting and
+// put on the floor). Meetings-v2 5.2: the recorder that keeps no audio: the coordinator's Record, Pause, Resume and Stop in the top
+// bar and the capture in this browser (recorder/useRecorder.ts; never on a member's screen or the room screen), the red "Recording:
+// text only, no audio kept" line on every screen while on, and before the case on the floor changes or ends the last words are posted
+// first (so they are stored under that Case File). Meetings-v2 5.3: "Discussion notes written for <patient>" for the coordinator when
+// a "notes" event comes, and the notes panel ("Read the notes", the More menu) for the coordinator and the members.
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowLeft, Camera, CameraOff, Footprints, LogOut, Maximize2, Mic, MicOff, Minimize2, MonitorCheck, MonitorUp, PanelLeft, Volume2, VolumeX, X } from "lucide-react";
+import { ArrowLeft, Camera, CameraOff, LogOut, Maximize2, Mic, MicOff, Minimize2, MonitorUp, Volume2, VolumeX, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { handUsers, type AgentInfo, type LiveEvent, type LiveStatus, type MeetingState, type ReactionEvent } from "@/lib/live";
 import type { Me } from "@/lib/session";
 import { useVideoRoom, type JoinChoice } from "@/lib/video";
 import { useDictationGuard } from "@/hooks/useDictationGuard";
 import { useIsDesktop, useMediaQuery } from "@/hooks/useMediaQuery";
-import { SkeletonLines, errorText, useAnnounce } from "@/features/casefile/components/common";
-import { admit, agentAudio, agentListening as agentListeningCall, allowPresent, askQuestion, endCase as endCaseCall, getSlides, openOnScreen, present, presentPoints as presentPointsCall, raiseHand, sendChat, sendReaction, setAgent as setAgentCall, setAgentSettings, setCurrent, setPresenting, setSpotlight, stopAgent as stopAgentCall, timer as timerCall } from "../api";
+import { errorText, useAnnounce } from "@/features/casefile/components/common";
+import { admit, agentAudio, agentListening as agentListeningCall, allowPresent, askQuestion, endCase as endCaseCall, present, presentPoints as presentPointsCall, raiseHand, sendChat, sendReaction, setAgent as setAgentCall, setAgentSettings, setCurrent, setPresenting, setSpotlight, stopAgent as stopAgentCall, timer as timerCall } from "../api";
+import { useFollow } from "../board/useFollow";
 import { isSpeaking, primeAudio, speak, VOICE_TEXT } from "@/lib/voice";
 import { onTheFloor, speechItem, useAgentSpeaker } from "./agentSpeaker";
 import { CardDialog } from "../components/CardDialog";
 import { CaseFlow } from "./CaseFlow";
-import { ControlBar, DecisionStrip, SlideDots, StageFrame } from "../components/Stage";
-import { QuestionsList, SlideContent } from "../components/shared";
+import { ControlBar, DecisionStrip, StageFrame } from "../components/Stage";
+import { QuestionsList } from "../components/shared";
 import { CallContext, useCall } from "./context";
 import type { CallActions, CallCtx, CallVariant, CallVideo, ReactionKind } from "./types";
 import { ShellContext, useCallState, useControlsAutoHide, useMeetingCount, useSaveData, useShortcuts, useWakeLock, type ShellExtras } from "./useCallState";
 import { TopBar } from "./TopBar";
 import { AgendaRail } from "./AgendaRail";
-import { StageTabs } from "./StageTabs";
 import { AdmitToast } from "./AdmitToast";
 import { CallBar, RoundButton } from "./CallBar";
 import { ShortcutsDialog } from "./ShortcutsDialog";
@@ -50,6 +61,10 @@ import { StageContent } from "./StageContent";
 import { Strip } from "./Strip";
 import { PresentDialog, markPresentAsked, presentAsked } from "./PresentDialog";
 import { SidePanel } from "./panels";
+import { TakeUpDialog } from "./TakeUpDialog";
+import { useRecorder } from "../recorder/useRecorder";
+import { RecorderLine, RecordingBadge } from "../recorder/RecordControl";
+import { NotesWrittenLine, notesKey } from "../recorder/NotesPanel";
 import { cn } from "@/lib/utils";
 
 /** What the shell needs of the live channel (useMeetingLive's result; the control view builds it from its props). */
@@ -93,6 +108,7 @@ export function meetingEnded(status: string | null | undefined): boolean {
  * conducts without joining by code); people only, so a room screen ("<user>#room") never counts. Pure. */
 export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvailable, onJoinVideo, events }: CallShellProps) {
   const nav = useNavigate();
+  const qc = useQueryClient();
   const s = live.state;
   const stateRef = useRef(s);
   stateRef.current = s;
@@ -107,7 +123,6 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
   const cid = s.current?.case_id ?? null;
   const idx = order.findIndex((r) => r.case_id === cid);
   const row = idx >= 0 ? order[idx] : null;
-  const sharedSlide = s.current?.slide ?? 0;
   const admitted = s.me?.status === "present" || s.me?.status === "remote" || !!s.can?.manage;
   const waiting = s.me?.status === "waiting";
   const inSession = s.meeting.status === "in_session";
@@ -116,17 +131,14 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
   const canManage = variant === "coordinator" && !!s.can?.manage;
   const canRecord = variant !== "room" && !!s.can?.record;
 
-  const [following, setFollowing] = useState(true);
-  const [mySlide, setMySlide] = useState(sharedSlide);
-  useEffect(() => { if (following) setMySlide(sharedSlide); }, [sharedSlide, following]);
-  useEffect(() => { setFollowing(true); }, [cid]);
-
-  const slidesQ = useQuery({ queryKey: ["slides", mid, cid], queryFn: () => getSlides(mid, cid!), enabled: !!cid && (variant !== "member" || admitted), retry: variant === "coordinator" ? false : 1, staleTime: 60_000 });
-  const slides = slidesQ.data?.slides ?? [];
-  const slidesStatus: CallCtx["slidesStatus"] = !cid ? "idle" : slidesQ.isLoading ? "loading" : slidesQ.isError ? "error" : "ready";
+  // ---- the Board view (meetings-v2 2.4 and 2.5) ------------------------------------------------------------------------------
+  // The room screen is signed in as the coordinator, yet it never leads: it always follows and takes no clicks. A remote member may
+  // look around on their own screen. An outside expert never gets the Board view (the Case File's read routes refuse them): the stage
+  // shows the identity-stripped summary of the meeting's summary route instead.
+  const follow = useFollow({ mid, state: s, canDrive: variant === "room" ? false : undefined, canLook: variant !== "room" });
+  const expert = variant !== "room" && !s.can?.manage && !!s.attendance.find((a) => a.user === (s.me?.user ?? me?.user))?.outside_expert;
   const member = variant === "member";
-  const shownSlide = member && !following ? mySlide : sharedSlide;
-  const opened = member && !following ? null : s.current?.opened ?? null;
+  const conduct = variant === "coordinator";
 
   // ---- video -------------------------------------------------------------------------------------------------------------
   const room = variant === "room";
@@ -173,9 +185,14 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
   const [helpOpen, setHelpOpen] = useState(false);
   const [endOpen, setEndOpen] = useState(false);
   const [menu, setMenu] = useState<ShellExtras["menu"]>(null);
-  const [summaryOn, setSummaryOn] = useState(true);
-  const [minutes, setMinutes] = useState<number>(row?.minutes ?? s.meeting.minutes_per_case ?? 10);
-  useEffect(() => { setMinutes(row?.minutes ?? s.meeting.minutes_per_case ?? 10); }, [cid]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [takeUpOpen, setTakeUpOpen] = useState(false);
+  const [notesCase, setNotesCase] = useState<string | null>(null);
+  const [notesNote, setNotesNote] = useState<{ caseId: string; lines: number } | null>(null);
+  const notesSeen = useRef(new Map<string, string>());
+  // the minutes the running timer was set to, else the agenda row's: a reload keeps a paused 15-minute timer (review finding 11)
+  const seedMinutes = () => { const t = s.current?.timer?.total; return t ? Math.round(t / 60) : row?.minutes ?? s.meeting.minutes_per_case ?? 10; };
+  const [minutes, setMinutes] = useState<number>(seedMinutes);
+  useEffect(() => { setMinutes(seedMinutes()); }, [cid]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!phone) setMenu((m) => (m === "coordinator" ? null : m)); }, [phone]);
 
   // ---- screen share (night-v3 5.2): LiveKit carries the pixels, the meeting records who presents -----------------------------
@@ -206,6 +223,18 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
     if (ev.type === "reaction") { cs.addReaction({ user: String(ev.user ?? ""), name: ev.name as string | undefined, kind: String(ev.kind ?? ""), at: ev.at as string | undefined }); return; }
     if (ev.type === "decision") { cs.markSaved(); return; }
     if (ev.type === "ended") { speaker.stopAll(); announce("The meeting has ended."); return; }
+    if (ev.type === "notes") {
+      // the notes of a Case File were written, edited or reviewed: the panel reads them again; a new build is told to the coordinator
+      void qc.invalidateQueries({ queryKey: notesKey(mid) });
+      const c = String(ev.case_id ?? "");
+      const at = String(ev.generated_at ?? "");
+      const lines = typeof ev.lines === "number" ? ev.lines : 0;
+      if (c && at && notesSeen.current.get(c) !== at) {
+        notesSeen.current.set(c, at);
+        if (variant === "coordinator" && lines > 0) { setNotesNote({ caseId: c, lines }); announce("Discussion notes were written for a Case File."); }
+      }
+      return;
+    }
     if (variant !== "member") return;
     if (ev.type === "end_case") {
       const c = String(ev.case_id ?? "");
@@ -218,7 +247,7 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
         announce("The coordinator asks for your card on this case.");
       }
     }
-  }, [announce, cs.addReaction, cs.markSaved, variant, myUser, speaker]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [announce, cs.addReaction, cs.markSaved, variant, myUser, speaker, qc, mid]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!events) return undefined;
     events.current = onEvent;
@@ -233,6 +262,14 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
 
   // ---- actions -----------------------------------------------------------------------------------------------------------
   const refresh = useCallback(() => { void live.refresh(); }, [live]);
+
+  // ---- the recorder (meetings-v2 5.2): the coordinator's control view only; members and the room screen never capture ------------
+  const recorder = useRecorder({
+    mid, enabled: conduct && canManage, recording: s.recording, inSession,
+    room: rawVideo.room, videoStatus: rawVideo.status, videoWanted: videoOn, micOn: rawVideo.micOn, dictating,
+    attendance: s.attendance, me: myUser, tick: rawVideo.tick, announce, refresh,
+  });
+  const cutFirst = conduct && canManage ? recorder.cut : null;
   const run = useCallback(async <T,>(fn: () => Promise<T>, said?: string | ((r: T) => string)): Promise<T> => {
     setError(null);
     try {
@@ -243,7 +280,7 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
     } catch (e) { setError(errorText(e)); throw e; }
   }, [announce, refresh]);
 
-  const goM = useMutation({ mutationFn: (v: { caseId: string; slide?: number }) => setCurrent(mid, v.caseId, v.slide) });
+  const goM = useMutation({ mutationFn: (v: { caseId: string }) => setCurrent(mid, v.caseId) });
   const timerM = useMutation({ mutationFn: (v: { action: "start" | "stop" | "reset"; minutes?: number }) => timerCall(mid, v.action, v.minutes) });
   const endM = useMutation({ mutationFn: (c: string) => endCaseCall(mid, c) });
   const handM = useMutation({ mutationFn: (raised: boolean) => raiseHand(mid, raised) });
@@ -256,10 +293,9 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
       for (const a of list) await admit(mid, a.user);
       return list.length;
     }, (n) => (n === 1 ? "Admitted." : `Admitted ${n} people.`)),
-    go: (caseId, slide) => run(() => goM.mutateAsync({ caseId, slide }), slide !== undefined ? `Slide ${slide + 1} on the screen.` : "Next case on the screen."),
-    open: (kind, docId) => run(() => openOnScreen(mid, kind, docId), kind === "none" ? "The shared screen shows the slide again." : kind === "images" ? "The images are on the shared screen." : "The record is on the shared screen."),
+    go: (caseId) => run(async () => { await cutFirst?.(); return goM.mutateAsync({ caseId }); }, "Next case on the screen."),
     timer: (action, m) => run(() => timerM.mutateAsync({ action, minutes: action === "stop" ? undefined : m ?? minutes }), action === "start" ? "Timer started." : action === "stop" ? "Timer stopped." : "Timer reset."),
-    endCase: () => (cid ? run(() => endM.mutateAsync(cid), (r) => (r?.cards_requested?.length ? `Cards asked of ${r.cards_requested.length} board heads.` : "Discussion ended.")) : Promise.reject(new Error("No case on the screen."))),
+    endCase: () => (cid ? run(async () => { await cutFirst?.(); return endM.mutateAsync(cid); }, (r) => (r?.cards_requested?.length ? `Cards asked of ${r.cards_requested.length} board heads.` : "Discussion ended.")) : Promise.reject(new Error("No case on the screen."))),
     endMeeting: () => setEndOpen(true),
     ask: (text, role) => { if (role) primeVoices(); return run(() => askQuestion(mid, text, role), "Question sent to the shared screen."); },
     hand: (raised) => run(() => handM.mutateAsync(raised), raised ? "Hand raised." : "Hand lowered."),
@@ -328,19 +364,13 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
   };
   const video: CallVideo = { ...rawVideo, toggleShare: mayShare || shareOn ? toggleShare : undefined };
 
-  const next = () => { if (order.length && idx < order.length - 1 && !goM.isPending) void actions.go(order[idx + 1].case_id).catch(() => {}); };
-  const previous = () => { if (idx > 0 && !goM.isPending) void actions.go(order[idx - 1].case_id).catch(() => {}); };
+  const moving = goM.isPending || recorder.busy === "cut";
+  const next = () => { if (order.length && idx < order.length - 1 && !moving) void actions.go(order[idx + 1].case_id).catch(() => {}); };
+  const previous = () => { if (idx > 0 && !moving) void actions.go(order[idx - 1].case_id).catch(() => {}); };
 
   const ctx: CallCtx = {
-    mid, variant, state: s, me: myUser, cid, row, order, slides, slidesStatus, slidesError: slidesQ.error ?? undefined,
-    sharedSlide, shownSlide, following, setFollowing,
-    showSlide: (i) => {
-      if (variant === "coordinator") { if (cid) void actions.go(cid, i).catch(() => {}); return; }
-      if (variant !== "member") return;
-      if (following && i === sharedSlide && !s.current?.opened) return;
-      setMySlide(i); setFollowing(false);
-    },
-    opened, video, videoAvailable, liveStatus: live.status, liveDetail: live.statusDetail, savedNow: cs.savedNow,
+    mid, variant, state: s, me: myUser, cid, row, order, follow, expert,
+    video, videoAvailable, liveStatus: live.status, liveDetail: live.statusDetail, savedNow: cs.savedNow,
     joinVideo: () => onJoinVideo?.(), dictating,
     panel: cs.panel, setPanel: cs.setPanel, togglePanel: cs.togglePanel, layout: cs.layout, setLayout: cs.setLayout,
     pinned: cs.pinned, setPinned: cs.setPinned, spotlight, agents: agentsOf(s), agentVoices: cs.agentVoices, setAgentVoices: cs.setAgentVoices,
@@ -353,13 +383,17 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
   const cardAsked = member && !!cid && (s.ended ?? []).includes(cid) && !!(s.can?.card || s.can?.card_required);
   const extras: ShellExtras = {
     joined: room || !!joinChoice, idx, minutes, setMinutes, next, previous, openShortcuts: () => setHelpOpen(true), cardAsked,
-    handPending: handM.isPending, goPending: goM.isPending, timerPending: timerM.isPending, endPending: endM.isPending, presencePending: presenceM.isPending,
+    handPending: handM.isPending, goPending: moving, timerPending: timerM.isPending, endPending: endM.isPending || recorder.busy === "cut", presencePending: presenceM.isPending,
     menu, setMenu, saveData, setSaveData,
+    recorder: conduct && canManage ? recorder : null,
+    openTakeUp: () => { setMenu(null); setTakeUpOpen(true); },
+    openNotes: (caseId) => { setMenu(null); setNotesCase(caseId ?? null); cs.setPanel("notes"); },
+    notesCase,
   };
   useShortcuts(ctx, { openHelp: () => setHelpOpen(true), next, previous });
 
   // Phone: the controls fade after 4 s without a touch, except while something needs them.
-  const holdControls = ended || !!cs.panel || !!menu || helpOpen || endOpen || !!card || presentAsk || ctx.hands.has(myUser) || dictating || shareOn || !!s.presenting;
+  const holdControls = ended || !!cs.panel || !!menu || helpOpen || endOpen || !!card || presentAsk || takeUpOpen || ctx.hands.has(myUser) || dictating || shareOn || !!s.presenting;
   const controls = useControlsAutoHide(phone && !room, holdControls);
   const landscape = phone && !room && sideways;
   const fade = cn("transition-opacity duration-300 focus-within:pointer-events-auto focus-within:opacity-100", controls.hidden && "pointer-events-none opacity-0");
@@ -367,7 +401,7 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
   const liveText = s.decision_live && (!s.decision_live.case_id || s.decision_live.case_id === cid) ? s.decision_live.text : "";
   const voiceChip = agent.blocked && cs.agentVoices && !ended ? <AllowVoicesChip onAllow={allowVoices} big={room} /> : null;
   const testId = variant === "member" ? "member-view" : variant === "coordinator" ? "control-view" : "room-screen";
-  const attrs: Record<string, string | undefined> = variant === "member" ? { "data-following": String(following), "data-video-status": video.status }
+  const attrs: Record<string, string | undefined> = variant === "member" ? { "data-following": String(follow.mode !== "look"), "data-video-status": video.status }
     : variant === "room" ? { "data-meeting-status": s.meeting.status } : { "data-video-status": video.status };
   attrs["data-controls"] = controls.hidden ? "hidden" : "shown";
   if (phone && !room) attrs["data-orientation"] = landscape ? "landscape" : "portrait";
@@ -378,18 +412,23 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
         <StageFrame testId={testId} attrs={attrs}>
           {liveNode}
           {phone && !room ? <div className={fade} data-testid="top-controls"><TopBar /></div> : <TopBar />}
-          {room ? <RoomBody summaryOn={summaryOn} setSummaryOn={setSummaryOn} videoOn={videoOn} liveText={liveText} ended={ended} voiceChip={voiceChip} /> : (
+          {/* the recorder's line on every screen while on: never faded, the room reads it on the projector (meetings-v2 5.2) */}
+          <RecordingBadge />
+          {room ? <RoomBody videoOn={videoOn} liveText={liveText} ended={ended} voiceChip={voiceChip} /> : (
             <section aria-label="Call" className={cn("flex min-h-0 flex-1 gap-3 p-2 lg:p-3", phone && !landscape && "flex-col overflow-y-auto", landscape && "gap-2")}>
               {desktop ? <AgendaRail /> : null}
               <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
-                <StageTabs />
-                <div className={cn("flex min-w-0 gap-2", phone && !landscape ? "min-h-[62.5vw] flex-1" : "min-h-0 flex-1")}>
-                  <StageContent className={cn(phone && !landscape ? "min-h-[62.5vw] w-full flex-1" : "min-h-0 flex-1")}>
+                <div className={cn("flex min-w-0 gap-2", phone && !landscape ? "min-h-[max(62.5vw,24rem)] flex-1" : "min-h-0 flex-1")}>
+                  <StageContent className={cn(phone && !landscape ? "min-h-[max(62.5vw,24rem)] w-full flex-1" : "min-h-0 flex-1")}>
                     <StageOverlays ended={ended} voiceChip={voiceChip} />
                   </StageContent>
-                  {desktop && !cs.panel ? <div className="scroll-thin hidden w-52 shrink-0 overflow-y-auto lg:block xl:w-60"><Strip orientation="column" /></div> : null}
+                  {/* the coordinator's strip is narrow: on the mirrored laptop the room reads the Board view, not the tiles (D1) */}
+                  {desktop && !cs.panel ? <div className={cn("scroll-thin hidden shrink-0 overflow-y-auto lg:block", conduct ? "w-36 xl:w-44" : "w-52 xl:w-60")} data-testid="strip-column"><Strip orientation="column" small={conduct} /></div> : null}
                 </div>
                 {(phone && !landscape) || (desktop && cs.panel) ? <div className="shrink-0"><Strip orientation="row" max={phone ? 8 : 10} /></div> : null}
+                {conduct ? <AdmitToast /> : null}
+                {conduct ? <RecorderLine /> : null}
+                {conduct && notesNote ? <NotesWrittenLine caseId={notesNote.caseId} lines={notesNote.lines} onClose={() => setNotesNote(null)} /> : null}
                 <AnimatePresence>
                   {liveText || cs.savedNow ? (
                     <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
@@ -397,7 +436,7 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
                     </motion.div>
                   ) : null}
                 </AnimatePresence>
-                {error ? <p role="alert" className="flex items-center gap-2 rounded-lg bg-[#3a1c1c] px-3 py-1.5 text-xs text-[#ffb4a8]"><span className="min-w-0 flex-1">{error}</span><button type="button" className="rounded p-1 hover:bg-white/10" onClick={() => setError(null)} aria-label="Dismiss the message"><X className="size-3.5" /></button></p> : null}
+                {error ? <p role="alert" className="flex items-center gap-2 rounded-lg bg-bad-soft px-3 py-1.5 text-xs text-bad"><span className="min-w-0 flex-1">{error}</span><button type="button" className="rounded p-1 hover:bg-bad/10" onClick={() => setError(null)} aria-label="Dismiss the message"><X className="size-3.5" /></button></p> : null}
               </div>
               {landscape ? <div className="scroll-thin w-28 shrink-0 overflow-y-auto overflow-x-hidden" data-testid="landscape-strip"><Strip orientation="column" max={8} small /></div> : null}
               <SidePanel />
@@ -407,6 +446,7 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
           {room ? null : <ShortcutsDialog open={helpOpen} onOpenChange={setHelpOpen} coordinator={canManage} present={!!video.toggleShare} />}
           {mayShare ? <PresentDialog open={presentAsk} onOpenChange={setPresentAsk} onShare={() => { markPresentAsked(mid); setPresentAsk(false); void rawToggleShare?.(); }} /> : null}
           {canManage ? <EndMeetingDialog open={endOpen} onOpenChange={setEndOpen} /> : null}
+          {canManage && inSession ? <TakeUpDialog open={takeUpOpen} onOpenChange={setTakeUpOpen} mid={mid} agenda={s.agenda} beforeMove={cutFirst ?? undefined} onDone={(name) => { announce(`${name} is taken up and on the screen now.`); refresh(); }} /> : null}
           {card ? <CardDialog mid={mid} caseId={card.caseId} patientLine={card.patientLine} required={!!s.can?.card_required} open onOpenChange={(o) => { if (!o) setCard(null); }} onSent={() => announce("Card sent.")} /> : null}
         </StageFrame>
       </ShellContext.Provider>
@@ -414,23 +454,14 @@ export function CallShell({ mid, variant, live, me, joinChoice = null, videoAvai
   );
 }
 
-/** The overlays on the stage: the connection banner, the "Following / Stepped away" chip (member), "What the room sees"
- * (coordinator), the slide dots and the coordinator's admit toast. */
+/** The overlays on the stage: the case flow toasts, the meeting ended card, "You are presenting" and the agent voices chip. Who leads
+ * or follows the Board view is said in the Board view's own header ("Following <name>", Look around, Back to the room). */
 function StageOverlays({ ended, voiceChip }: { ended: boolean; voiceChip: ReactNode }) {
-  const c = useCall();
-  const openedItem = c.opened && c.opened.kind !== "none";
   return (
     <>
       <CaseFlow />
       {ended ? <EndedCard /> : null}
       <div className="pointer-events-none absolute inset-x-0 top-14 z-20 flex flex-col items-center gap-1.5 px-3 [&>*]:pointer-events-auto"><PresentingBar />{voiceChip}</div>
-      {c.variant === "member" ? (
-        <span className={cn("pointer-events-none absolute right-3 top-3 z-10 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium", c.following ? "bg-ok/20 text-[#8fe0b3]" : "bg-warn/20 text-[#ffd48a]")}>
-          {c.following ? <MonitorCheck className="size-3.5" aria-hidden /> : <Footprints className="size-3.5" aria-hidden />}<span className={c.phone ? "sr-only" : undefined}>{c.following ? "Following the shared screen" : "Stepped away"}</span>
-        </span>
-      ) : c.variant === "coordinator" ? <span className="pointer-events-none absolute right-3 top-3 z-10 rounded-full bg-black/50 px-2.5 py-1 text-xs font-medium text-white">What the room sees</span> : null}
-      {!openedItem && !c.state.presenting ? <SlideDots slides={c.slides} index={c.shownSlide} className="absolute bottom-2 right-3 z-10" /> : null}
-      <AdmitToast className="absolute bottom-3 left-3" />
     </>
   );
 }
@@ -510,20 +541,18 @@ function PhoneDecisionStrip({ text, saved }: { text: string; saved: boolean }) {
 export const ROOM_QUESTIONS = 2;
 export const ROOM_TILES = 6;
 export const ROOM_TILES_SHORT = 4;
+/** The agent tiles the room screen shows before "+n more" (two on a screen under 900 px high, so the questions keep their room). */
+export const ROOM_AGENTS = 4;
+export const ROOM_AGENTS_SHORT = 2;
 
-/** The room screen's body (a projector, 1920 x 1080; research/04 section 6.4): the summary column (a toggle, on by default, as the
- * room used it), the compact agenda column, the stage in large type (28 px and more), the latest questions, the remote members (at
- * most six tiles and "+n more") and the agents, and the footer with the count, the hands by name and the big decision strip
- * (28 px). Nothing here scrolls the page: long content is cut with "+n more" or clipped. */
-function RoomBody({ summaryOn, setSummaryOn, videoOn, liveText, ended, voiceChip }: { summaryOn: boolean; setSummaryOn: (on: boolean) => void; videoOn: boolean; liveText: string; ended: boolean; voiceChip: ReactNode }) {
+/** The room screen's body (a separate projector PC, research/04 section 6.4; meetings-v2 2.5): the compact agenda column, the Board view
+ * of the Case File on the floor, always following, no clicks, in large type, with the whole height of the screen; the column at the
+ * right with the remote members (at most six tiles and "+n more"), the agents and the latest questions; the footer with the count, the
+ * hands by name and the big decision strip (28 px). Nothing here scrolls the page: long content is cut with "+n more" or clipped; the
+ * Board view scrolls inside itself. */
+function RoomBody({ videoOn, liveText, ended, voiceChip }: { videoOn: boolean; liveText: string; ended: boolean; voiceChip: ReactNode }) {
   const c = useCall();
   const s = c.state;
-  const summary = c.slides.find((x) => x.kind === "summary") ?? c.slides[0] ?? null;
-  const onStage = c.slides[c.shownSlide] ?? null;
-  const openedItem = c.opened && c.opened.kind !== "none";
-  // The summary column is left out while the summary itself fills the stage (it would show twice).
-  const summaryOnStage = !!(onStage && summary && onStage.id === summary.id && !openedItem);
-  const showColumn = summaryOn && !summaryOnStage;
   const questions = (s.questions ?? []).filter((q) => !c.cid || !q.case_id || q.case_id === c.cid);
   const latest = questions.slice(-ROOM_QUESTIONS);
   const earlier = questions.length - latest.length;
@@ -532,66 +561,59 @@ function RoomBody({ summaryOn, setSummaryOn, videoOn, liveText, ended, voiceChip
   const tall = useMediaQuery("(min-height: 900px)");
   return (
     <>
-      {/* the hover bar sits at the bottom right of this area; the stage column and the people column keep room under it */}
       <section aria-label="Call" className="relative flex min-h-0 flex-1 gap-3 overflow-hidden p-3 lg:p-4">
-        {showColumn ? (
-          <section className="hidden w-[30%] min-w-0 overflow-hidden rounded-xl border border-stage-line bg-stage-panel p-5 [mask-image:linear-gradient(to_bottom,#000_88%,transparent)] lg:block" aria-label="Summary" data-testid="room-summary">
-            {!c.cid ? <p className="text-xl text-stage-fg/80">The summary of the current case appears here.</p> : null}
-            {c.cid && c.slidesStatus === "loading" ? <div data-theme="dark"><SkeletonLines n={8} /></div> : null}
-            {c.cid && c.slidesStatus === "error" ? <p className="text-xl text-warn">The slides for this case could not be loaded.</p> : null}
-            {summary ? <div data-theme="dark"><SlideContent slide={summary} big /></div> : null}
-          </section>
-        ) : null}
         <AgendaRail room className="hidden lg:flex" />
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 pb-14">
-          {/* Large type on the projector: every line on the stage at 28 px or more (the slide title larger, the source chips at 20 px). */}
-          <StageContent className="min-h-0 flex-1 [&_.stage-slide]:text-[28px] [&_.stage-slide_*]:[font-size:inherit] [&_.stage-slide_h3]:text-[36px] [&_.stage-slide_.quote-chip]:text-[20px] [&_p]:text-[28px] [&_p]:leading-snug" >
-            {!openedItem && !s.presenting ? <SlideDots slides={c.slides} index={c.shownSlide} className="absolute bottom-3 right-4 z-10" /> : null}
+        {/* a narrow window (not a projector) keeps the Board view only, with room under it for the small bar */}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <StageContent className="min-h-0 flex-1">
             <CaseFlow />
             {voiceChip ? <div className="absolute inset-x-0 top-20 z-30 flex justify-center px-3">{voiceChip}</div> : null}
             {ended ? <EndedCard /> : null}
           </StageContent>
+        </div>
+        <div className="hidden w-72 shrink-0 flex-col gap-3 overflow-hidden lg:flex min-[1600px]:w-[24rem]">
+          {/* the people and agents first: they shrink (cut, never scrolled) only when the column is full; the questions take what is left */}
+          <aside className="flex min-h-0 flex-col gap-2 overflow-hidden" aria-label="Remote members and agents" data-testid="room-people">
+            <Strip orientation="column" max={tall ? ROOM_TILES : ROOM_TILES_SHORT} maxAgents={tall ? ROOM_AGENTS : ROOM_AGENTS_SHORT} />
+          </aside>
           <AnimatePresence initial={false}>
             {latest.length ? (
-              <motion.section key="q" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="max-h-[30%] shrink-0 overflow-hidden rounded-xl border border-stage-line bg-stage-panel p-3 [&_li_p]:text-xl [&_li_p]:leading-snug" aria-label="Questions" data-testid="room-questions">
-                <h2 className="mb-1 flex items-baseline gap-2 text-lg font-semibold text-stage-fg/80">Questions from members{earlier > 0 ? <span className="text-base font-normal" data-testid="room-questions-more">(the latest {latest.length}; +{earlier} more)</span> : null}</h2>
-                <div data-theme="dark"><QuestionsList questions={latest} caseId={c.cid} big /></div>
+              <motion.section key="q" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="min-h-0 flex-1 basis-0 overflow-hidden rounded-xl border border-stage-line bg-stage-panel p-3 [mask-image:linear-gradient(to_bottom,#000_85%,transparent)] [&_li_p]:text-lg [&_li_p]:leading-snug" aria-label="Questions" data-testid="room-questions">
+                <h2 className="mb-1 text-lg font-semibold text-stage-fg/80">Questions from members{earlier > 0 ? <span className="block text-base font-normal" data-testid="room-questions-more">(the latest {latest.length}; +{earlier} more)</span> : null}</h2>
+                <QuestionsList questions={latest} caseId={c.cid} big />
               </motion.section>
             ) : null}
           </AnimatePresence>
         </div>
-        <aside className="flex w-72 shrink-0 flex-col gap-2 overflow-hidden pb-14 min-[1600px]:w-[24rem]" aria-label="Remote members and agents" data-testid="room-people">
-          <Strip orientation="column" max={tall ? ROOM_TILES : ROOM_TILES_SHORT} />
-        </aside>
-        <RoomHoverBar summaryOn={summaryOn} setSummaryOn={setSummaryOn} videoOn={videoOn} summaryOnStage={summaryOnStage} />
       </section>
       <footer className="space-y-2 border-t border-stage-line px-3 py-2 lg:px-4">
-        <div className="flex flex-wrap items-center gap-3 text-xl text-stage-fg/80">
+        <div className="flex flex-wrap items-center gap-3 text-base text-stage-fg/80 lg:text-xl">
+          <RoomHoverBar videoOn={videoOn} />
           <span data-testid="room-count">{count} in the meeting</span>
-          {handNames.length ? <span className="rounded-full bg-warn/20 px-3 py-0.5 text-xl font-medium text-[#ffd48a]" data-testid="room-hands">{handNames.length} hand{handNames.length === 1 ? "" : "s"} raised: {handNames.join(", ")}</span> : null}
-          {c.video.error ? <span className="text-lg text-[#ffb4a8]">{c.video.error}</span> : null}
+          {handNames.length ? <span className="rounded-full bg-warn-soft px-3 py-0.5 text-base font-medium text-warn lg:text-xl" data-testid="room-hands">{handNames.length} hand{handNames.length === 1 ? "" : "s"} raised: {handNames.join(", ")}</span> : null}
+          {c.video.error ? <span className="text-lg text-bad">{c.video.error}</span> : null}
         </div>
-        <DecisionStrip text={liveText} saved={c.savedNow} big className={cn("[&>p]:line-clamp-2 [&>p]:text-[28px] [&>span]:text-base", !liveText && !c.savedNow && "hidden")} />
-        {!liveText && !c.savedNow ? <p className="rounded-xl border border-dashed border-stage-line px-4 py-2 text-xl text-stage-fg/80">The decision appears here as the coordinator types it, until it is read back and saved.</p> : null}
+        <DecisionStrip text={liveText} saved={c.savedNow} big className={cn("[&>p]:line-clamp-2 [&>p]:text-lg lg:[&>p]:text-[28px] [&>span]:text-sm lg:[&>span]:text-base", !liveText && !c.savedNow && "hidden")} />
+        {!liveText && !c.savedNow ? <p className="rounded-xl border border-dashed border-stage-line px-4 py-2 text-base text-stage-fg/80 lg:text-xl">The decision appears here as the coordinator types it, until it is read back and saved.</p> : null}
       </footer>
     </>
   );
 }
 
-/** The room screen's small bar at the bottom right: it shows on hover or focus. */
-function RoomHoverBar({ summaryOn, setSummaryOn, videoOn, summaryOnStage }: { summaryOn: boolean; setSummaryOn: (on: boolean) => void; videoOn: boolean; summaryOnStage: boolean }) {
+/** The room screen's small bar, at the right end of the footer's first line (never over the Board view or the tiles): faint until
+ * hovered or focused. */
+function RoomHoverBar({ videoOn }: { videoOn: boolean }) {
   const c = useCall();
   const v = c.video;
   const btn = "text-stage-fg hover:bg-stage-raised hover:text-stage-fg";
   return (
-    <div className="absolute bottom-2 right-3 z-30 flex flex-wrap items-center justify-end gap-1 rounded-xl border border-stage-line bg-stage-panel/95 p-1 opacity-30 shadow-[var(--shadow-lift)] backdrop-blur transition-opacity duration-200 hover:opacity-100 focus-within:opacity-100" role="toolbar" aria-label="Room screen controls" data-testid="room-bar">
+    <div className="order-last ml-auto flex flex-wrap items-center justify-end gap-1 rounded-xl border border-stage-line bg-stage-panel p-1 text-sm opacity-30 transition-opacity duration-200 hover:opacity-100 focus-within:opacity-100" role="toolbar" aria-label="Room screen controls" data-testid="room-bar">
       {videoOn ? (
         <>
           <Button variant="ghost" size="sm" className={cn(btn, v.micOn && "bg-stage-raised")} onClick={() => void v.toggleMic()} disabled={v.status !== "connected"} aria-pressed={v.micOn} title="The room's microphone, for the remote members">{v.micOn ? <Mic className="size-4" /> : <MicOff className="size-4" />}Room mic</Button>
           <Button variant="ghost" size="sm" className={cn(btn, v.camOn && "bg-stage-raised")} onClick={() => void v.toggleCam()} disabled={v.status !== "connected"} aria-pressed={v.camOn} title="The room's camera, for the remote members">{v.camOn ? <Camera className="size-4" /> : <CameraOff className="size-4" />}Room camera</Button>
         </>
       ) : null}
-      <Button variant="ghost" size="sm" className={cn(btn, summaryOn && !summaryOnStage && "bg-stage-raised")} onClick={() => setSummaryOn(!summaryOn)} aria-pressed={summaryOn} disabled={summaryOnStage} title={summaryOnStage ? "The summary is on the stage now" : "The case summary in a column beside the stage"} data-testid="summary-toggle"><PanelLeft className="size-4" />Summary on the side</Button>
       <Button variant="ghost" size="sm" className={cn(btn, c.agentVoices && "bg-stage-raised")} onClick={() => c.setAgentVoices(!c.agentVoices)} aria-pressed={c.agentVoices} title={c.agentVoices ? "The agents' answers are read aloud on this screen; click to mute them" : "The agents' answers are not read aloud on this screen; click to turn them on"} data-testid="agent-voices">{c.agentVoices ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}{c.agentVoices ? "Agent voices on" : "Agent voices off"}</Button>
       <Button variant="ghost" size="icon" className={btn} onClick={c.toggleFullscreen} aria-label={c.fullscreen ? "Leave full screen" : "Full screen"} title={c.fullscreen ? "Leave full screen (F)" : "Full screen (F)"} aria-keyshortcuts="F">{c.fullscreen ? <Minimize2 className="size-5" /> : <Maximize2 className="size-5" />}</Button>
       <Button asChild variant="ghost" size="icon" className={btn} aria-label="Close the room screen" title="Close the room screen"><Link to={`/meetings/${c.mid}`}><X className="size-5" /></Link></Button>

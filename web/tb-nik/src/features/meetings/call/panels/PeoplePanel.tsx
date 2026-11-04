@@ -11,7 +11,8 @@ import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type { Attendee, MeetingState } from "@/lib/live";
 import { identityUser, isRoomScreen } from "@/lib/video";
-import { LoadingButton } from "@/features/casefile/components/common";
+import { LoadingButton, fmtDateTime } from "@/features/casefile/components/common";
+import { newCode } from "../../api";
 import { cn } from "@/lib/utils";
 import { PanelSection, PersonRow, handOrder, usePanelAction } from "../../components/People";
 import { useCall } from "../context";
@@ -75,7 +76,7 @@ function RowMenu({ a, ctx, busy, onSpot, onPresent }: { a: Attendee; ctx: CallCt
       <DropdownMenuTrigger asChild>
         <Button size="icon-xs" variant="ghost" className={cn("text-stage-muted hover:bg-stage-raised hover:text-stage-fg", ctx.phone && "size-11")} aria-label={`More for ${a.name}`} title={`More for ${a.name}`} disabled={busy}><MoreVertical className="size-4" /></Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" data-theme="dark">
+      <DropdownMenuContent align="end">
         <DropdownMenuItem disabled={full} onSelect={() => onSpot(!on)} title={full ? "Up to three people can be in the spotlight" : undefined}>
           {on ? <StarOff className="size-4" /> : <Star className="size-4" />}{on ? "Remove from spotlight" : full ? "Spotlight is full (three people)" : "Spotlight for everyone"}
         </DropdownMenuItem>
@@ -121,8 +122,21 @@ export function PeoplePanel() {
     );
   };
 
+  // the join code during the meeting, for a latecomer (it showed on the agenda page only before the start; review finding 2)
+  const codeBox = canManage && ctx.variant === "coordinator" ? (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border px-3 py-2" data-testid="call-join-code">
+      <span className="text-xs text-stage-muted">Join code</span>
+      {s.code?.value ? <span className="font-mono text-base font-semibold tracking-widest text-foreground">{s.code.value.replace(/(\d{3})(\d{3})/, "$1 $2")}</span>
+        : <span className="text-sm text-stage-muted">No code yet</span>}
+      {s.code?.expires_at ? <span className="text-[11px] text-stage-muted">until {fmtDateTime(s.code.expires_at)}</span> : null}
+      <LoadingButton size="sm" variant="outline" className="ml-auto" loading={act.pending === "code"}
+        onClick={() => void act.run("code", async () => { await newCode(ctx.mid); await ctx.refresh(); })}>New code</LoadingButton>
+    </div>
+  ) : null;
+
   return (
     <div className="space-y-4">
+      {codeBox}
       {big ? (
         <div className="relative">
           <Search className="pointer-events-none absolute left-2 top-1/2 size-4 -translate-y-1/2 text-stage-muted" aria-hidden />

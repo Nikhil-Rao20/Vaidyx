@@ -5,7 +5,8 @@ Jobs: re-fetch every 30 min for the HIS-connected, non-archived, undecided Case 
 meeting is in session; a Case File with a running job is skipped); automatic reminders at the due date for sent, unanswered requests
 (dept_requests.remind_automatic, at most one per request per day); the daily digest per user at their digest time (one notification
 with the unread count); expiry of meeting codes and of break-glass windows; the meeting_starting notice 15 minutes before a meeting;
-prune of old notifications. State in data/tumour_board/scheduler.json {last_tick, last_jobs{name: {at, result}}}.
+prune of old notifications; once a day the weekly series make their next four weeks of meetings (meetings.series_job, meetings-v2
+item 3.1; a Case File waiting for a meeting joins the first one made). State in data/tumour_board/scheduler.json {last_tick, last_jobs{name: {at, result}}}.
 
 Where the work runs: the stores are JSON files changed by read-modify-write on the app's event loop, and the model client is bound to
 that loop, so the thread only keeps time. When the app's loop is known (attach_loop(), called by the meeting routes, the bell and the
@@ -25,6 +26,7 @@ REFETCH_EVERY = 30 * 60
 REMINDERS_EVERY = 10 * 60
 PRUNE_EVERY = 24 * 3600
 STARTING_MINUTES = 15
+SERIES_EVERY = 24 * 3600  # the weekly series job: once a day (it never makes a date twice, so an earlier run is harmless)
 SYNC_TIMEOUT = 120  # seconds the thread waits for a quick job on the app's loop
 _thread: threading.Thread | None = None
 _stop = threading.Event()
@@ -135,6 +137,12 @@ def job_break_glass(now: datetime) -> dict:
 def job_meeting_starting(now: datetime) -> dict:
     from . import meetings
     return {"announced": meetings.notify_starting(now, STARTING_MINUTES)}
+
+
+def job_series(now: datetime) -> dict:
+    """The weekly series (meetings-v2 item 3.1): each active series gets its next four weeks of meetings, made by "Vaidyx (automatic)"."""
+    from . import meetings
+    return meetings.series_job(now)
 
 
 def job_reminders(now: datetime) -> dict:
@@ -258,8 +266,8 @@ def messages_job(now: datetime) -> dict:
         return {"error": f"{e.__class__.__name__}: {str(e)[:200]}"}
 
 
-QUICK = ("codes", "break_glass", "meeting_starting", "reminders", "digests", "prune")
-JOBS = (("codes", job_codes, 0), ("break_glass", job_break_glass, 0), ("meeting_starting", job_meeting_starting, 0),
+QUICK = ("codes", "break_glass", "meeting_starting", "series", "reminders", "digests", "prune")
+JOBS = (("codes", job_codes, 0), ("break_glass", job_break_glass, 0), ("meeting_starting", job_meeting_starting, 0), ("series", job_series, SERIES_EVERY),
         ("reminders", job_reminders, REMINDERS_EVERY), ("digests", job_digests, 0), ("prune", job_prune, PRUNE_EVERY),
         ("refetch", job_refetch, REFETCH_EVERY), ("similar", similar_job, 1800), ("messages_retention", messages_job, PRUNE_EVERY))
 

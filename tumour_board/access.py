@@ -22,13 +22,18 @@ new opening), scope READ: the read actions only (BREAK_GLASS_ACTIONS), never the
 FULL), never listed among the doctor's Case Files (visible), never on a protected Case File. The owner's consultants are told and it is
 audited (team.break_glass_doctor, route POST /break-glass).
 
+The meeting window (owner decision 2 Nov 2026, docs/meetings-v2/DESIGN.md; meetings-v2 item 2.2) is the other way to READ: a login
+admitted (present or remote) to a meeting running now (board.running_now) reads the Case File on its floor (`current`), read-only, while
+it stays on the floor; never an outside expert, never a protected Case File; READ wins over REQUESTS only inside that window and FULL stays
+FULL. The running meetings are looked up through a cache of MEETING_WINDOW_TTL seconds (meetings._save clears it).
+
 Acting: the clinical actions of a treating doctor (confirm, waive, dismiss, upload an outside report, re-fetch, link, send and close
 requests, refer, manage the participants and the team, set the urgency, approve a resident's proposal, change the listing) belong to
 the owning department's consultants; a resident of the team may upload and propose, never sign; a department still confirms or deletes
 its own upload through its membership (the V1 rule), the coordinator keeps the board and session actions. An archived Case File keeps
 its readers but refuses every change except taking it out of the archive ("This Case File is archived"). Every change here is audited in
 the Case File. No model calls."""
-import json, os, re, threading
+import json, os, re, threading, time
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -54,6 +59,8 @@ BREAK_GLASS_MAX_HOURS = 24
 DOCTOR_WINDOW_HOURS = 24  # a doctor's window opened with a reason lasts this long (owner decision D8)
 REASON_MIN, REASON_MAX, VIA_MAX = 3, 500, 80
 READ_ONLY_MESSAGE = "This Case File is open read-only (opened with a reason): the owning department acts on it."
+MEETING_READ_MESSAGE = "This Case File is open read-only while it is on the floor of the meeting: the owning department acts on it."
+MEETING_WINDOW_TTL = 2.0  # seconds the running meetings' answer is kept, so scope() stays cheap (meetings-v2 item 2.2)
 _bg_lock = threading.Lock()
 
 
@@ -456,6 +463,57 @@ def _admin_open(r: dict, case: dict) -> bool:
     return break_glass_window(r.get("user") or "", (case or {}).get("case_id")) is not None
 
 
+# ---- the meeting window (meetings-v2 item 2.2, owner decision 2 Nov 2026) -----------------------------------------------------
+
+_meeting_cache: tuple = ("", 0.0, {})  # (data root, monotonic time, {case_id: {user: meeting id}})
+_meeting_gen = [0]  # bumped by meeting_window_reset, so an answer computed before a reset is not kept after it
+
+
+def meeting_window_reset() -> None:
+    """Forget the cached running meetings: meetings._save calls it, so a Next, an admission or the end of a meeting counts at once."""
+    global _meeting_cache
+    _meeting_gen[0] += 1
+    _meeting_cache = ("", 0.0, {})
+
+
+def _meeting_floors() -> dict:
+    """{case_id: {user: meeting id}}: the Case File on the floor of each meeting running now (board.running_now) with the logins admitted
+    to it (meetings.ADMITTED); an outside expert's entry and a protected Case File are left out. Kept MEETING_WINDOW_TTL seconds per data
+    root; unreadable sessions give no window (the safe side)."""
+    global _meeting_cache
+    key, now = str(config.DATA_ROOT), time.monotonic()
+    k, at, floors = _meeting_cache
+    if k == key and 0 <= now - at < MEETING_WINDOW_TTL:
+        return floors
+    gen = _meeting_gen[0]
+    out: dict = {}
+    try:
+        from . import board, meetings  # lazy: both import this module
+        for s in board.running_sessions():
+            cid = s.get("current")
+            if not cid or str(cid) in config.PROTECTED_CASES:
+                continue
+            for u, p in (s.get("people") or {}).items():
+                if isinstance(p, dict) and p.get("status") in meetings.ADMITTED and not p.get("outside_expert"):
+                    out.setdefault(str(cid), {})[str(u)] = s.get("id")
+    except Exception:
+        out = {}
+    if gen == _meeting_gen[0]:
+        _meeting_cache = (key, now, out)
+    return out
+
+
+def meeting_window(r: dict, case) -> str | None:
+    """The id of the running meeting whose Case File on the floor is this one and to which `r` is admitted (present or remote), else
+    None. Never an outside expert, a disabled or expired login, or a protected Case File."""
+    if not isinstance(r, dict) or not isinstance(case, dict) or r.get("outside_expert") or r.get("disabled") or r.get("expired"):
+        return None
+    u, cid = str(r.get("user") or ""), str(case.get("case_id") or "")
+    if not u or not cid or is_protected(case):
+        return None
+    return _meeting_floors().get(cid, {}).get(u)
+
+
 # ---- reading ---------------------------------------------------------------------------------------------------------------
 
 def _mine(r: dict) -> set:
@@ -463,7 +521,8 @@ def _mine(r: dict) -> set:
 
 
 def scope(r: dict, case: dict, state=None) -> str | None:
-    """FULL, REQUESTS or None (refused) for the user with roles `r` on this Case File."""
+    """FULL, REQUESTS, READ (a doctor's window opened with a reason, or the meeting window) or None (refused) for the user with roles
+    `r` on this Case File."""
     if not isinstance(r, dict) or r.get("disabled") or r.get("expired") or not isinstance(case, dict):
         return None
     if is_protected(case):  # real patient data: its creator, and a Vaidyx admin inside a break-glass window on it; nobody else (finding 0)
@@ -480,7 +539,7 @@ def scope(r: dict, case: dict, state=None) -> str | None:
     if not own:  # no owning department recorded (before 5.1, a manual Case File): the coordinator (above) and its creator only (owner, 16 Oct)
         if is_creator(r, case):
             return FULL
-        return READ if _doctor_open(r, case) else None  # or a doctor's window opened with a reason (D8)
+        return READ if _doctor_open(r, case) or meeting_window(r, case) else None  # or a doctor's window opened with a reason (D8), or the meeting window
     mine = _mine(r) - set(r.get("resident") or {})  # the consultant placements; a resident reads through is_team_resident only
     if own in mine or (mine & set(participants(case))) or (mine & set(linked_owners(case))):
         return FULL
@@ -492,10 +551,17 @@ def scope(r: dict, case: dict, state=None) -> str | None:
     if ref and org.department_id(ref.get("to")) in mine:
         return FULL
     if mine & set(asked(case["case_id"], state)):  # a resident never answers requests
-        return REQUESTS
+        return READ if meeting_window(r, case) else REQUESTS  # at the board the supporting head reads the whole Case File on the floor (2.2)
     if _doctor_open(r, case):  # a doctor's window opened with a reason (night-v3 item 1.9, D8): read only
         return READ
+    if meeting_window(r, case):  # admitted to a running meeting with this Case File on the floor (meetings-v2 item 2.2): read only
+        return READ
     return None
+
+
+def _read_window(r: dict, case) -> bool:
+    """Scope READ through a window (a doctor's opened with a reason, or the meeting window): the read actions only."""
+    return isinstance(case, dict) and (_doctor_open(r, case) or meeting_window(r, case) is not None) and scope(r, case) == READ
 
 
 def can_see_chats(r: dict, case: dict) -> bool:
@@ -538,7 +604,15 @@ def no_export_in_window(r: dict, case: dict, scope_now: str | None) -> None:
 def visible(r: dict, cases, states=None) -> list:
     """The Case Files the user may open (any scope but a doctor's window: a Case File opened with a reason is reached by its address or
     the notification, never listed among the doctor's own), each as given."""
-    return [c for c in cases or [] if isinstance(c, dict) and scope(r, c, (states or {}).get(c.get("case_id"))) not in (None, READ)]
+    return [c for c in cases or [] if isinstance(c, dict) and _listed(r, c, (states or {}).get(c.get("case_id")))]
+
+
+def _listed(r: dict, case: dict, state=None) -> bool:
+    """visible(): any scope but a window; a department that was asked keeps its Case File listed while the meeting window reads it."""
+    sc = scope(r, case, state)
+    if sc == READ and meeting_window(r, case) and owner(case) and (_mine(r) - set(r.get("resident") or {})) & set(asked(case["case_id"], state)):
+        return True
+    return sc not in (None, READ)
 
 
 def my_actions(r: dict, case_id: str, state=None) -> list:
@@ -595,7 +669,7 @@ def may(r: dict, action: str, case: dict, department: str | None = None) -> bool
     A Vaidyx admin inside its break-glass window only reads (BREAK_GLASS_ACTIONS, security review #6)."""
     if isinstance(r, dict) and r.get("vaidyx_admin") and not r.get("disabled"):
         return action in BREAK_GLASS_ACTIONS and _admin_open(r, case)
-    if isinstance(case, dict) and _doctor_open(r, case) and scope(r, case) == READ:  # a doctor's window opened with a reason: read only (D8)
+    if _read_window(r, case):  # a doctor's window opened with a reason (D8) or the meeting window (2.2): read only
         return action in BREAK_GLASS_ACTIONS
     if not org.can(r, action, department):
         return False
@@ -631,8 +705,8 @@ def require(r: dict, action: str, case: dict, department: str | None = None) -> 
         raise PermissionError(ARCHIVED_MESSAGE + ". Take it out of the archive first.")
     if isinstance(r, dict) and r.get("expired"):
         raise PermissionError("Your placement ended on " + str(r.get("end_date") or "")[:10] + ". Ask your department admin to extend it.")
-    if isinstance(case, dict) and _doctor_open(r, case) and scope(r, case) == READ:
-        raise PermissionError(READ_ONLY_MESSAGE)
+    if _read_window(r, case):
+        raise PermissionError(READ_ONLY_MESSAGE if _doctor_open(r, case) else MEETING_READ_MESSAGE)
     if isinstance(r, dict) and r.get("vaidyx_admin"):
         if _admin_open(r, case):
             raise PermissionError("A break-glass window is read only: a Vaidyx admin reads the Case File, the owning department acts on it.")

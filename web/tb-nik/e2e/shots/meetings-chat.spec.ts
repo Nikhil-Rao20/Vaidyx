@@ -84,7 +84,9 @@ test.describe("Meeting chat", () => {
     expect(req.postDataJSON()).toEqual({ text: "Agree with the plan.\nPlease add the bone scan." });
     await expect(box).toHaveValue("");
     // The server's line comes back on the live channel: mine, with its line break kept (the mocked refresh after the send
-    // returns the fixture's three lines, so the pushed line is the last one).
+    // returns the fixture's three lines, so the pushed line is the last one). Wait for that refresh first: under load it could
+    // land after the push and replace the list (3 Nov 2026, a race seen in 2 of 3 full runs).
+    await page.waitForLoadState("networkidle").catch(() => {});
     live.push({ type: "chat", message: line("C6", "Agree with the plan.\nPlease add the bone scan.", "rao@vxh.example", "Lakshmi Rao") });
     await expect(rows.last()).toHaveAttribute("data-mine", "true");
     await expect(rows.last()).toContainText("Please add the bone scan.");
