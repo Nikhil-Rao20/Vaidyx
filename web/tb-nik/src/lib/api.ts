@@ -15,11 +15,16 @@ export class ApiError extends Error {
 }
 
 type Listener = (err: ApiError) => void;
-const listeners: { unauthenticated: Listener[]; mustChange: Listener[] } = { unauthenticated: [], mustChange: [] };
+const listeners: { unauthenticated: Listener[]; mustChange: Listener[]; twoFactor: Listener[] } = { unauthenticated: [], mustChange: [], twoFactor: [] };
 
 export function onUnauthenticated(fn: Listener) {
   listeners.unauthenticated.push(fn);
   return () => { listeners.unauthenticated = listeners.unauthenticated.filter((f) => f !== fn); };
+}
+/** A guest reviewer (real data) without two-step sign-in yet: every Tumour Board call answers 409 two_factor_required. */
+export function onTwoFactorRequired(fn: Listener) {
+  listeners.twoFactor.push(fn);
+  return () => { listeners.twoFactor = listeners.twoFactor.filter((f) => f !== fn); };
 }
 export function onMustChangePassword(fn: Listener) {
   listeners.mustChange.push(fn);
@@ -103,6 +108,7 @@ export async function request<T = unknown>(path: string, opts: RequestOptions = 
     const err = new ApiError(res.status, messageFor(res.status, data), code, data);
     if (res.status === 401 && !opts.quiet401) listeners.unauthenticated.forEach((f) => f(err));
     if (res.status === 409 && code === "password_change_required") listeners.mustChange.forEach((f) => f(err));
+    if (res.status === 409 && code === "two_factor_required") listeners.twoFactor.forEach((f) => f(err));
     throw err;
   }
   return data as T;

@@ -9,7 +9,9 @@ export function RequireSession() {
   if (loading) return <PageSkeleton />;
   if (!me) return <Navigate to="/sign-in" replace state={{ from: loc.pathname + loc.search }} />;
   if (me.must_change_password && loc.pathname !== "/first-login") return <Navigate to="/first-login" replace />;
-  if (!me.must_change_password && me.setup_needed && loc.pathname !== "/welcome" && loc.pathname !== "/first-login") return <Navigate to="/welcome" replace />;
+  // a guest reviewer (real, anonymized files) turns on two-step sign-in before anything else
+  if (!me.must_change_password && me.two_factor_required && loc.pathname !== "/settings") return <Navigate to="/settings#security" replace />;
+  if (!me.must_change_password && !me.two_factor_required && me.setup_needed && loc.pathname !== "/welcome" && loc.pathname !== "/first-login") return <Navigate to="/welcome" replace />;
   return <Outlet />;
 }
 

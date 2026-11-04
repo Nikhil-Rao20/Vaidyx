@@ -65,11 +65,19 @@ export const getMeetingNotes = (id: string, signal?: AbortSignal) => api.get<Cas
 export const setSummaryLine = (id: string, text: string) => api.post<{ summary_line: SummaryLine }>(`${caseUrl(id)}/summary-line`, { text });
 export const reviewArtefact = (id: string, artefact: string, status = "reviewed", comment = "") => api.post(`${caseUrl(id)}/review`, { artefact, status, comment });
 export const refetchHis = (id: string) => api.post<{ job: string; total: number }>(`${caseUrl(id)}/his/refetch`, {});
-export const uploadDocuments = (id: string, files: File[], outside: boolean) => {
+/** A private Case File (guest reviewer, 5 Nov 2026): the uploader confirms the files are anonymized; "upload anyway" sends confirm
+ * and a reason after the server listed likely identifiers. */
+export interface PrivateUpload { anonymized: boolean; confirm?: boolean; reason?: string }
+export const uploadDocuments = (id: string, files: File[], outside: boolean, priv?: PrivateUpload) => {
   const form = new FormData();
   files.forEach((f) => form.append("files", f, f.name));
   form.append("paths", JSON.stringify(files.map((f) => f.name)));
   form.append("outside", outside ? "1" : "0");
+  if (priv) {
+    form.append("anonymized", priv.anonymized ? "1" : "0");
+    if (priv.confirm) form.append("confirm", "1");
+    if (priv.reason) form.append("reason", priv.reason);
+  }
   return api.upload<{ job: string; total: number; warnings?: string[] }>(`${caseUrl(id)}/documents`, form);
 };
 export const openImages = (id: string, doc: string) => api.post<{ available: boolean; viewer_url?: string; reason?: string; modality?: string; instances?: number }>(`${caseUrl(id)}/documents/${enc(doc)}/images`, {});

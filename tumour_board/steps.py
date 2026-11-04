@@ -218,6 +218,9 @@ def documents(case_id, case, st=None, docs=None) -> list[dict]:
                     "date": dt.get("event") or dt.get("report") or "", "department": d.get("department") or his.get("performer_department") or "",
                     "accession": his.get("accession") or "", "final": fs, "check": doc_check(dd, case, cat), "images": bool(his.get("imaging_study_ref")),
                     "outside": bool(dd.get("outside")), "state": d.get("state"),
+                    # a private Case File (guest reviewer): what still looks like an identifier after reading (masked samples), 5 Nov 2026
+                    **({"identifiers": [{"kind": f.get("kind"), "where": f.get("where"), "sample": f.get("sample")} for f in (d.get("identifiers_after_reading") or [])][:12]}
+                       if d.get("identifiers_after_reading") else {}),
                     "earlier": [{"doc_id": e["doc_id"], "title": _title(e), "version": ((his_case.doc_view(e) or {}).get("his") or {}).get("version"),
                                  "status": final_status({**e, "his": (his_case.doc_view(e) or {}).get("his") or {}})["label"]} for e in earlier.get(d["doc_id"], [])]})
     out.sort(key=lambda x: x["date"] or "", reverse=True)

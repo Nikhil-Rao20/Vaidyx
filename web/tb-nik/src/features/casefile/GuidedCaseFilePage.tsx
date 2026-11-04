@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowLeft, BellRing, Eye, FolderSearch, MessageSquareText } from "lucide-react";
+import { ArrowLeft, BellRing, Eye, FolderSearch, Lock, MessageSquareText } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/session";
@@ -406,6 +406,11 @@ export default function GuidedCaseFilePage() {
         onArchive={teamq.data?.can?.archive && !teamq.data?.archived ? () => setArchiveOpen(true) : undefined}
         onMove={canMove ? () => setMoveOpen(true) : undefined} onWithdraw={canMove ? () => setTakeOffOpen(true) : undefined} />
 
+      {cf.case.private ? (
+        <p role="status" className="flex items-center gap-2 rounded-md border border-border bg-muted px-3 py-2 text-sm">
+          <Lock className="size-4 shrink-0" aria-hidden /> <span><span className="font-medium">Private:</span> only you can see this Case File. It is deleted automatically 90 days after it was created.</span>
+        </p>
+      ) : null}
       {teamq.data?.archived ? <p role="status" className="rounded-md border border-border bg-muted px-3 py-2 text-sm">Archived{teamq.data.archived.reason ? `: ${teamq.data.archived.reason}` : ""}. Read only.</p> : null}
       {bg ? <ReadOnlyBanner until={bg.until} reason={bg.reason} /> : null}
       {similarOf ? (
@@ -465,7 +470,7 @@ export default function GuidedCaseFilePage() {
       <TakeOffDialog open={takeOffOpen} onOpenChange={setTakeOffOpen} patient={cf.case.patient?.name || id} currentDate={cf.case.board_date} onConfirm={onWithdraw} />
       <BookViewer target={bookAt} onClose={() => setBookAt(null)} />
       <ChangeCancerDialog open={cancerOpen} onOpenChange={setCancerOpen} caseId={id} current={steps?.protocol ?? cf.case.protocol ?? ""} onChanged={() => { announce("Reading the reports again for the new cancer."); void refresh(); }} />
-      <UploadDialog open={uploadOpen} onOpenChange={setUploadOpen} caseId={id} hisCase={!!cf.his} onStarted={() => { announce("Upload started; reading the files."); window.setTimeout(() => void refresh(), 4000); }} />
+      <UploadDialog open={uploadOpen} onOpenChange={setUploadOpen} caseId={id} hisCase={!!cf.his} privateCase={!!cf.case.private} onStarted={() => { announce("Upload started; reading the files."); window.setTimeout(() => void refresh(), 4000); }} />
     </div>
   );
 }

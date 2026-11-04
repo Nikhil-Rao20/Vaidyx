@@ -14,6 +14,7 @@ import type { SourceTarget } from "../components/SourceViewer";
 import { JobSteps, UploadDialog } from "../components/ReportsPanel";
 import { EmptyState, LoadingButton, errorText, fmtDate, fmtDateTime, niceTitle, plural, useAnnounce } from "../components/common";
 import type { StepDocument, Steps } from "./types";
+import { useSession } from "@/lib/session";
 
 const GROUPS: Array<[string, string]> = [["pathology", "Pathology"], ["imaging", "Imaging"], ["labs", "Labs"], ["notes", "Clinical notes"], ["other", "Other reports"]];
 
@@ -46,6 +47,12 @@ function DocRow({ d, onOpen, onCheck, onImages, imagesBusy }: { d: StepDocument;
           <div className="flex flex-wrap items-center gap-1.5">
             <CheckTag d={d} onCheck={onCheck} />
             {d.outside ? <span className="rounded-md bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">Outside report</span> : null}
+            {d.identifiers?.length ? (
+              <span className="rounded-md status-warn px-1.5 py-0.5 text-xs font-medium" data-testid="identifier-warn"
+                    title={d.identifiers.map((f) => `${f.where}: ${f.kind} "${f.sample}"`).join("\n")}>
+                May identify the patient: {d.identifiers[0].kind}, {d.identifiers[0].where}{d.identifiers.length > 1 ? ` and ${d.identifiers.length - 1} more` : ""}
+              </span>
+            ) : null}
             {d.final.warn && d.check.status !== "reading" ? <span className="rounded-md status-warn px-1.5 py-0.5 text-xs font-medium" data-testid="final-warn">{d.final.label}</span> : null}
             {n ? (
               <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-link hover:bg-accent" data-testid="values-read">
@@ -80,6 +87,7 @@ function DocRow({ d, onOpen, onCheck, onImages, imagesBusy }: { d: StepDocument;
 export function ReportsStep({ steps, cf, caseId, onOpen, onCheckDoc, onChanged, onNext }: {
   steps: Steps; cf: CaseFile; caseId: string; onOpen: (t: SourceTarget) => void; onCheckDoc: (docId: string) => void; onChanged: () => Promise<void>; onNext: () => void;
 }) {
+  const { me } = useSession();
   const [by, setBy] = useState<"type" | "visit">("type");
   const [uploadOpen, setUploadOpen] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
@@ -122,14 +130,15 @@ export function ReportsStep({ steps, cf, caseId, onOpen, onCheckDoc, onChanged, 
         </header>
         <div className="flex flex-wrap gap-2 border-b border-border px-4 py-2.5">
           {cf.permissions?.refetch ? <LoadingButton size="sm" variant="outline" loading={refetch.isPending || !!jobId} loadingText="Getting new reports" onClick={() => refetch.mutate()}><RefreshCw className="size-4" />Get new reports from the hospital</LoadingButton> : null}
-          {cf.permissions?.upload ? <Button size="sm" variant="outline" onClick={() => setUploadOpen(true)}><Upload className="size-4" />Upload outside report</Button> : null}
+          {cf.permissions?.upload ? <Button size="sm" variant="outline" onClick={() => setUploadOpen(true)}><Upload className="size-4" />{cf.case.private ? "Add the anonymized files" : "Upload outside report"}</Button> : null}
+          {!cf.permissions?.upload && me?.upload_policy === "private_only" ? <p className="self-center text-xs text-muted-foreground">On this site, uploading is for guest reviewers, into their own private Case Files.</p> : null}
         </div>
         {refetch.isError ? <p role="alert" className="px-4 pt-2 text-xs text-bad">{errorText(refetch.error)}</p> : null}
         {jobId ? <div className="px-4 pt-2"><JobSteps job={job} /></div> : null}
         {imgMsg?.err ? <p role="alert" className="px-4 pt-2 text-xs text-bad">{imgMsg.err}</p> : null}
         {imgMsg?.blocked ? <p className="px-4 pt-2 text-xs">The browser blocked the new tab. <a className="text-link underline" href={imgMsg.blocked} target="_blank" rel="noopener noreferrer">Open the image viewer <ExternalLink className="inline size-3" aria-hidden /></a></p> : null}
         <div className="px-4 pb-2">
-          {!docs.length ? <EmptyState title="No reports yet" text="Nothing came from the hospital system yet. Get new reports, or upload an outside report." className="py-6" /> : null}
+          {!docs.length ? <EmptyState title="No reports yet" text={cf.case.private ? "Add the anonymized files: they are read and checked like hospital reports." : "Nothing came from the hospital system yet. Get new reports, or upload an outside report."} className="py-6" /> : null}
           {groups.map((g) => (
             <div key={g.key} className="pt-3" data-testid="report-group">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{g.label} <span className="font-normal normal-case">({g.docs.length})</span></h3>
@@ -139,7 +148,7 @@ export function ReportsStep({ steps, cf, caseId, onOpen, onCheckDoc, onChanged, 
         </div>
       </section>
       <div className="flex justify-end"><Button variant="outline" onClick={onNext}>Next: Check<ArrowRight className="size-4" /></Button></div>
-      <UploadDialog open={uploadOpen} onOpenChange={setUploadOpen} caseId={caseId} hisCase={!!cf.his} onStarted={(j) => { setJobId(j); announce("Upload started; reading the files."); }} />
+      <UploadDialog open={uploadOpen} onOpenChange={setUploadOpen} caseId={caseId} hisCase={!!cf.his} privateCase={!!cf.case.private} onStarted={(j) => { setJobId(j); announce("Upload started; reading the files."); }} />
     </div>
   );
 }

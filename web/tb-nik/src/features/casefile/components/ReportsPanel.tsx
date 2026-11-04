@@ -15,6 +15,7 @@ import { docNeedsConfirmation, docStatusChip } from "./SourceViewer";
 import { EmptyState, LoadingButton, StatusChip, errorText, fmtDate, fmtDateTime, plural, screenNote, useAnnounce } from "./common";
 import { useOrg } from "@/hooks/useQueries";
 import { cn } from "@/lib/utils";
+import { ApiError } from "@/lib/api";
 
 function groupHeading(g: RecordGroup): string {
   const enc = g.kind === "OP" || g.kind === "IP";
@@ -219,52 +220,107 @@ export function ReportsPanel({ caseId, cf, onOpenSource, onChanged, compact }: {
         </ol>
       ) : null}
 
-      <UploadDialog open={uploadOpen} onOpenChange={setUploadOpen} caseId={caseId} hisCase={!!cf.his} onStarted={(j) => { setJobId(j); announce("Upload started; reading the files."); }} />
+      <UploadDialog open={uploadOpen} onOpenChange={setUploadOpen} caseId={caseId} hisCase={!!cf.his} privateCase={!!cf.case.private} onStarted={(j) => { setJobId(j); announce("Upload started; reading the files."); }} />
     </section>
   );
 }
 
-export function UploadDialog({ open, onOpenChange, caseId, hisCase, onStarted }: { open: boolean; onOpenChange: (o: boolean) => void; caseId: string; hisCase: boolean; onStarted: (job: string) => void }) {
+interface Finding { file: string; kind: string; where: string; sample: string }
+interface Refused { file: string; reason: string }
+const PRIVATE_ACCEPT = ".pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp,.docx,.doc,.rtf,.odt,.xls,.xlsx,.pptx,.txt,.csv";
+
+/** Upload into a Case File. A hospital-system Case File takes outside reports (PDF or an image). A guest reviewer's private Case File
+ * takes the anonymized files the reader handles: the uploader confirms they are anonymized, refused files are named with the reason,
+ * and likely identifiers (masked samples) stop the upload until "Upload anyway" with a reason or the file is removed. */
+export function UploadDialog({ open, onOpenChange, caseId, hisCase, privateCase = false, onStarted }: { open: boolean; onOpenChange: (o: boolean) => void; caseId: string; hisCase: boolean; privateCase?: boolean; onStarted: (job: string) => void }) {
   const [files, setFiles] = useState<File[]>([]);
-  const [outside, setOutside] = useState(true);
+  const [outside, setOutside] = useState(!privateCase);
+  const [anonymized, setAnonymized] = useState(false);
+  const [findings, setFindings] = useState<Finding[] | null>(null);
+  const [refused, setRefused] = useState<Refused[] | null>(null);
+  const [reason, setReason] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const reset = () => { setFiles([]); setFindings(null); setRefused(null); setReason(""); setAnonymized(false); setErr(null); };
+  const choose = (list: File[]) => { setFiles(list); setFindings(null); setRefused(null); setReason(""); setErr(null); };
   const up = useMutation({
-    mutationFn: () => uploadDocuments(caseId, files, outside),
-    onSuccess: (r) => { onStarted(r.job); setFiles([]); onOpenChange(false); },
-    onError: (e) => setErr(errorText(e)),
+    mutationFn: (anyway: boolean) => uploadDocuments(caseId, files, privateCase ? false : outside,
+      privateCase ? { anonymized, confirm: anyway, reason: anyway ? reason.trim() : undefined } : undefined),
+    onSuccess: (r) => { onStarted(r.job); reset(); onOpenChange(false); },
+    onError: (e) => {
+      const d = (e instanceof ApiError && e.detail && typeof e.detail === "object" ? (e.detail as { detail?: { findings?: Finding[]; files?: Refused[] } }).detail : undefined) ?? {};
+      if (e instanceof ApiError && e.code === "possible_identifiers" && d.findings) { setFindings(d.findings); setErr(null); return; }
+      if (e instanceof ApiError && e.code === "upload_refused" && d.files) { setRefused(d.files); setErr(null); return; }
+      setErr(errorText(e));
+    },
   });
   const tooBig = files.find((f) => f.size > 60 * 1024 * 1024);
+  const removeFile = (name: string) => choose(files.filter((f) => f.name !== name));
+  const canSend = files.length > 0 && !tooBig && (!privateCase || anonymized);
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!up.isPending) { onOpenChange(o); setErr(null); } }}>
+    <Dialog open={open} onOpenChange={(o) => { if (!up.isPending) { onOpenChange(o); if (!o) reset(); } }}>
       <DialogContent aria-describedby="upload-desc">
         <DialogHeader>
-          <DialogTitle>Upload outside report</DialogTitle>
-          <DialogDescription id="upload-desc">A report from another hospital or a private laboratory. PDF or an image, up to 60 MB each. It is read and checked against the patient's identity like every record.</DialogDescription>
+          <DialogTitle>{privateCase ? "Add the anonymized files" : "Upload outside report"}</DialogTitle>
+          <DialogDescription id="upload-desc">
+            {privateCase
+              ? "PDF, images (JPG, PNG, TIFF), Word, Excel, PowerPoint, OpenDocument, RTF, TXT or CSV, up to 60 MB each. Hidden details (author, camera, location) are removed before storing; each file is checked for anything that could still identify the patient."
+              : "A report from another hospital or a private laboratory. PDF or an image, up to 60 MB each. It is read and checked against the patient's identity like every other report."}
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div
             className={cn("rounded-md border-2 border-dashed border-border-strong p-4 text-center text-sm cursor-pointer hover:bg-muted transition", files.length && "border-primary")}
             onClick={() => inputRef.current?.click()}
             onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => { e.preventDefault(); setFiles(Array.from(e.dataTransfer.files)); }}
+            onDrop={(e) => { e.preventDefault(); choose(Array.from(e.dataTransfer.files)); }}
             role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); inputRef.current?.click(); } }}
             aria-label="Choose files"
           >
-            <input ref={inputRef} type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.webp" className="sr-only" onChange={(e) => setFiles(Array.from(e.target.files ?? []))} />
-            {files.length ? <ul className="text-left space-y-0.5">{files.map((f) => <li key={f.name} className="truncate">{f.name} <span className="text-muted-foreground">({Math.round(f.size / 1024)} KB)</span></li>)}</ul> : <span className="text-muted-foreground">Drop files here or click to choose</span>}
+            <input ref={inputRef} type="file" multiple accept={privateCase ? PRIVATE_ACCEPT : ".pdf,.png,.jpg,.jpeg,.tif,.tiff,.webp"} className="sr-only" onChange={(e) => choose(Array.from(e.target.files ?? []))} />
+            {files.length ? <ul className="text-left space-y-0.5">{files.map((f) => <li key={f.name} className="truncate">{f.name} <span className="text-muted-foreground">({Math.round(f.size / 1024)} KB)</span></li>)}</ul> : <span className="text-muted-foreground"><Upload className="mx-auto mb-1 size-5" aria-hidden />Drop the files here or choose them</span>}
           </div>
-          <div className="flex items-center gap-2">
-            <Switch id="outside" checked={outside} onCheckedChange={setOutside} />
-            <Label htmlFor="outside" className="text-sm">Outside report (another hospital or laboratory)</Label>
-          </div>
-          {hisCase && !outside ? <p className="text-xs text-muted-foreground">Into a hospital-system Case File every upload is normally an outside report.</p> : null}
+          {privateCase ? (
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" className="mt-1" checked={anonymized} onChange={(e) => setAnonymized(e.target.checked)} />
+              <span>I confirm these files are anonymized: no name, phone, Aadhaar, address or hospital ID.</span>
+            </label>
+          ) : (
+            <>
+              <div className="flex items-center gap-2">
+                <Switch id="outside" checked={outside} onCheckedChange={setOutside} />
+                <Label htmlFor="outside" className="text-sm">Outside report (another hospital or laboratory)</Label>
+              </div>
+              {hisCase && !outside ? <p className="text-xs text-muted-foreground">Into a hospital-system Case File every upload is normally an outside report.</p> : null}
+            </>
+          )}
+          {refused?.length ? (
+            <div role="alert" className="rounded-md status-bad p-3 text-sm">
+              <p className="font-medium">These files cannot be uploaded:</p>
+              <ul className="mt-1 space-y-1">{refused.map((r) => <li key={r.file}><span className="font-medium">{r.file}</span>: {r.reason} <Button size="sm" variant="ghost" className="h-6 px-1.5" onClick={() => removeFile(r.file)}>Remove file</Button></li>)}</ul>
+            </div>
+          ) : null}
+          {findings?.length ? (
+            <div role="alert" className="rounded-md status-warn p-3 text-sm">
+              <p className="font-medium">These files may still identify the patient:</p>
+              <ul className="mt-1 space-y-1">
+                {findings.map((f, i) => <li key={`${f.file}-${i}`}><span className="font-medium">{f.file}</span>, {f.where}: looks like a {f.kind} <span className="mono">"{f.sample}"</span></li>)}
+              </ul>
+              <div className="mt-2 flex flex-wrap gap-1">{Array.from(new Set(findings.map((f) => f.file))).map((n) => <Button key={n} size="sm" variant="outline" className="h-7" onClick={() => removeFile(n)}>Remove {n}</Button>)}</div>
+              <Label htmlFor="upload-reason" className="mt-3 block text-xs">Or upload anyway: say why (kept with the upload)</Label>
+              <textarea id="upload-reason" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={500} rows={2} className="mt-1 w-full rounded-md border border-border bg-card p-2 text-sm" placeholder="For example: the numbers are lab values, not identifiers" />
+            </div>
+          ) : null}
           {tooBig ? <p role="alert" className="text-xs text-bad">{tooBig.name} is larger than 60 MB.</p> : null}
           {err ? <p role="alert" className="text-xs text-bad">{err}</p> : null}
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={up.isPending}>Cancel</Button>
-          <LoadingButton onClick={() => { setErr(null); up.mutate(); }} loading={up.isPending} loadingText="Uploading" disabled={!files.length || !!tooBig}><Upload className="size-4" />Upload {files.length ? plural(files.length, "file") : ""}</LoadingButton>
+          <Button variant="outline" onClick={() => { onOpenChange(false); reset(); }} disabled={up.isPending}>Cancel</Button>
+          {findings?.length ? (
+            <LoadingButton onClick={() => up.mutate(true)} loading={up.isPending} loadingText="Uploading" disabled={!canSend || reason.trim().length < 5}><Upload className="size-4" />Upload anyway</LoadingButton>
+          ) : (
+            <LoadingButton onClick={() => { setErr(null); up.mutate(false); }} loading={up.isPending} loadingText="Uploading" disabled={!canSend}><Upload className="size-4" />Upload {files.length ? `${files.length} file${files.length === 1 ? "" : "s"}` : ""}</LoadingButton>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -22,7 +22,8 @@ import { useSession } from "@/lib/session";
 import { ageSex } from "@/lib/format";
 import type { CreateFromHisResponse, DuplicateCaseFileBody, PatientCaseFile } from "@/lib/types";
 import { isGeneric } from "@/lib/cancers";
-import { DEFAULT_FORM, createBody, type NewCaseForm } from "@/features/newcase/form";
+import { DEFAULT_FORM, createBody, manualBody, type NewCaseForm } from "@/features/newcase/form";
+import { StepManual, manualDone } from "@/features/newcase/StepManual";
 import { StepPatient } from "@/features/newcase/StepPatient";
 import { NOT_RECORDED, StepCancer, cancerStepDone } from "@/features/newcase/StepCancer";
 import { StepLogistics, logisticsDone, useOwnerChoices } from "@/features/newcase/StepLogistics";
@@ -53,7 +54,8 @@ export default function NewCaseFile() {
   const { me } = useSession();
   const [params] = useSearchParams();
   const initialId = params.get("identifier") || "";
-  const [form, setForm] = useState<NewCaseForm>({ ...DEFAULT_FORM, identifier: initialId });
+  const guest = Boolean(me?.real_data);  // a guest reviewer: private Case File from their own files, no hospital system
+  const [form, setForm] = useState<NewCaseForm>({ ...DEFAULT_FORM, identifier: initialId, ...(me?.real_data ? { joinCode: false, outsideConsent: false } : {}) });
   const [step, setStep] = useState(1);
   const [creating, setCreating] = useState(false);
   const [createErr, setCreateErr] = useState<string | null>(null);
@@ -74,7 +76,7 @@ export default function NewCaseFile() {
   const files = usePatientCaseFiles(pkey);
   // the live Case File of this patient and the chosen cancer: listed by the server, or named by its 409 on Create
   const duplicate = duplicateFor(files.data?.cases, form) ?? (serverDup && serverDup.key === pkey && sameCancer(serverDup.file, form) ? serverDup.file : null);
-  const stepOk = step === 1 ? Boolean(form.lookup?.found && form.lookup.patient) : step === 2 ? cancerStepDone(form) && !duplicate : logisticsDone(form, owners.length > 1) && !duplicate;
+  const stepOk = step === 1 ? (guest ? manualDone(form) : Boolean(form.lookup?.found && form.lookup.patient)) : step === 2 ? cancerStepDone(form) && !duplicate : logisticsDone(form, owners.length > 1) && !duplicate;
 
   const setFollow = (id: string, patch: Partial<FollowUp>) => setFollowUps((list) => list.map((f) => (f.id === id ? { ...f, ...patch } : f)));
 
@@ -83,17 +85,24 @@ export default function NewCaseFile() {
     setCreating(true);
     setCreateErr(null);
     try {
-      const r = await api.post<CreateFromHisResponse>(EP.fromHis, createBody(form, NOT_RECORDED));
-      const caseId = r.case.case_id;
-      const p = form.lookup?.patient;
-      const line = [p?.name, ageSex(p?.age, p?.sex), p?.uhid ? `UHID ${p.uhid}` : ""].filter(Boolean).join(", ");
+      let caseId: string, jobId: string | null = null, total = 0, line: string;
+      if (guest) {  // POST /cases: the server makes the id and marks it private
+        const c = await api.post<{ case_id: string }>(EP.cases, manualBody(form, NOT_RECORDED));
+        caseId = c.case_id;
+        line = [form.manualLabel.trim(), ageSex(Number(form.manualAge), form.manualSex)].filter(Boolean).join(", ");
+      } else {
+        const r = await api.post<CreateFromHisResponse>(EP.fromHis, createBody(form, NOT_RECORDED));
+        caseId = r.case.case_id; jobId = r.job || null; total = r.total ?? 0;
+        const p = form.lookup?.patient;
+        line = [p?.name, ageSex(p?.age, p?.sex), p?.uhid ? `UHID ${p.uhid}` : ""].filter(Boolean).join(", ");
+      }
       const steps: FollowUp[] = [{ id: "urgency", label: `Urgency tag ${form.urgency} set`, state: "pending" }];
       if (form.boardQuestion.trim()) steps.push({ id: "question", label: "Board question saved", state: "pending" });
       if (form.outsideConsent) steps.push({ id: "consent", label: "Consent for outside experts recorded", state: "pending" });
       if (form.joinCode) steps.push({ id: "code", label: "Join code made for residents", state: "pending" });
       setFollowUps(steps);
-      setCreated({ caseId, jobId: r.job || null, total: r.total ?? 0, patientLine: line || caseId });
-      notify.success("Case File created", "Fetching the records now.");
+      setCreated({ caseId, jobId, total, patientLine: line || caseId });
+      notify.success("Case File created", guest ? "Add the anonymized files in Records." : "Fetching the records now.");
       void invalidate(keys.caseLists);
       // The follow-ups run one after another; a failure is shown on its line and never undoes the Case File.
       const run = async (id: string, fn: () => Promise<unknown>) => {
@@ -132,7 +141,7 @@ export default function NewCaseFile() {
     <div className="mx-auto max-w-4xl">
       <PageHeader
         title="New Case File"
-        subtitle={created ? "Created. The records come in from the hospital system now." : "Three short steps. Nothing is created until you press Create."}
+        subtitle={created ? (guest ? "Created. Add the anonymized files in Records." : "Created. The records come in from the hospital system now.") : "Three short steps. Nothing is created until you press Create."}
         back={{ to: "/cases", label: "Case Files" }}
       />
       {created ? (
@@ -149,11 +158,20 @@ export default function NewCaseFile() {
             nextDisabled={!stepOk}
             nextLoading={creating}
             nextButtonText="Continue"
-            completeButtonText={creating ? "Creating" : "Create and fetch records"}
+            completeButtonText={creating ? "Creating" : guest ? "Create" : "Create and fetch records"}
           >
-            <Step title="Patient">
-              <StepTitle title="Find the patient" text="The hospital system is asked; you see the registration before anything is made." />
-              <StepPatient form={form} onChange={onChange} autoLookup={Boolean(initialId)} />
+            <Step title={guest ? "Case" : "Patient"}>
+              {guest ? (
+                <>
+                  <StepTitle title="Case label" text="No name and no hospital number: a label you recognise, with age and sex." />
+                  <StepManual form={form} onChange={onChange} />
+                </>
+              ) : (
+                <>
+                  <StepTitle title="Find the patient" text="The hospital system is asked; you see the registration before anything is made." />
+                  <StepPatient form={form} onChange={onChange} autoLookup={Boolean(initialId)} />
+                </>
+              )}
             </Step>
             <Step title="Cancer">
               <StepTitle title="Which cancer" text="The checklist decides which records the board needs." />

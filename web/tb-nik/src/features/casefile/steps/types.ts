@@ -54,6 +54,8 @@ export interface Warning {
 export interface DocCheck { status: "checked" | "please_check" | "reading" | "failed" | "dismissed"; reasons: string[]; values: Array<{ fact_id: string; label: string; value: string; quote: string; page?: number | null; confirmed_by?: string }> }
 export interface FinalStatus { final: boolean; signed: boolean; preliminary: boolean; status: string; label: string; warn: boolean }
 export interface StepDocument {
+  /** A private Case File's record: what still looks like an identifier after reading (masked samples). */
+  identifiers?: Array<{ kind: string; where: string; sample: string }>;
   doc_id: string; title: string; doc_type: string; group: "pathology" | "imaging" | "labs" | "notes" | "other" | "outside" | string; date: string;
   department: string; accession: string; final: FinalStatus; check: DocCheck; images: boolean; outside: boolean; state?: string;
   earlier: Array<{ doc_id: string; title: string; version?: number | null; status: string }>;

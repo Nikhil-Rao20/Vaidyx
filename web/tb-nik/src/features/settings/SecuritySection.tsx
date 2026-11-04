@@ -87,7 +87,7 @@ function PasswordForm() {
 }
 
 function TwoStep() {
-  const { me } = useSession();
+  const { me, refresh } = useSession();
   const status = useTotpStatus();
   const invalidate = useInvalidate();
   const [setup, setSetup] = useState<TotpSetup | null>(null);
@@ -95,13 +95,14 @@ function TwoStep() {
   const [backup, setBackup] = useState<string[] | null>(null);
   const [offOpen, setOffOpen] = useState(false);
   const [password, setPassword] = useState("");
-  const required = Boolean(me && (me.roles.coordinator || me.roles.root_admin || (me.roles.admin_of || []).length));
+  const required = Boolean(me && (me.real_data || me.roles.coordinator || me.roles.root_admin || (me.roles.admin_of || []).length));
   const start = useAsyncAction(async () => { setSetup(await api.post<TotpSetup>(EP.totpSetup)); setCode(""); });
   const confirm = useAsyncAction(async () => {
     const r = await api.post<{ ok: boolean; backup_codes?: string[] }>(EP.totpConfirm, { code: code.replace(/\D/g, "") });
     setBackup(r.backup_codes ?? []);
     setSetup(null);
     await invalidate(keys.totp);
+    if (me?.two_factor_required) await refresh();  // a guest reviewer may now open the rest of the site
     notify.success("Two-step sign-in is on");
   });
   const disable = useAsyncAction(async () => {
@@ -119,7 +120,7 @@ function TwoStep() {
       </div>
       <p className="text-xs text-muted-foreground">
         After the password, a 6-digit code from an authenticator app on your phone.
-        {required ? " It will be required for MDT Coordinators and admins when the hospital deploys Vaidyx; turning it on now saves a step later." : ""}
+        {me?.real_data ? " Required for this account: it works with real, anonymized files." : required ? " It will be required for MDT Coordinators and admins when the hospital deploys Vaidyx; turning it on now saves a step later." : ""}
       </p>
       {status.error && !status.data ? <ErrorState compact error={status.error} what="two-step sign-in" onRetry={() => void status.refetch()} /> : null}
       {backup ? (
@@ -170,9 +171,15 @@ function TwoStep() {
 }
 
 export function SecuritySection() {
+  const { me } = useSession();
   return (
     <SettingsCard id="security" icon={ShieldCheck} title="Security" text="Your password and how you sign in. Forgot the password? Your department admin resets it.">
       <div className="grid gap-6">
+        {me?.two_factor_required ? (
+          <p role="alert" className="rounded-md status-warn p-3 text-sm">
+            This account works with real, anonymized files. Turn on two-step sign-in below to open the rest of the Tumour Board.
+          </p>
+        ) : null}
         <PasswordForm />
         <div className="border-t border-border pt-5"><TwoStep /></div>
       </div>

@@ -73,6 +73,8 @@ export interface CaseListItem {
   last_change?: string;
   created?: string;
   residents_count?: number;
+  /** A guest reviewer's private Case File (only its creator sees it). */
+  private?: boolean;
   /** Free text name when the cancer has no built checklist. */
   cancer_name?: string;
   /** The person owns it, is on its team, or created it (server side "mine"). Never true for a linked-only row. */

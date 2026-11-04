@@ -2,7 +2,7 @@
 // The sign-in page calls signIn(); a 401 anywhere sends the person back to /sign-in with the page they wanted.
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { api, AUTH, TB, onUnauthenticated, onMustChangePassword, ApiError } from "@/lib/api";
+import { api, AUTH, TB, onUnauthenticated, onMustChangePassword, onTwoFactorRequired, ApiError } from "@/lib/api";
 import { unsubscribePush } from "@/lib/push";
 import { applyTheme, applyTextSize, type Theme, type TextSize } from "@/lib/appearance";
 
@@ -45,6 +45,12 @@ export interface Me {
   features: { video: boolean; push: boolean };
   /** Phase 8: this person may use Messages (placed, or the MDT Coordinator). */
   messages?: boolean;
+  /** A guest reviewer with anonymized real files: their Case Files are private (5 Nov 2026). */
+  real_data?: boolean;
+  /** A guest reviewer who has not turned on two-step sign-in yet: Settings, Security comes first. */
+  two_factor_required?: boolean;
+  /** "private_only": on this site only guest reviewers upload, into their own private Case Files. */
+  upload_policy?: "all" | "private_only";
 }
 
 interface SessionState {
@@ -101,7 +107,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       if (err.code === "idle_timeout") { queryClient.clear(); forgetLocal(); }  // the server ended an idle session
     });
     const off2 = onMustChangePassword(() => setMe((m) => (m ? { ...m, must_change_password: true } : m)));
-    return () => { off(); off2(); };
+    const off3 = onTwoFactorRequired(() => setMe((m) => (m ? { ...m, two_factor_required: true } : m)));
+    return () => { off(); off2(); off3(); };
   }, [queryClient]);
 
   const signIn = useCallback(async (username: string, password: string, totp?: string) => {

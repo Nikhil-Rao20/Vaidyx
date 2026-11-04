@@ -27,6 +27,10 @@ export interface NewCaseForm {
   outsideConsent: boolean;
   /** The owning treating department when the doctor has several (or is a coordinator). */
   department: string;
+  /** A guest reviewer's Case File without the hospital system (StepManual): a label, never a name; age in years; F / M / O. */
+  manualLabel: string;
+  manualAge: string;
+  manualSex: string;
 }
 
 export const DEFAULT_FORM: NewCaseForm = {
@@ -44,6 +48,9 @@ export const DEFAULT_FORM: NewCaseForm = {
   joinCode: true,
   outsideConsent: false,
   department: "",
+  manualLabel: "",
+  manualAge: "",
+  manualSex: "",
 };
 
 export const WINDOW_CHOICES: Array<{ value: number | "all"; label: string }> = [
@@ -68,6 +75,20 @@ export function createBody(form: NewCaseForm, notRecorded: string) {
     setting: generic ? GENERIC_SETTING : form.setting && form.setting !== notRecorded ? form.setting : "",
     board_date: form.boardDate || "",
     window: form.windowMonths === "all" ? { all: true } : { months: form.windowMonths },
+    department: form.department || undefined,
+    cancer_name: cleanCancerName(form.cancerName) || undefined,
+  };
+}
+
+/** The body of POST /cases for a guest reviewer (no hospital system): the label stands where a name would, with age and sex. The
+ * server makes the id and marks the Case File private. */
+export function manualBody(form: NewCaseForm, notRecorded: string) {
+  const generic = isGeneric(form.protocol);
+  return {
+    patient: { name: form.manualLabel.trim(), age: Number(form.manualAge), sex: form.manualSex, anonymized: true },
+    protocol: form.protocol || "",
+    setting: generic ? GENERIC_SETTING : form.setting && form.setting !== notRecorded ? form.setting : "",
+    board_date: form.boardDate || "",
     department: form.department || undefined,
     cancer_name: cleanCancerName(form.cancerName) || undefined,
   };

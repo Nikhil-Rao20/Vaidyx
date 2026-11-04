@@ -53,6 +53,7 @@ start_app() {
   # LOCALHOST_BYPASS=false: set here so a stray .env file higher up the folder tree can never switch it on.
   ( cd "$APP" || exit 1; APP_BIND=127.0.0.1 APP_PORT=$APP_PORT VAIDYX_DATA_DIR=$ROOT/vaidyx_data TB_DATA_ROOT=$ROOT/tumour_board \
       TB_GUIDELINE_DIR=$ROOT/guidelines TB_PROTECTED_CASES=TB-2026-bharath TB_STAGING=off CLEANUP_ENABLED=false LOCALHOST_BYPASS=false \
+      TB_UPLOAD_POLICY=private_only TB_PRIVATE_RETENTION_DAYS=90 \
       exec setsid nohup "$PY" app.py ) >> "$LOG/app.log" 2>&1 < /dev/null &
   for _ in $(seq 1 90); do up $APP_PORT && curl -s -o /dev/null -m 3 "http://127.0.0.1:$APP_PORT/login" && return 0; sleep 2; done
   echo "app: did not start, see $LOG/app.log"; return 1

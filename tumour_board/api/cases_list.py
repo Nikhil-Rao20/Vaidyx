@@ -18,7 +18,7 @@ website lists it apart and leaves it out of every count."""
 import re
 from fastapi import Request
 
-from tumour_board import access, board, org, profiles, proposals, protocol, service, store, team
+from tumour_board import access, board, config, org, profiles, proposals, protocol, service, store, team
 from tumour_board.api.common import make_router, need, roles
 
 router = make_router()
@@ -219,6 +219,7 @@ def row(c: dict, r: dict, sched: dict, labels: dict) -> dict:
             "ids": _identifiers(c), "accessions": _accessions(docs),
             "documents": len(docs), "last_change": _last_change(cid), "created": c.get("created") or "", "created_by": c.get("created_by") or "",
             "residents_count": len(access.team_residents(c)), "scope": scope, "archived": access.is_archived(c),
+            "private": config.is_private(cid),  # a guest reviewer's own Case File: only its creator ever sees it (5 Nov 2026)
             "relation": rel, "mine": mine, **clinical, **extra}
 
 

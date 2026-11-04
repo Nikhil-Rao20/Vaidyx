@@ -57,6 +57,9 @@ ROLE_USERS = {  # username: (display name, roles as in org.json)
     "tb-micro-doc": ("Dr Microbiology (demo)", {"departments": {"microbiology": "doctor"}}),
     "tb-pulmo-doc": ("Dr Pulmonology (demo)", {"departments": {"pulmonology": "doctor"}}),
     "tb-crs-doc": ("Dr Colorectal Surgery (demo)", {"departments": {"colorectal_surgery": "doctor"}}),
+    # A guest reviewer with anonymized real files (5 Nov 2026): private Case Files only, two-factor sign-in first. The department
+    # only sets the owning department of their Case Files; change it to the reviewer's specialty in org.json if wanted.
+    "tb-guest-1": ("Guest reviewer 1", {"departments": {"medical_oncology": "doctor"}, "real_data": True}),
 }
 NO_TOOLS = {"can_use_bash": False, "can_use_browser": False, "can_use_research": False, "can_generate_images": False,
             "can_use_agent": False, "can_manage_memory": False}
@@ -102,6 +105,7 @@ def write_org():
     for u, (_name, roles) in ROLE_USERS.items():
         src = (org.get("users") or {}).get(u, {})
         users[u] = {**src, **{k: v for k, v in roles.items() if k != "root_admin"}, "disabled": False}
+        users[u].setdefault("display_name", _name)
     org["users"] = users
     org["admins"] = [u for u, (_n, r) in ROLE_USERS.items() if r.get("root_admin")]
     (TB / "org.json").write_text(json.dumps(org, indent=1))
