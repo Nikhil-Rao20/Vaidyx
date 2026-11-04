@@ -153,7 +153,7 @@ async def handle(request: Request):
         return JSONResponse({"gate": "ok", "app": "ok" if ok else "down"}, status_code=200 if ok else 503)
     if path == "/index.html":
         return RedirectResponse("/", status_code=302)
-    if request.method in ("GET", "HEAD"):
+    if request.method in ("GET", "HEAD") and path_safe(path):  # a trick path gets no friendly redirect: it is refused below
         old = plain_site_path(path)
         if old is not None:
             return RedirectResponse(old + (f"?{request.url.query}" if request.url.query else ""), status_code=301)

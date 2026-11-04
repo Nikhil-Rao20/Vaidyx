@@ -181,3 +181,9 @@ def test_upload_is_paused_until_the_switch_exists(client, gate, tmp_path, monkey
     (tmp_path / "upload_enabled").touch()
     r = client.post("/api/tb/cases/TB-002/documents", headers=OK, files={"files": ("a.pdf", b"%PDF-1.4")})
     assert r.status_code == 502                                                             # switched on: forwarded
+
+
+@pytest.mark.parametrize("path", ["/tb-nik/../api/admin/users", "/tb-nik/%2e%2e/admin", "/tb-nik//api/admin"])
+def test_trick_paths_under_the_old_prefix_get_no_redirect(client, path):
+    r = client.get(path, headers=OK, follow_redirects=False)
+    assert r.status_code == 404, (path, r.status_code, r.headers.get("location"))
