@@ -26,18 +26,19 @@ gate_ok() { curl -s -m 5 -o /dev/null -w '%{http_code}' -H "X-Vaidyx-Gate: $(cat
 start_app() {
   up $APP_PORT && return 0
   [ -d "$APP" ] && [ -d "$ROOT/vaidyx_data" ] || { echo "app: run deploy_h200.sh / setup_instance.py first"; return 1; }
-  ( cd "$APP" && APP_BIND=127.0.0.1 APP_PORT=$APP_PORT VAIDYX_DATA_DIR=$ROOT/vaidyx_data TB_DATA_ROOT=$ROOT/tumour_board \
+  # exec: no shell stays behind holding the caller's output (a piped deploy_h200.sh looked hung)
+  ( cd "$APP" || exit 1; APP_BIND=127.0.0.1 APP_PORT=$APP_PORT VAIDYX_DATA_DIR=$ROOT/vaidyx_data TB_DATA_ROOT=$ROOT/tumour_board \
       TB_GUIDELINE_DIR=$ROOT/guidelines TB_PROTECTED_CASES=TB-2026-bharath TB_STAGING=off CLEANUP_ENABLED=false \
-      setsid nohup "$PY" app.py >> "$LOG/app.log" 2>&1 < /dev/null & )
+      exec setsid nohup "$PY" app.py ) >> "$LOG/app.log" 2>&1 < /dev/null &
   for _ in $(seq 1 90); do curl -s -o /dev/null -m 3 "http://127.0.0.1:$APP_PORT/login" && return 0; sleep 2; done
   echo "app: did not start, see $LOG/app.log"; return 1
 }
 
 start_gate() {
   up $GATE_PORT && return 0
-  ( cd "$APP/deploy/h200" && VX_GATE_SECRET_FILE="$SEC/gate_secret" VX_UPSTREAM=http://127.0.0.1:$APP_PORT \
-      setsid nohup "$PY" -m uvicorn gate:app --host 127.0.0.1 --port $GATE_PORT --no-proxy-headers --log-level warning \
-      >> "$LOG/gate.log" 2>&1 < /dev/null & )
+  ( cd "$APP/deploy/h200" || exit 1; VX_GATE_SECRET_FILE="$SEC/gate_secret" VX_UPSTREAM=http://127.0.0.1:$APP_PORT \
+      exec setsid nohup "$PY" -m uvicorn gate:app --host 127.0.0.1 --port $GATE_PORT --no-proxy-headers --log-level warning \
+      ) >> "$LOG/gate.log" 2>&1 < /dev/null &
   for _ in $(seq 1 20); do up $GATE_PORT && return 0; sleep 1; done
   echo "gate: did not start, see $LOG/gate.log"; return 1
 }
