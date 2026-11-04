@@ -1,0 +1,119 @@
+"""Tests for the deployment gate (deploy/h200/gate.py): secret, allow-list, path tricks, WebSocket origin."""
+import importlib
+import sys
+from pathlib import Path
+
+import pytest
+from starlette.testclient import TestClient
+
+GATE_DIR = Path(__file__).resolve().parents[1] / "h200"
+SECRET = "s" * 40
+
+
+@pytest.fixture(scope="module")
+def gate(tmp_path_factory):
+    f = tmp_path_factory.mktemp("gate") / "secret"
+    f.write_text(SECRET + "\n")
+    mp = pytest.MonkeyPatch()
+    mp.setenv("VX_GATE_SECRET_FILE", str(f))
+    mp.setenv("VX_UPSTREAM", "http://127.0.0.1:9")      # nothing listens: forwarded requests answer 502
+    mp.setenv("VX_HIS_UPSTREAM", "http://127.0.0.1:9")
+    sys.path.insert(0, str(GATE_DIR))
+    sys.modules.pop("gate", None)
+    mod = importlib.import_module("gate")
+    yield mod
+    sys.path.remove(str(GATE_DIR))
+    mp.undo()
+
+
+@pytest.fixture()
+def client(gate):
+    return TestClient(gate.app, raise_server_exceptions=False)
+
+
+OK = {"x-vaidyx-gate": SECRET}
+
+
+def test_no_or_wrong_secret_is_refused(client):
+    assert client.get("/tb-nik").status_code == 403
+    assert client.get("/tb-nik", headers={"x-vaidyx-gate": "wrong"}).status_code == 403
+    assert client.get("/tb-nik", headers={"x-vaidyx-gate": SECRET[:-1]}).status_code == 403
+    assert client.get("/_gate/health").status_code == 403
+
+
+def test_secret_needed_even_for_health_and_root(client):
+    assert client.get("/", follow_redirects=False).status_code == 403
+    r = client.get("/", headers=OK, follow_redirects=False)
+    assert r.status_code == 302 and r.headers["location"] == "/tb-nik"
+
+
+@pytest.mark.parametrize("method,path", [
+    ("GET", "/api/chat"), ("POST", "/api/chat"), ("GET", "/api/admin/users"), ("GET", "/api/tools"),
+    ("POST", "/api/upload"), ("GET", "/settings"), ("GET", "/api/memory"), ("POST", "/api/auth/signup"),
+    ("POST", "/api/auth/setup"), ("GET", "/fhir/Patient"), ("POST", "/tb-nik"), ("DELETE", "/static/x.js"),
+    ("GET", "/api/tb/../chat"), ("GET", "/api/tb/%2e%2e/chat"), ("GET", "/api/tb//x"), ("GET", "/api/tb/%2fx"),
+    ("GET", "/api/tb\\..\\chat"), ("GET", "/api/tb/admin"), ("GET", "/api/tb/admin/x"),
+])
+def test_paths_outside_the_allow_list_are_refused(client, method, path):
+    r = client.request(method, path, headers=OK)
+    assert r.status_code in (403, 404), (method, path, r.status_code)
+
+
+@pytest.mark.parametrize("method,path", [
+    ("GET", "/tb-nik"), ("GET", "/tb-nik/casefiles"), ("GET", "/static/tb-nik/assets/a.js"), ("GET", "/login"),
+    ("POST", "/api/auth/login"), ("POST", "/api/auth/logout"), ("GET", "/api/auth/2fa/status"),
+    ("POST", "/api/auth/2fa/setup"), ("GET", "/api/tb/cases"), ("POST", "/api/tb/cases/TB-001/ask"),
+    ("GET", "/his/patients"), ("GET", "/desk"),
+])
+def test_allowed_paths_are_forwarded(client, method, path):
+    r = client.request(method, path, headers=OK)
+    assert r.status_code == 502, (method, path, r.status_code)  # forwarded to the (absent) upstream
+
+
+def test_health_reports_app_down(client):
+    r = client.get("/_gate/health", headers=OK)
+    assert r.status_code == 503 and r.json()["app"] == "down"
+
+
+def test_websocket_rules(gate):
+    ok_headers = {"host": "vx.example", "origin": "https://vx.example", "x-vaidyx-gate": SECRET}
+    assert gate.WS_PATHS.match("/api/tb/meetings/S20261102-6708/ws")
+    assert gate.WS_PATHS.match("/api/tb/messages/ws")
+    assert not gate.WS_PATHS.match("/api/tb/meetings/../ws")
+    assert not gate.WS_PATHS.match("/api/chat/ws")
+    assert gate.origin_matches_host(ok_headers)
+    assert not gate.origin_matches_host({**ok_headers, "origin": "https://evil.example"})
+    assert not gate.origin_matches_host({"host": "vx.example"})  # a browser always sends Origin
+    assert gate.has_secret(ok_headers) and not gate.has_secret({"x-vaidyx-gate": "x"})
+
+
+def test_websocket_without_secret_or_origin_is_closed(client):
+    from starlette.websockets import WebSocketDisconnect
+    for headers in ({"origin": "http://testserver"}, {**OK, "origin": "https://evil.example"}, OK):
+        with pytest.raises(WebSocketDisconnect) as e:
+            with client.websocket_connect("/api/tb/messages/ws", headers=headers) as ws:
+                ws.receive_text()
+        assert e.value.code == 1008
+
+
+def test_forwarded_for_is_always_set(gate):
+    assert gate.forwarded_for({}, "127.0.0.1") == "127.0.0.1"
+    assert gate.forwarded_for({"x-forwarded-for": "1.2.3.4"}, "127.0.0.1") == "1.2.3.4, 127.0.0.1"
+
+
+def test_secret_header_is_never_forwarded(gate):
+    assert "x-vaidyx-gate" in gate.HOP_REQ
+
+
+def test_short_secret_refuses_to_start(tmp_path, monkeypatch):
+    f = tmp_path / "s"
+    f.write_text("short")
+    monkeypatch.setenv("VX_GATE_SECRET_FILE", str(f))
+    sys.path.insert(0, str(GATE_DIR))
+    sys.modules.pop("gate", None)
+    try:
+        with pytest.raises(SystemExit):
+            importlib.import_module("gate")
+    finally:
+        sys.path.remove(str(GATE_DIR))
+        sys.modules.pop("gate", None)
