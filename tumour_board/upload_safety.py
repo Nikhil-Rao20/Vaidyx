@@ -27,7 +27,10 @@ ALLOWED = {".pdf", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp", ".
 OOXML = {".docx", ".xlsx", ".pptx"}
 OLE = {".doc", ".xls"}
 IMAGES = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"}
-MAX_PIXELS = 180_000_000          # an image larger than this is refused (decompression bombs)
+MAX_PIXELS = 100_000_000          # an image larger than this (width x height, per frame) is refused (decompression bombs)
+MAX_FRAMES = 60                   # pages of a multi-page TIFF
+MAX_UNZIPPED = 200 * 1024 * 1024  # an Office file larger than this once unpacked is refused (zip bombs)
+MAX_RATIO = 200                   # ... and so is any part packed more than 200 times
 MAX_SCAN_PAGES = 300              # text-layer pages searched per PDF
 OLE_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
 
@@ -68,6 +71,9 @@ def sniff(name: str, data: bytes) -> str:
     if ext in OOXML or ext == ".odt":
         try:
             with zipfile.ZipFile(io.BytesIO(data)) as z:
+                big = zip_too_big(z)
+                if big:
+                    return big
                 names = set(z.namelist())
             ok = ("[Content_Types].xml" in names) if ext in OOXML else ("mimetype" in names and "content.xml" in names)
         except zipfile.BadZipFile:
@@ -75,6 +81,18 @@ def sniff(name: str, data: bytes) -> str:
     if ext in (".txt", ".csv"):
         ok = b"\x00" not in data[:65536] and _decode(data) is not None
     return "" if ok else f"the content of {name} does not match its name ({ext})"
+
+
+def zip_too_big(z: zipfile.ZipFile) -> str:
+    """A reason when the archive would unpack to too much (a zip bomb), else ''. Reads only the directory, never the parts."""
+    infos = z.infolist()
+    if len(infos) > 5000:
+        return "the Office file has too many parts"
+    if sum(i.file_size for i in infos) > MAX_UNZIPPED:
+        return "the Office file is too large once unpacked"
+    if any(i.compress_size and i.file_size / i.compress_size > MAX_RATIO and i.file_size > 1024 * 1024 for i in infos):
+        return "the Office file is packed in a way that is not accepted (a part expands too much)"
+    return ""
 
 
 def _decode(data: bytes):
@@ -91,33 +109,55 @@ _PDF_DANGER = (b"/JavaScript", b"/JS", b"/Launch", b"/EmbeddedFile", b"/RichMedi
 
 
 def _pdf(c: Checked) -> None:
+    """Refuse locked or unreadable PDFs; store a copy REBUILT from the pages alone: the document catalog (open actions, named
+    JavaScript, embedded files, forms / XFA, outlines), the document information and XMP are not carried over, and each page loses
+    its actions (/AA) and annotations (links, attachments). The raw-byte look for script words is only an early, extra refusal."""
     from pypdf import PdfReader, PdfWriter
+    from pypdf.generic import NameObject
     raw = c.data
     if any(t in raw for t in _PDF_DANGER):
         c.refused = "a PDF with scripts, launch actions or embedded files is not accepted; print it to a new PDF and upload that"
         return
     try:
-        r = PdfReader(io.BytesIO(raw))
+        r = PdfReader(io.BytesIO(raw), strict=False)
         if r.is_encrypted:
             c.refused = "a password-protected PDF is not accepted; remove the password and upload again"
             return
-        w = PdfWriter(clone_from=r)
-        w.metadata = None                      # the document information (author, creator, producer, title)
-        root = w._root_object
-        if "/Metadata" in root:                # XMP
-            del root["/Metadata"]
+        if len(r.pages) > 2000:
+            c.refused = "the PDF has more than 2000 pages"
+            return
+        w = PdfWriter()
+        for page in r.pages:
+            w.add_page(page)
+        for page in w.pages:
+            for key in ("/AA", "/Annots"):
+                if NameObject(key) in page:
+                    del page[NameObject(key)]
+        w.metadata = None
         out = io.BytesIO(); w.write(out)
-        c.data = out.getvalue(); c.notes.append("PDF document details (author, title, software) removed")
-    except Exception as e:  # an unusual PDF: stored as it is (the reader may still read it), said plainly
-        c.notes.append(f"PDF details could not be removed ({type(e).__name__}); stored as uploaded")
+        data = out.getvalue()
+        check = PdfReader(io.BytesIO(data))
+        root = check.trailer["/Root"]
+        if any(k in root for k in ("/OpenAction", "/AA", "/Names", "/AcroForm", "/Metadata")):
+            c.refused = "the PDF could not be cleaned of its actions; print it to a new PDF and upload that"
+            return
+        c.data = data
+        c.notes.append("PDF rebuilt from its pages: document details (author, title, software), links, actions and attachments removed")
+    except Exception as e:
+        c.refused = f"the PDF could not be read safely ({type(e).__name__}); print it to a new PDF and upload that"
 
 
 def _image(c: Checked) -> None:
     from PIL import Image
-    Image.MAX_IMAGE_PIXELS = MAX_PIXELS
     fmt = {".jpg": "JPEG", ".jpeg": "JPEG", ".png": "PNG", ".tif": "TIFF", ".tiff": "TIFF", ".bmp": "BMP", ".webp": "WEBP"}[c.ext]
     try:  # only the decoder of the file's own type (pillow's other decoders, where most advisories are, are never reached)
-        im = Image.open(io.BytesIO(c.data), formats=[fmt])
+        im = Image.open(io.BytesIO(c.data), formats=[fmt])   # reads the header only
+        if im.size[0] * im.size[1] > MAX_PIXELS:
+            c.refused = "the image is too large (more than 100 megapixels)"
+            return
+        if getattr(im, "n_frames", 1) > MAX_FRAMES:
+            c.refused = f"the image has more than {MAX_FRAMES} pages"
+            return
         im.load()
     except Exception as e:  # includes Image.DecompressionBombError
         c.refused = f"the image could not be opened safely ({type(e).__name__})"
@@ -127,6 +167,9 @@ def _image(c: Checked) -> None:
         n = getattr(im, "n_frames", 1)
         for i in range(n):
             im.seek(i)
+            if im.size[0] * im.size[1] > MAX_PIXELS:
+                c.refused = "a page of the image is too large"
+                return
             f = im.copy()
             f.info = {}                        # EXIF, XMP, text chunks, comments
             frames.append(f)
@@ -159,6 +202,10 @@ def _zip_office(c: Checked) -> None:
     except zipfile.BadZipFile:
         c.refused = "the Office file is damaged"
         return
+    big = zip_too_big(zin)
+    if big:
+        c.refused = big
+        return
     if any(n.lower().endswith("vbaproject.bin") or n.lower().startswith("basic/") for n in names):
         c.refused = "an Office file with macros is not accepted; save it as a normal document and upload that"
         return
@@ -170,6 +217,15 @@ def _zip_office(c: Checked) -> None:
                 zout.writestr(info, _CORE_EMPTY)
             elif n in ("docProps/custom.xml",):
                 continue
+            elif n == "docProps/app.xml":
+                x = zin.read(n).decode("utf-8", "replace")
+                x = re.sub(r"<(Company|Manager|HyperlinkBase)>.*?</\1>", "", x, flags=re.S)
+                zout.writestr(info, x.encode("utf-8"))
+            elif n.endswith(("comments.xml", "commentsExtended.xml", "people.xml")) or "/comments/" in n or n.startswith("xl/threadedComments/"):
+                x = zin.read(n).decode("utf-8", "replace")
+                x = re.sub(r'(w:author|w:initials|w15:author|author|displayName|userId)="[^"]*"', r'\1=""', x)
+                x = re.sub(r"<author>.*?</author>", "<author></author>", x, flags=re.S)
+                zout.writestr(info, x.encode("utf-8"))
             elif c.ext == ".odt" and n == "meta.xml":
                 zout.writestr(info, _ODT_META_EMPTY)
             elif n == "mimetype":
@@ -178,7 +234,7 @@ def _zip_office(c: Checked) -> None:
                 zout.writestr(info, zin.read(n))
     if c.ext in OOXML and "docProps/custom.xml" in names:  # its relationship / content-type entries stay valid without the part
         pass
-    c.data = out.getvalue(); c.notes.append("document author and properties removed")
+    c.data = out.getvalue(); c.notes.append("document author, company and comment authors removed")
 
 
 def _rtf(c: Checked) -> None:
@@ -194,7 +250,9 @@ def _mask(v: str) -> str:
     keep = re.sub(r"\s", "", v)
     if len(keep) <= 4:
         return "•" * len(keep)
-    return keep[:2] + "•" * max(3, len(keep) - 4) + keep[-2:]
+    if len(keep) <= 9:  # a PIN code, a short id: one character each side
+        return keep[0] + "•" * (len(keep) - 2) + keep[-1]
+    return keep[:2] + "•" * (len(keep) - 4) + keep[-2:]
 
 
 _PATTERNS = [  # (kind, compiled, value group): ordered; overlapping matches of a later kind are dropped

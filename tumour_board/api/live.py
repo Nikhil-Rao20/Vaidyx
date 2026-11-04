@@ -27,7 +27,13 @@ def _must_change(websocket: WebSocket, user: str) -> bool:
     mgr = getattr(websocket.app.state, "auth_manager", None)
     fn = getattr(mgr, "must_change_password", None)
     try:
-        return bool(fn(user)) if callable(fn) else False
+        if callable(fn) and fn(user):
+            return True
+        # a guest reviewer (real_data) without two-step sign-in: no live channel either (5 Nov 2026 review)
+        if org.roles(user).get("real_data") and __import__("os").getenv("TB_REAL_DATA_2FA", "1").strip() != "0":
+            t = getattr(mgr, "totp_enabled", None)
+            return not (callable(t) and t(user))
+        return False
     except Exception:
         return True
 

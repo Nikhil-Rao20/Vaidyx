@@ -275,3 +275,94 @@ def test_identifier_kinds(text, kind):
                                   "Tumour size 2.5 x 1.8 x 1.2 cm, 3 of 14 nodes", "Name: Anonymized"])
 def test_blanks_and_clinical_numbers_are_not_identifiers(text):
     assert upload_safety.scan_text(text) == []
+
+
+# ---- the 5 Nov independent review --------------------------------------------------------------------------------------------
+
+def test_a_private_case_file_is_never_referred_nor_in_anyone_s_referral_inbox(app):
+    from tumour_board import referral
+    cid = create_private(app)["case_id"]
+    r = app.as_(GR).post(f"/cases/{cid}/referrals", json={"to": "medical_oncology", "reason": "second opinion"})
+    assert r.status_code == 403 and r.json()["detail"]["code"] == "guest_scope"
+    c = store.get_case(cid)                      # even a referral written straight into the file stays invisible
+    c["referrals"] = [{"to": "medical_oncology", "from": "breast_surgery", "status": "requested", "at": store.now_iso()}]
+    store.save_case(c)
+    for who in (RAO, MEHTA, ANIL):
+        assert cid not in json.dumps(referral.inbox(org.roles(who))), who
+
+
+def test_a_padded_id_is_not_a_case_file(app):
+    cid = create_private(app)["case_id"]
+    for path in (f"/cases/%20{cid}/documents", f"/cases/{cid}%20", f"/cases/%20{cid}"):
+        r = app.tc.post("/api/tb" + path, files=[("files", PLANTED_TXT)], data={"anonymized": "1"}) if path.endswith("documents") else app.as_(GR).get(path)
+        assert r.status_code == 404, (path, r.status_code)
+    assert store.list_docs(cid) == []
+
+
+@pytest.mark.parametrize("method,path", [("POST", "/intake/documents"), ("GET", "/intake"), ("POST", "/demo/TB-001"),
+                                         ("GET", "/his/lookup?identifier=VXH/26/004201")])
+def test_a_guest_stays_inside_their_private_case_files(app, method, path):
+    r = app.as_(GR).tc.request(method, "/api/tb" + path)
+    assert r.status_code == 403 and r.json()["detail"]["code"] == "guest_scope", r.text
+
+
+def test_a_guest_uploads_nowhere_else_even_where_everyone_may(app, monkeypatch):
+    monkeypatch.setenv("TB_UPLOAD_POLICY", "all")
+    o = org.load(); o["users"][GR]["departments"] = {"breast_surgery": "member"}; org.save(o, by="test")
+    plain = store.create_case("TB-PLAIN2", {"name": "SYNTHETIC"}, "breast", created_by=RAO)
+    plain["department"] = "breast_surgery"; store.save_case(plain)
+    r = upload(app.as_(GR), "TB-PLAIN2", [CLEAN_TXT])
+    assert r.status_code == 403 and r.json()["detail"]["code"] == "upload_private_only"
+
+
+def test_stored_names_are_neutral_and_the_audit_has_no_file_name(app):
+    cid = create_private(app)["case_id"]
+    r = upload(app.as_(GR), cid, [("Ramesh_Kumar_discharge.txt", CLEAN_TXT[1])], anonymized="1")   # a bare name is not detectable
+    assert r.status_code == 200, r.text
+    d = store.list_docs(cid)[0]
+    assert d["filename"] == "record-1.txt" and "Ramesh" not in json.dumps(d)
+    assert "Ramesh" not in json.dumps(store.read_audit(cid))
+
+
+def test_others_get_404_for_a_private_case_file(app):
+    cid = create_private(app)["case_id"]
+    for who in (RAO, MEHTA, ANIL):
+        assert app.as_(who).get(f"/cases/{cid}").status_code == 404, who
+
+
+def test_a_hex_escaped_script_does_not_survive_the_pdf_rebuild():
+    from pypdf import PdfReader, PdfWriter
+    from pypdf.generic import DictionaryObject, NameObject, TextStringObject
+    w = PdfWriter(); w.add_blank_page(200, 200)
+    w._root_object[NameObject("/OpenAction")] = DictionaryObject({NameObject("/S"): NameObject("/JavaScript"), NameObject("/JS"): TextStringObject("app.alert(1)")})
+    b = io.BytesIO(); w.write(b)
+    raw = b.getvalue().replace(b"/JavaScript", b"/J#61vaScript").replace(b"/JS ", b"/J#53 ")
+    c = upload_safety.check("x.pdf", raw)
+    if not c.refused:                                # rebuilt from the pages: no open action, no script left
+        assert b"JavaScript" not in c.data and "/OpenAction" not in PdfReader(io.BytesIO(c.data)).trailer["/Root"]
+
+
+def test_an_office_zip_bomb_is_refused():
+    b = io.BytesIO()
+    with zipfile.ZipFile(b, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("[Content_Types].xml", "<Types/>")
+        z.writestr("word/document.xml", "<w:t>" + "A" * (210 * 1024 * 1024) + "</w:t>")
+    c = upload_safety.check("big.docx", b.getvalue())
+    assert c.refused and ("unpacked" in c.refused or "expands" in c.refused)
+
+
+def test_short_values_are_masked_harder():
+    f = upload_safety.scan_text("Bengaluru - 560041")
+    assert f and f[0]["sample"] == "5••••1"
+
+
+def test_office_company_and_comment_authors_are_removed():
+    b = io.BytesIO()
+    with zipfile.ZipFile(b, "w") as z:
+        z.writestr("[Content_Types].xml", "<Types/>")
+        z.writestr("docProps/app.xml", "<Properties><Company>Sunrise Hospital</Company><Manager>Dr X</Manager></Properties>")
+        z.writestr("word/comments.xml", '<w:comments><w:comment w:author="Dr Somebody" w:initials="DS"/></w:comments>')
+        z.writestr("word/document.xml", "<w:document/>")
+    c = upload_safety.check("r.docx", b.getvalue())
+    z = zipfile.ZipFile(io.BytesIO(c.data))
+    assert b"Sunrise" not in z.read("docProps/app.xml") and b"Dr Somebody" not in z.read("word/comments.xml")

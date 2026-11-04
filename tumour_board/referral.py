@@ -275,6 +275,8 @@ def inbox(r: dict) -> list[dict]:
     since = (date.today() - timedelta(days=RECENT_DAYS)).isoformat()
     out = []
     for case, _st in notify._cases():
+        if access.hidden(r, case):  # a protected or private Case File: only for who may open it (5 Nov review)
+            continue
         for i, rec in enumerate(case.get("referrals") or []):
             if not isinstance(rec, dict):
                 continue

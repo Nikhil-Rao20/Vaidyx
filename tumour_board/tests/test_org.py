@@ -169,7 +169,7 @@ def test_validate_returns_a_cleaned_copy():
     o["routes"] = {"breast.cbc": "Pathology", "lung_nsclc.clinical_history": "owner", "breast.previous_board": "coordinator"}
     clean = org.validate(o)
     assert clean is not o and clean["users"]["ravi"] == {"departments": {"pathology": "head"}, "admin_of": [], "coordinator": False, "disabled": False, "display_name": "",
-                                                         "auditor": False, "outside_expert": False, "end_date": ""}
+                                                         "auditor": False, "outside_expert": False, "end_date": "", "real_data": False}
     assert clean["users"]["asha"]["departments"] == {"radiology": "member"} and clean["users"]["asha"]["admin_of"] == ["biochemistry"]  # V1 ids, aliases and "doctor" normalised
     assert clean["admins"] == ["a"] and clean["hospital"]["fetch_window_months"] == 24
     assert clean["routes"] == {"breast.cbc": "pathology", "lung_nsclc.clinical_history": "owner", "breast.previous_board": "coordinator"}
@@ -230,7 +230,7 @@ def test_v1_file_is_migrated_on_load_and_audited(data_root):
     assert "X-ray wing" in org.department("radiology")["aliases"]  # a custom V1 alias travels with its department
     assert org.department_id("Haematology") == "haematology"  # the V1 lab alias that now names a treating department is dropped
     assert o["users"]["rad"] == {"departments": {"radiology": "head"}, "admin_of": [], "coordinator": False, "disabled": False, "display_name": "Dr R",
-                                 "auditor": False, "outside_expert": False, "end_date": ""}
+                                 "auditor": False, "outside_expert": False, "end_date": "", "real_data": False}
     assert o["users"]["lab"]["departments"] == {"biochemistry": "member", "pathology": "member"}
     assert o["users"]["coord"]["coordinator"] is True and o["users"]["coord"]["departments"] == {}
     assert o["users"]["med"]["departments"] == {"medical_oncology": "member"}
@@ -334,14 +334,14 @@ def test_roles(people):
     assert people["two_dept"] == {"user": "meena", "admin": False, "vaidyx_admin": False, "root_admin": False, "coordinator": False,
                                   "departments": {"radiology": "member", "pathology": "member"}, "admin_of": [],
                                   "treating": {}, "supporting": {"radiology": "member", "pathology": "member"}, "disabled": False, "known": True,
-                                  "resident": {}, "resident_treating": {}, "auditor": False, "outside_expert": False, "end_date": "", "expired": False, "display_name": "Dr Meena Iyer"}
+                                  "resident": {}, "resident_treating": {}, "auditor": False, "outside_expert": False, "real_data": False, "end_date": "", "expired": False, "display_name": "Dr Meena Iyer"}
     assert people["head"]["departments"] == {"radiology": "head"} and people["head"]["known"]
     assert people["coordinator"]["coordinator"] and people["coordinator"]["departments"] == {} and people["coordinator"]["known"]
     assert people["vaidyx_admin"]["admin"] and people["vaidyx_admin"]["vaidyx_admin"] and not people["vaidyx_admin"]["root_admin"] and people["vaidyx_admin"]["known"]
     assert people["admin"]["admin"] and not people["admin"]["root_admin"] and people["admin"]["known"]
     assert people["unknown"] == {"user": "stranger", "admin": False, "vaidyx_admin": False, "root_admin": False, "coordinator": False, "departments": {},
                                  "admin_of": [], "treating": {}, "supporting": {}, "disabled": False, "known": False,
-                                 "resident": {}, "resident_treating": {}, "auditor": False, "outside_expert": False, "end_date": "", "expired": False, "display_name": ""}
+                                 "resident": {}, "resident_treating": {}, "auditor": False, "outside_expert": False, "real_data": False, "end_date": "", "expired": False, "display_name": ""}
     empty = org.roles("")
     assert empty["admin"] and empty["known"]
     assert org.roles(None)["admin"]
