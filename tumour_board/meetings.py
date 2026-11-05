@@ -877,6 +877,24 @@ def _repair_interrupted(s: dict) -> bool:
     return changed
 
 
+def _gone_filter():
+    """A test for a Case File id that is gone from this meeting's view: deleted (a guest reviewer's private Case File removed, 5 Nov
+    2026) or kept off the board (config.BOARD_HIDDEN). Questions, answers, outcomes and cards about it are left out of the screens;
+    the stored meeting record and its audit stay as they are."""
+    cache: dict = {}
+
+    def gone(cid) -> bool:
+        if not cid:
+            return False
+        if cid not in cache:
+            try:
+                cache[cid] = cid in config.BOARD_HIDDEN or not store.get_case(cid)
+            except Exception:
+                cache[cid] = True
+        return cache[cid]
+    return gone
+
+
 def view(mid: str, r: dict) -> dict:
     """The GET /meetings/{mid} payload (also the first WebSocket message). A viewer who is not admitted (waiting, or a department on the
     attendance sheet that did not join) sees the agenda with initials for the Case Files it may not read in full, and none of the live
@@ -894,13 +912,15 @@ def view(mid: str, r: dict) -> dict:
     cur = s.get("current")
     code = s.get("code") if manage(r) and isinstance(s.get("code"), dict) else None
     dl = LIVE_DECISION.get(mid) or {"text": "", "by": "", "at": None, "case_id": None}
-    cards = {cid: sorted(v.keys()) for cid, v in (s.get("cards") or {}).items() if isinstance(v, dict)}
+    gone = _gone_filter()
+    cards = {cid: sorted(v.keys()) for cid, v in (s.get("cards") or {}).items() if isinstance(v, dict) and not gone(cid)}
     cv = current_view(s)
     outcomes = {cid: (oc if full is None or cid in full else {k: v for k, v in oc.items() if k in ("outcome", "label", "at", "moved_to", "flagged")})
-                for cid, oc in (s.get("outcomes") or {}).items() if isinstance(oc, dict)}
+                for cid, oc in (s.get("outcomes") or {}).items() if isinstance(oc, dict) and not gone(cid)}
+    if not member or gone(dl.get("case_id")):
+        dl = {"text": "", "by": "", "at": None, "case_id": None}
     if not member:
         cv = {**cv, "opened": None}
-        dl = {"text": "", "by": "", "at": None, "case_id": None}
     af = _agent_fields(s)
     if not member:
         af["agents"] = agents_public(af["agents"])  # no record quotes for a viewer who is not admitted
@@ -908,7 +928,7 @@ def view(mid: str, r: dict) -> dict:
             "code": {"value": code["value"], "expires_at": code.get("expires_at"), "attempts": code.get("attempts", 0)} if code else None,
             "attendance": attendance_rows(s), "current": cv, "view": view_state(s) if member else None,
             "recording": _recording_view(s),  # the recorder's state for every screen (meetings-v2 5.1)  # the follow state for the members only (2.2)
-            "decision_live": dl, "questions": list(s.get("questions") or []) if member else [],
+            "decision_live": dl, "questions": [q for q in s.get("questions") or [] if not (isinstance(q, dict) and gone(q.get("case_id")))] if member else [],
             "hands": list(s.get("hands") or []), **af, "spotlight": spotlight_view(s),
             "quorum": quorum_view(s), "present_allowed": present_allowed_view(s), "presenting": (s.get("live") or {}).get("presenting") or None,
             "chat": _chat_lines(s, r, list(s.get("chat") or [])[-CHAT_VIEW:]) if member else [],

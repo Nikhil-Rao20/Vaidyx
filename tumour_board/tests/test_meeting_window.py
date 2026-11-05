@@ -6,6 +6,7 @@ expert, never a protected Case File; REQUESTS becomes READ only inside the windo
 The follow state: `view` in the meeting record, set by the coordinator or the presenter of the Case File on the floor through
 POST /meetings/{mid}/view, reset by Next, sent over the socket, audited without the quote; images reuse open_item's viewing grant.
 Hermetic: the fixtures of test_nik_meetings (fake logins, synthetic Case Files TB-001..003, no model, no hospital system)."""
+import json
 from datetime import datetime, timedelta
 
 import pytest
@@ -336,3 +337,22 @@ def test_the_guest_sends_a_private_case_file_onto_a_planned_meeting(tc):  # noqa
     finally:
         config.PROTECTED_CASES.discard("TB-001") if isinstance(config.PROTECTED_CASES, set) else None
     assert mid
+
+
+def test_questions_about_a_deleted_case_file_leave_the_meeting_screens(tc):  # noqa: F811
+    """5 Nov 2026: a guest reviewer's private Case File deleted after its meeting: the agents' answers about it (which quote its records)
+    and its outcome are no longer shown; the stored meeting record and its audit are not edited."""
+    import shutil
+    mid = started(tc, discussion=("TB-001", "TB-002"), noting=())
+    s = meetings.get(mid)
+    s.setdefault("questions", []).append({"id": "Q1", "case_id": "TB-001", "text": "What does the biopsy say?", "role": "pathology",
+                                          "answer": {"text": "SYNTHETIC answer quoting TB-001", "statements": []}, "at": store.now_iso()})
+    s.setdefault("outcomes", {})["TB-001"] = {"outcome": "discussed", "decision_text": "SYNTHETIC decision for TB-001"}
+    meetings._save(s)
+    v = As(tc, "anil").get(f"/meetings/{mid}").json()
+    assert any(q.get("id") == "Q1" for q in v["questions"]) and "TB-001" in v["outcomes"]
+    shutil.rmtree(store.case_dir("TB-001"))
+    v = As(tc, "anil").get(f"/meetings/{mid}").json()
+    assert not any(q.get("id") == "Q1" for q in v["questions"]) and "TB-001" not in v["outcomes"]
+    assert "SYNTHETIC answer quoting TB-001" not in json.dumps(v)
+    assert any(q.get("id") == "Q1" for q in meetings.get(mid)["questions"])          # the stored record is unchanged
