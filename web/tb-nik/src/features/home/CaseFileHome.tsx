@@ -52,7 +52,7 @@ export function CaseFileHome({ me }: { me: Me }) {
         subtitle={`${greeting()}${name ? `, ${name}` : ""}. Here are ${where}.`}
         actions={
           <>
-            <JoinButton label="Join a Case File" hint="6-digit code from the consultant" onClick={() => setJoin("case")} />
+            {me.real_data ? null : <JoinButton label="Join a Case File" hint="6-digit code from the consultant" onClick={() => setJoin("case")} />}
             <JoinButton label="Join a meeting" hint="6-digit code from the coordinator" onClick={() => setJoin("meeting")} />
             {canCreate ? (
               <ClickSpark sparkColor="var(--primary)" sparkCount={8} sparkRadius={18} duration={420}>
@@ -66,8 +66,9 @@ export function CaseFileHome({ me }: { me: Me }) {
       />
       <WaitingStrip me={me} />
       {coordinator ? <NextMeetingCard readyCount={counts?.ready ?? 0} waitingCount={counts?.waiting ?? 0} /> : null}
-      {canCreate && counts && counts.all === 0 ? <GiftBox className="mb-5" /> : null}
-      {canCreate && counts && counts.all > 0 && counts.all < 3 ? <GiftBox compact className="mb-5" /> : null}
+      {/* a guest reviewer (real_data) has no hospital system to fetch from: no UHID box (5 Nov 2026) */}
+      {canCreate && !me.real_data && counts && counts.all === 0 ? <GiftBox className="mb-5" /> : null}
+      {canCreate && !me.real_data && counts && counts.all > 0 && counts.all < 3 ? <GiftBox compact className="mb-5" /> : null}
       <AskPubMedCard className="mb-5" />
       <CaseFileList me={me} canCreate={canCreate} onCount={onCount} />
       <JoinDialog kind={join ?? "case"} open={join !== null} onOpenChange={(o) => { if (!o) setJoin(null); }} />
