@@ -26,8 +26,8 @@ read, restart or edit their units, files, certificates or nginx sites. Every VM 
 ## Setting up the doctors' instance (H200, once)
 
 ```bash
-/data/vaidyx/venv/tb_deploy/bin/python deploy/h200/setup_instance.py --app /data/vaidyx/tb_deploy/app   # synthetic cases, logins
-/data/vaidyx/venv/tb_deploy/bin/python deploy/h200/demo_owners.py   # after the app and gate run: TB-001..TB-008 get their department
+/data/vaidyx/venv/tb_deploy312/bin/python deploy/h200/setup_instance.py --app /data/vaidyx/tb_deploy/app   # synthetic cases, logins
+/data/vaidyx/venv/tb_deploy312/bin/python deploy/h200/demo_owners.py   # after the app and gate run: TB-001..TB-008 get their department
 ```
 
 `demo_owners.py` signs in as the MDT Coordinator and uses the app's own audited route, so each doctor finds the practice Case
@@ -45,11 +45,13 @@ python -m his_mock.auth --reset`, run from the pinned checkout.
 
 ## Python environment
 
-The doctors' site (app, gate, HIMS copy, release tests) runs on its own environment `/data/vaidyx/venv/tb_deploy`, built from
-`requirements-ci.lock` (the pins CI tests, with the security upgrades). Rebuild: create it from the base Python 3.10
-(`/opt/miniforge3/envs/mlenv/bin/python3.10 -m venv`), `pip install pip==26.2.1`, `pip install -r requirements-ci.lock`. The shared
-`/data/vaidyx/venv/app` (internal app, public demo) is separate. Still open: pillow, filelock and dnspython fixes need Python 3.11+
-(and a newer fastembed); upload_safety opens images only with the decoder of their own type meanwhile.
+The doctors' site (app, gate, HIMS copy, release tests) runs on its own environment `/data/vaidyx/venv/tb_deploy312` (Python 3.12),
+built from `requirements-ci.lock` (the pins CI tests, with the security upgrades). Rebuild: `/usr/bin/python3.12 -m venv
+/data/vaidyx/venv/tb_deploy312`, `pip install pip==26.2.1`, `pip install -r requirements-ci.lock`. The shared `/data/vaidyx/venv/app`
+(internal app, public demo) is separate. The earlier Python 3.10 environment `/data/vaidyx/venv/tb_deploy` is kept for a rollback:
+deploying a commit from before the move starts the site on it again. The search model is the same file in both (fastembed 0.9.1 names
+its source `Snowflake/...`, so its cache folder is `models--Snowflake--...`; the vectors are bit-identical). chromadb has advisories
+without a fix; the Tumour Board does not use it.
 
 ## Everyday commands (H200)
 

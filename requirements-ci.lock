@@ -1,7 +1,8 @@
-# Exact package versions of the H200 app venv (Python 3.10), used by CI (.github/workflows/gate.yml).
-# Refresh: /data/vaidyx/venv/app/bin/pip freeze --exclude-editable > requirements-ci.lock (then check CI).
-# Security bumps 2026-11-05 (aiohttp, brotli, certifi, opentelemetry-api + sdk + semantic-conventions, pypdf); the
-# same pins are installed in /data/vaidyx/venv/tb_deploy. pillow, filelock and dnspython fixes need Python 3.11+.
+# Exact package versions of the doctors' site environment /data/vaidyx/venv/tb_deploy312 (Python 3.12), used by CI (.github/workflows/gate.yml).
+# Refresh: /data/vaidyx/venv/tb_deploy312/bin/pip freeze --exclude-editable > requirements-ci.lock (then check CI).
+# 2026-11-05: moved from Python 3.10 to 3.12 for the security fixes of pillow 13.0.0, filelock 4.2.9 and dnspython 2.9.2 (with fastembed
+# 0.9.1: the same model file, bit-identical vectors); earlier the same day aiohttp, brotli, certifi, opentelemetry and pypdf.
+# chromadb 1.5.9 has advisories without a fix; the Tumour Board does not use it.
 aiohappyeyeballs==2.7.1
 aiohttp==3.14.4
 aiosignal==1.4.0
@@ -10,7 +11,6 @@ annotated-types==0.8.0
 anyio==4.15.1
 async-timeout==5.0.1
 attrs==26.1.0
-backports.asyncio.runner==1.2.0
 bcrypt==5.0.0
 beautifulsoup4==4.15.0
 brotli==1.2.1
@@ -27,13 +27,13 @@ croniter==6.2.4
 cryptography==50.0.2
 cssselect2==0.10.1
 defusedxml==0.7.1
-dnspython==2.8.0
+dnspython==2.9.2
 durationpy==0.11
 et_xmlfile==2.0.0
 exceptiongroup==1.3.1
 fastapi==0.142.2
-fastembed==0.8.1
-filelock==4.0.9
+fastembed==0.9.1
+filelock==4.2.9
 flatbuffers==25.12.19
 fonttools==4.65.0
 frozenlist==1.8.0
@@ -90,7 +90,7 @@ orjson==3.12.0
 overrides==7.7.0
 packaging==26.3
 pandas==2.3.3
-pillow==12.3.0
+pillow==13.0.0
 playwright==1.63.0
 pluggy==1.6.0
 propcache==0.5.4

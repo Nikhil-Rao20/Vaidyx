@@ -395,6 +395,9 @@ def test_the_coordinator_lists_and_reads_a_private_case_file_but_changes_nothing
     assert app.as_(ANIL).delete(f"/cases/{cid}").status_code == 403
     assert app.as_(ANIL).post(f"/cases/{cid}/ready", json={}).status_code == 403
     assert store.case_dir(cid).exists() and len(store.list_docs(cid)) == 1
+    hs = app.as_(ANIL).get(f"/cases/{cid}/helpers").json()["helpers"]
+    assert hs and not any(h["prepare_allowed"] for h in hs)                   # no Prepare buttons for a reader
+    assert app.as_(ANIL).post(f"/cases/{cid}/helpers/prepare-all", json={}).status_code == 403
     from tumour_board import access
     assert access.scope(org.roles(ANIL), store.get_case(cid)) == access.READ
     assert not access.coordinator_view(org.roles(GR), store.get_case(cid))      # a guest never gets the coordinator's view

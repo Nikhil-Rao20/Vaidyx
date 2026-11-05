@@ -120,7 +120,8 @@ def list_helpers(case_id, roles=None) -> list:
     sig = rules.case_signature(case_id, st)
     chats = load_chats(case_id)
     allowed = bool(isinstance(roles, dict) and (roles.get("admin") or org.can(roles, "list_case") or access.may(roles, "upload_to_case", case)
-                                                 or (roles.get("resident_treating") and access.owner(case) in roles["resident_treating"])))
+                                                 or (roles.get("resident_treating") and access.owner(case) in roles["resident_treating"]))
+                   and not access.coordinator_view(roles, case))  # a guest reviewer's private Case File: the coordinator only reads it
     hook = _ready_hook_queue(case_id)
     out = []
     for role in ROLES:

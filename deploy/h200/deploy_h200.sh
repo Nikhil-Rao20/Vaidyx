@@ -40,7 +40,7 @@ else
 fi
 
 # The tests CI cannot run (they need files kept only on the H200, deploy/ci/h200_only_tests.txt), on the new checkout.
-PY=${VX_PY:-/data/vaidyx/venv/tb_deploy/bin/python}   # the doctors' site's own environment (vx.sh)
+PY=${VX_PY:-/data/vaidyx/venv/tb_deploy312/bin/python}   # the doctors' site's own environment (vx.sh)
 H200_TESTS=$(grep -v '^#' "$APP/deploy/ci/h200_only_tests.txt" 2>/dev/null | grep .)
 if [ -n "$H200_TESTS" ]; then
   if ! (cd "$APP" && "$PY" -m pytest -q -p no:cacheprovider $H200_TESTS > "$HOME/vaidyx/deploy_vm/logs/h200_tests.log" 2>&1); then
@@ -53,11 +53,17 @@ if [ -n "$H200_TESTS" ]; then
 fi
 
 # The gate and the link run from the pinned checkout too. A changed gate.py restarts the gate at once (its port is never left
-# empty for the app's restart); a changed vx.sh (for example the link's port) restarts the link.
+# empty for the app's restart); a changed vx.sh (for example the link's port or the Python environment) restarts the gate, the
+# demo hospital copy and the link, so every process runs what vx.sh now says.
 VX="$APP/deploy/h200/vx.sh"
 changed() { [ -n "$PREV" ] && ! git -C "$APP" diff --quiet "$PREV" "$SHA" -- "$1"; }
 if changed deploy/h200/gate.py; then echo "gate.py changed: restarting the gate"; "$VX" restart-gate || echo "gate restart failed"; fi
-if changed deploy/h200/vx.sh; then echo "vx.sh changed: restarting the link"; "$VX" restart-link || echo "link restart failed"; fi
+if changed deploy/h200/vx.sh; then
+  echo "vx.sh changed: restarting the gate, the demo hospital copy and the link"
+  changed deploy/h200/gate.py || "$VX" restart-gate || echo "gate restart failed"
+  "$VX" restart-his || echo "demo hospital restart failed"
+  "$VX" restart-link || echo "link restart failed"
+fi
 
 if "$VX" restart-app && "$VX" ensure; then
   note "deployed ${SHA:0:7} (from ${PREV:0:7}) ci=${CI:-skipped} · $("$VX" status | tr '\n' ' ')"
