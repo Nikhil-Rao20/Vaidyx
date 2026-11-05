@@ -172,7 +172,7 @@ export function StepLogistics({ form, onChange, settingLabel, protocolLabel }: {
           <KeyValue label="Records" value={guest ? "you add the files after Create" : form.windowMonths === "all" ? "everything on record" : `last ${form.windowMonths} months`} />
           <KeyValue label="Board date" value={form.boardDate ? <span className="inline-flex items-center gap-1"><CalendarDays className="size-3.5" aria-hidden /> {formatDate(form.boardDate)}</span> : ""} fallback="not set" />
           <KeyValue label="Urgency" value={form.urgency ? String(form.urgency) : ""} fallback="choose one above" />
-          {guest ? <KeyValue label="Who sees it" value="only you (private)" /> : null}
+          {guest ? <KeyValue label="Who sees it" value="you and the MDT Coordinator (private)" /> : null}
           {guest ? null : <KeyValue label="Join code" value={form.joinCode ? <span className="inline-flex items-center gap-1"><KeyRound className="size-3.5" aria-hidden /> made after creation</span> : "no"} />}
         </KeyValueList>
       </section>

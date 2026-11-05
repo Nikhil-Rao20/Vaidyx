@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { MicButton } from "@/components/MicButton";
 import { notify } from "@/components/Toasts";
 import { ApiError } from "@/lib/api";
+import { useSession } from "@/lib/session";
 import { routeMissing } from "@/lib/live";
 import { stopSpeaking } from "@/lib/voice";
 import { cn } from "@/lib/utils";
@@ -80,6 +81,7 @@ function ThreadRow({ t, onOpen, active }: { t: PubMedThread; onOpen: () => void;
 
 export function PubMedAsk({ caseId, variant = "page", initialQuestion, autoAsk, canSave, compact, note }: PubMedAskProps) {
   const qc = useQueryClient();
+  const { me } = useSession();
   const reduce = useReducedMotion();
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
   const key = useMemo(() => threadsKey(caseId), [caseId]);
@@ -209,7 +211,7 @@ export function PubMedAsk({ caseId, variant = "page", initialQuestion, autoAsk, 
         className={cn("resize-y text-sm", page ? "min-h-20" : "min-h-14")} />
       <div className="flex flex-wrap items-center gap-2">
         <span className="min-w-[11rem] flex-1 text-xs text-muted-foreground">
-          {caseId ? "The search may add this Case File's cancer and documented terms. Never a name or number." : "Only search words go to PubMed, never a name or number."}
+          {me?.real_data ? "Search words leave this server for PubMed (NCBI, USA): do not type a name or anything that could identify the patient." : caseId ? "The search may add this Case File's cancer and documented terms. Never a name or number." : "Only search words go to PubMed, never a name or number."}
         </span>
         <MicButton target={inputRef} screen="pubmed" context="question" caseId={caseId} label="Dictate the question" hint={false}
           onInsert={(next) => { if (next.length > MAX_Q) setQuestion(next.slice(0, MAX_Q)); }} />

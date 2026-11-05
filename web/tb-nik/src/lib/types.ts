@@ -73,7 +73,7 @@ export interface CaseListItem {
   last_change?: string;
   created?: string;
   residents_count?: number;
-  /** A guest reviewer's private Case File (only its creator sees it). */
+  /** A guest reviewer's private Case File (its creator and the MDT Coordinator see it). */
   private?: boolean;
   /** Free text name when the cancer has no built checklist. */
   cancer_name?: string;

@@ -85,7 +85,7 @@ def test_nobody_else_sees_or_opens_it(app):
     cid = create_private(app)["case_id"]
     assert cid in [x.get("case_id") or x.get("id") for x in _cases(app, GR)]
     assert app.as_(GR).get(f"/cases/{cid}").status_code == 200
-    for who in (RAO, MEHTA, ANIL, VX):                 # same department, another department, the coordinator, the Vaidyx admin
+    for who in (RAO, MEHTA, VX):                       # same department, another department, the Vaidyx admin (the coordinator reads it: below)
         assert cid not in [x.get("case_id") or x.get("id") for x in _cases(app, who)], who
         assert app.as_(who).get(f"/cases/{cid}").status_code in (403, 404), who
         assert cid not in app.as_(who).get(f"/cases/{cid}").text or who == VX
@@ -135,24 +135,17 @@ def test_the_uploader_confirms_the_files_are_anonymized(app):
     assert d["uploaded"]["anonymized_by_uploader"] is True and d["uploaded"]["by"] == GR and d["uploaded"]["text_checked"] is True
 
 
-def test_likely_identifiers_stop_the_upload_until_upload_anyway_with_a_reason(app):
+def test_likely_identifiers_are_noted_not_blocking(app):
+    """Eswar, 5 Nov 2026: finding identifiers is not strictly needed; the upload goes through and only the kinds are recorded."""
     cid = create_private(app)["case_id"]
     r = upload(app.as_(GR), cid, [PLANTED_TXT], anonymized="1")
-    assert r.status_code == 409 and r.json()["detail"]["code"] == "possible_identifiers"
-    kinds = {f["kind"] for f in r.json()["detail"]["findings"]}
-    assert {"patient name", "mobile number", "12-digit number (Aadhaar-like)", "hospital id"} <= kinds
-    for raw in ("Ramesh Kumar", "98450 12312", "4821 7733 9919", "VXH/26/004201"):
-        assert raw not in r.text                       # masked samples only
-    assert store.list_docs(cid) == []                  # nothing stored
-    assert "Ramesh" not in json.dumps(store.read_audit(cid))
-    r = upload(app.as_(GR), cid, [PLANTED_TXT], anonymized="1", confirm="1")
-    assert r.status_code == 400 and r.json()["detail"]["code"] == "reason_required"
-    r = upload(app.as_(GR), cid, [PLANTED_TXT], anonymized="1", confirm="1", reason="Synthetic test file")
     assert r.status_code == 200, r.text
     d = store.list_docs(cid)[0]
-    assert d["uploaded"]["upload_anyway_reason"] == "Synthetic test file" and d["uploaded"]["identifiers_at_upload"]
+    kinds = {f["kind"] for f in d["uploaded"]["identifiers_at_upload"]}
+    assert {"patient name", "mobile number", "12-digit number (Aadhaar-like)", "hospital id"} <= kinds
+    assert "upload_anyway_reason" not in d["uploaded"]
     ev = [e for e in store.read_audit(cid) if e.get("kind") == "private_upload"][-1]
-    assert ev["upload_anyway"] is True and "Ramesh" not in json.dumps(ev)
+    assert ev["possible_identifiers"] and "Ramesh" not in json.dumps(ev) and "Ramesh" not in json.dumps(d["uploaded"])
 
 
 @pytest.mark.parametrize("f,why", [(("scan.dcm", b"\x00" * 200), "not accepted"), (("report.pdf", b"MZ\x90\x00 not a pdf"), "does not match"),
@@ -328,7 +321,7 @@ def test_stored_names_are_neutral_and_the_audit_has_no_file_name(app):
 
 def test_others_get_404_for_a_private_case_file(app):
     cid = create_private(app)["case_id"]
-    for who in (RAO, MEHTA, ANIL):
+    for who in (RAO, MEHTA):                     # the coordinator reads it (Eswar, 5 Nov 2026)
         assert app.as_(who).get(f"/cases/{cid}").status_code == 404, who
 
 
@@ -382,3 +375,27 @@ def test_a_private_case_file_offers_no_sharing_actions(app):
     p = app.as_(GR).get(f"/cases/{cid}").json()["permissions"]
     assert not any(p.get(k) for k in ("send_request", "create_request", "refer", "mark_ready", "manage_participants", "remind"))
     assert p["upload"] is True and p["delete_case"] is True
+
+
+def test_the_coordinator_lists_and_reads_a_private_case_file_but_changes_nothing(app):
+    """Eswar, 5 Nov 2026: the guest reviewer and the MDT Coordinator see a private Case File; the coordinator only reads it."""
+    cid = create_private(app)["case_id"]
+    assert upload(app.as_(GR), cid, [CLEAN_TXT], anonymized="1").status_code == 200
+    assert cid in [x.get("case_id") or x.get("id") for x in _cases(app, ANIL)]
+    r = app.as_(ANIL).get(f"/cases/{cid}")
+    assert r.status_code == 200, r.text
+    perms = r.json().get("permissions") or {}
+    assert perms and not any(v for v in perms.values() if isinstance(v, bool)), perms
+    assert not any(x for v in perms.values() if isinstance(v, dict) for x in v.values()), perms
+    rows = app.as_(ANIL).get("/case-list").json()
+    rows = rows.get("rows", rows.get("cases", rows)) if isinstance(rows, dict) else rows
+    mine = [x for x in rows if x.get("case_id") == cid]
+    assert mine and mine[0]["relation"] == "coordinator" and mine[0]["private"] is True
+    assert upload(app.as_(ANIL), cid, [CLEAN_TXT], anonymized="1").status_code in (403, 404)
+    assert app.as_(ANIL).delete(f"/cases/{cid}").status_code == 403
+    assert app.as_(ANIL).post(f"/cases/{cid}/ready", json={}).status_code == 403
+    assert store.case_dir(cid).exists() and len(store.list_docs(cid)) == 1
+    from tumour_board import access
+    assert access.scope(org.roles(ANIL), store.get_case(cid)) == access.READ
+    assert not access.coordinator_view(org.roles(GR), store.get_case(cid))      # a guest never gets the coordinator's view
+    assert not access.coordinator_view(org.roles(ANIL), store.get_case("TB-2026-bharath") or {"case_id": "TB-2026-bharath"})  # never the real case

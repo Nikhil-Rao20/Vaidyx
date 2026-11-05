@@ -204,7 +204,8 @@ class _ModelErrorRoute(APIRoute):
                         if ((rl.get("vaidyx_admin") or sc == access.READ) and request.method in ("POST", "PUT", "PATCH", "DELETE")
                                 and not _BREAK_GLASS_OK.match(m.group(2) or "")):  # a window (the admin's, or a doctor's opened with a reason) only reads
                             msg = ("A break-glass window is read only: the Vaidyx admin reads the Case File, the owning department acts on it."
-                                   if rl.get("vaidyx_admin") else access.READ_ONLY_MESSAGE
+                                   if rl.get("vaidyx_admin") else "A guest reviewer's private Case File: you can read it; only the guest reviewer changes it."
+                                   if access.coordinator_view(rl, m.group(1)) else access.READ_ONLY_MESSAGE
                                    if access._doctor_open(rl, store.get_case(m.group(1)) or {}) else access.MEETING_READ_MESSAGE)  # the meeting window (meetings-v2 2.2)
                             return JSONResponse({"detail": {"message": msg, "code": "break_glass_read_only"}}, status_code=403)
                         if request.method in ("POST", "PUT", "PATCH", "DELETE") and not _ARCHIVE_OK.match(m.group(2) or ""):
@@ -321,7 +322,7 @@ def _doc_department(d):
 def _private_upload_check(case_id, data, user, anonymized, confirm, reason):
     """(cleaned data, per-file upload record, None) or (.., .., JSONResponse refusal) for an upload into a private Case File.
     The uploader confirms the files are anonymized; refused types and dangerous files stop the whole upload; likely identifiers
-    stop it until the uploader chooses "upload anyway" with a reason (both audited, the values never: masked samples only)."""
+    are only recorded (kinds and positions, never the values) and shown as a note on the record (Eswar, 5 Nov 2026)."""
     from tumour_board import upload_safety
     if str(anonymized).strip() != "1":
         return data, None, JSONResponse({"detail": {"message": "Confirm that these files are anonymized (no name, phone, Aadhaar, address or hospital id).",
@@ -334,22 +335,17 @@ def _private_upload_check(case_id, data, user, anonymized, confirm, reason):
         return data, None, JSONResponse({"detail": {"message": "Some files cannot be uploaded.", "code": "upload_refused", "files": refused}}, status_code=415)
     findings = [{"file": c.name, **f} for c in checked for f in c.findings]
     why = str(reason or "").strip()[:500]
-    if findings and str(confirm).strip() != "1":
-        store.audit(case_id, {"kind": "private_upload_identifiers", "by": user,
-                              "found": [{"n": next(i + 1 for i, c in enumerate(checked) if c.name == x["file"]), "kind": x["kind"], "where": x["where"]} for x in findings]})
-        return data, None, JSONResponse({"detail": {"message": "These files may still identify the patient.", "code": "possible_identifiers",
-                                                    "findings": findings}}, status_code=409)
-    if findings and len(why) < 5:
-        return data, None, JSONResponse({"detail": {"message": "Give a short reason for uploading anyway.", "code": "reason_required"}}, status_code=400)
+    # Likely identifiers no longer stop the upload (Eswar, 5 Nov 2026: "not strictly needed ... don't over stress on that"): they are
+    # recorded (kinds and positions only) and the record shows a small note; the uploader's confirmation above is the rule.
     now = store.now_iso()
     start = len(store.list_docs(case_id))
     stored = [f"record-{start + i + 1}{c.ext}" for i, c in enumerate(checked)]  # neutral names: the uploaded name may carry a name
     meta = {stored[i]: {"uploaded": {"by": user, "at": now, "anonymized_by_uploader": True, "cleaned": c.notes,
                                   "text_checked": c.text_checked,
                                   "identifiers_at_upload": [{"kind": f["kind"], "where": f["where"]} for f in c.findings],
-                                  **({"upload_anyway_reason": why} if c.findings else {})}} for i, c in enumerate(checked)}
+                                  **({"upload_anyway_reason": why} if c.findings and why else {})}} for i, c in enumerate(checked)}
     store.audit(case_id, {"kind": "private_upload", "by": user, "files": len(checked), "anonymized_confirmed": True,
-                          **({"upload_anyway": True, "reason": why, "kinds": sorted({x["kind"] for x in findings})} if findings else {})})
+                          **({"possible_identifiers": sorted({x["kind"] for x in findings}), **({"reason": why} if why else {})} if findings else {})})
     return [(stored[i], c.data) for i, c in enumerate(checked)], meta, None
 
 
@@ -381,6 +377,8 @@ def _case_permissions(r, c, st, docs):
     """_case_permissions_all, with a private Case File (guest reviewer) offering nothing that brings other people in: no requests to
     departments, no referral, no participants, no Send to the board, no reminders (the routes refuse them too, _GUEST_NO_WRITE)."""
     p = _case_permissions_all(r, c, st, docs)
+    if config.is_private(c.get("case_id")) and not access.is_creator(r, c):  # the coordinator reads it (scope READ): nothing to do
+        return {k: (False if isinstance(v, bool) else {kk: False for kk in v} if isinstance(v, dict) else v) for k, v in p.items()}
     if config.is_private(c.get("case_id")):
         for k in ("send_request", "create_request", "close_request", "refer", "manage_participants", "withdraw_referral", "mark_ready",
                   "remind", "refetch", "link_registration", "set_owner"):
@@ -876,7 +874,7 @@ def setup_tumour_board_routes():
         out = []
         for c in store.list_cases():  # only the Case Files this user may open (V2 item 5.1)
             sc = access.scope(rl, c)
-            if sc and sc != access.READ:  # a Case File opened with a reason is never listed (item 1.9)
+            if sc and (sc != access.READ or access.coordinator_view(rl, c)):  # a Case File opened with a reason is never listed (item 1.9); a private one is, for the coordinator
                 out.append({**_his_brief(_case_summary.case_for(c, sc)), "scope": sc, "owner_name": org.department_name(access.owner(c)) if access.owner(c) else "",
                             "participants": access.participants(c), "linked": len(c.get("linked_cases") or []), "referral": (access.open_referral(c) or {}).get("to")})
         return {"cases": out, "demo": service.list_demo()}

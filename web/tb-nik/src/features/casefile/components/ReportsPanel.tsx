@@ -264,7 +264,7 @@ export function UploadDialog({ open, onOpenChange, caseId, hisCase, privateCase 
           <DialogTitle>{privateCase ? "Add the anonymized files" : "Upload outside report"}</DialogTitle>
           <DialogDescription id="upload-desc">
             {privateCase
-              ? "PDF, images (JPG, PNG, TIFF), Word, Excel, PowerPoint, OpenDocument, RTF, TXT or CSV, up to 60 MB each. Hidden details (author, camera, location) are removed before storing; each file is checked for anything that could still identify the patient."
+              ? "PDF, images (JPG, PNG, TIFF), Word, Excel, PowerPoint, OpenDocument, RTF, TXT or CSV, up to 60 MB each. Hidden details (author, camera, location) are removed before storing."
               : "A report from another hospital or a private laboratory. PDF or an image, up to 60 MB each. It is read and checked against the patient's identity like every other report."}
           </DialogDescription>
         </DialogHeader>

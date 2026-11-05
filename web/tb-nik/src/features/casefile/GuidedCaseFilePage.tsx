@@ -408,7 +408,9 @@ export default function GuidedCaseFilePage() {
 
       {cf.case.private ? (
         <p role="status" className="flex items-center gap-2 rounded-md border border-border bg-muted px-3 py-2 text-sm">
-          <Lock className="size-4 shrink-0" aria-hidden /> <span><span className="font-medium">Private:</span> only you can see this Case File. It is deleted automatically 90 days after it was created.</span>
+          <Lock className="size-4 shrink-0" aria-hidden /> {me?.user && me.user === cf.case.created_by
+            ? <span><span className="font-medium">Private:</span> only you and the MDT Coordinator can see this Case File. It is deleted automatically 90 days after it was created.</span>
+            : <span><span className="font-medium">Private:</span> a guest reviewer's Case File. You can read it; only the guest reviewer changes it.</span>}
         </p>
       ) : null}
       {teamq.data?.archived ? <p role="status" className="rounded-md border border-border bg-muted px-3 py-2 text-sm">Archived{teamq.data.archived.reason ? `: ${teamq.data.archived.reason}` : ""}. Read only.</p> : null}

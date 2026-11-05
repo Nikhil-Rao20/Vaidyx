@@ -128,6 +128,14 @@ def is_creator(r: dict, case: dict) -> bool:
     return bool(u) and isinstance(case, dict) and u == str(case.get("created_by") or "")
 
 
+def coordinator_view(r: dict, case) -> bool:
+    """The MDT Coordinator on a guest reviewer's private Case File (Eswar, 5 Nov 2026): it is listed for them and opens read only
+    (scope READ). Never the real case (config.PROTECTED_CASES), never a guest, never a disabled login."""
+    cid = case.get("case_id") if isinstance(case, dict) else case
+    return (isinstance(r, dict) and bool(r.get("coordinator")) and bool(r.get("known")) and not r.get("disabled") and not r.get("expired")
+            and not r.get("real_data") and bool(cid) and config.is_private(str(cid)))
+
+
 def hidden(r: dict, case) -> bool:
     """True for a protected Case File this user may not open: listings (notifications, inboxes, waiting items) leave it out."""
     if not is_protected(case):
@@ -528,6 +536,8 @@ def scope(r: dict, case: dict, state=None) -> str | None:
     if is_protected(case):  # real patient data: its creator, and a Vaidyx admin inside a break-glass window on it; nobody else (finding 0)
         if is_creator(r, case) or (r.get("vaidyx_admin") and break_glass_window(r.get("user") or "", case.get("case_id")) is not None):
             return FULL
+        if coordinator_view(r, case):  # a guest reviewer's private Case File: the MDT Coordinator reads it too (Eswar, 5 Nov 2026)
+            return READ
         return None
     if r.get("admin"):
         return FULL if _admin_open(r, case) else None

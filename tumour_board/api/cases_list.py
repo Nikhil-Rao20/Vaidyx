@@ -171,7 +171,7 @@ def relation(r: dict, c: dict) -> str | None:
     if sc is None:
         return None
     if access.is_protected(c) or r.get("admin"):
-        return "creator" if access.is_creator(r, c) else "admin"
+        return "creator" if access.is_creator(r, c) else "coordinator" if access.coordinator_view(r, c) else "admin"
     own = access.owner(c)
     cons = set(r.get("departments") or {}) - set(r.get("resident") or {})  # consultant placements, as access.scope reads them
     if own and own in cons:
@@ -303,7 +303,8 @@ async def case_list(request: Request, q: str = "", urgency: str = "", status: st
     sched = _scheduled()
     rows = []
     for c in store.list_cases():  # the same visibility as GET /cases (access.scope)
-        if access.scope(r, c) in (None, access.READ):  # a Case File opened with a reason is never listed among the person's own (item 1.9)
+        sc = access.scope(r, c)
+        if sc is None or (sc == access.READ and not access.coordinator_view(r, c)):  # a Case File opened with a reason is never listed among the person's own (item 1.9); a private one is, for the coordinator
             continue
         rows.append(row(c, r, sched, labels))
     filters = {"departments": sorted({(x["owner"]["department"], x["owner"]["department_label"]) for x in rows if x["owner"]["department"]}),

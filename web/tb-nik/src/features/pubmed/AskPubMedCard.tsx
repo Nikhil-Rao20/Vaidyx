@@ -7,10 +7,12 @@ import { ArrowRight, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { useSession } from "@/lib/session";
 import { PubMedMark } from "./PubMedMark";
 
 export function AskPubMedCard({ className }: { className?: string }) {
   const [q, setQ] = useState("");
+  const { me } = useSession();
   const navigate = useNavigate();
   const ok = q.trim().length >= 3;
   return (
@@ -36,7 +38,7 @@ export function AskPubMedCard({ className }: { className?: string }) {
         </form>
       </div>
       <div className="relative mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-        <span>Published evidence, not advice for any patient. Only search words go to PubMed.</span>
+        <span>Published evidence, not advice for any patient. {me?.real_data ? "Search words leave this server for PubMed (NCBI, USA): do not type a name or anything that could identify the patient." : "Only search words go to PubMed."}</span>
         <Link to="/pubmed" className="inline-flex min-h-9 items-center gap-1 font-medium text-link hover:underline sm:min-h-0" data-testid="pubmed-card-open">Your PubMed questions<ArrowRight className="size-3.5" aria-hidden /></Link>
       </div>
     </motion.section>

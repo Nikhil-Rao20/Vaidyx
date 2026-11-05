@@ -589,8 +589,10 @@ export interface CaseFile {
     urgency?: Urgency | null;
     team?: { owner?: string; residents?: unknown[] };
     meeting_id?: string;
-    /** A guest reviewer's private Case File: only its creator sees it; deleted 90 days after creation (5 Nov 2026). */
+    /** A guest reviewer's private Case File: its creator and the MDT Coordinator (read only) see it; deleted 90 days after creation (5 Nov 2026). */
     private?: boolean;
+    /** The login that created the Case File. */
+    created_by?: string;
     /** The choices of Send to the board (night-v3 item 1.4); withdrawn when the doctor took it off the agenda (item 1.6). */
     board_send?: BoardSend | null;
     board_record?: BoardRecord | null;
