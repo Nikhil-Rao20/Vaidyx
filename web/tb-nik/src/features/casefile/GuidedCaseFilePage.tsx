@@ -5,6 +5,7 @@
 // banner says so above the sections: "Past Case File, not advice for this patient". It stays on every section (the section moves carry
 // the two params) and after a reload or a fresh visit while the person's read-only window came from there (via "similar:<id>").
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowLeft, BellRing, Eye, FolderSearch, Lock, MessageSquareText } from "lucide-react";
@@ -16,7 +17,7 @@ import { ApiError } from "@/lib/api";
 import { notify } from "@/components/Toasts";
 import { consultantTitle } from "@/lib/format";
 import {
-  archiveCase, buildSummary, createFreeRequest, exportVtbUrl, markReady, moveCase, notBuiltYet, postConfirmation, postProposal, remindRequest, reviewArtefact,
+  archiveCase, deletePrivateCase, buildSummary, createFreeRequest, exportVtbUrl, markReady, moveCase, notBuiltYet, postConfirmation, postProposal, remindRequest, reviewArtefact,
   setSlotValue, setUrgency, slotAskDepartment, slotNotNeeded, undoConfirmation, withdrawCase,
 } from "./api";
 import { useCaseFile, useMyRole, useProposals, useRememberCase, useSlots, useTeam } from "./hooks";
@@ -126,6 +127,7 @@ export default function GuidedCaseFilePage() {
   const [side, setSide] = useState<Side | null>(legacy?.side ?? null);
   const [readyOpen, setReadyOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
   const [takeOffOpen, setTakeOffOpen] = useState(false);
   const [cancerOpen, setCancerOpen] = useState(false);
@@ -404,6 +406,7 @@ export default function GuidedCaseFilePage() {
       <CaseHeader cf={cf} team={teamq.data} steps={steps} resident={resident} consultantName={consultantName} onSend={() => setReadyOpen(true)}
         onPanel={(p) => setSide({ kind: "panel", panel: p })} onPrint={() => window.print()} boardPdfHref={hasBoardRecord && !bg ? caseBoardPdfUrl(id) : null} exportHref={exportVtbUrl(id)} exportAllowed={exportAllowed}
         onArchive={teamq.data?.can?.archive && !teamq.data?.archived ? () => setArchiveOpen(true) : undefined}
+        onDelete={cf.case.private && cf.permissions?.delete_case ? () => setDeleteOpen(true) : undefined}
         onMove={canMove ? () => setMoveOpen(true) : undefined} onWithdraw={canMove ? () => setTakeOffOpen(true) : undefined} />
 
       {cf.case.private ? (
@@ -467,6 +470,9 @@ export default function GuidedCaseFilePage() {
         {side?.kind === "ask" ? <AskPanel caseId={id} docs={cf.documents} onOpenSource={openSource} compact canSavePubmed={role.consultant && !bg && !teamq.data?.archived} /> : null}
       </SidePanel>
 
+      <ConfirmDialog open={deleteOpen} onOpenChange={setDeleteOpen} destructive title="Delete this Case File?" confirmText="Delete" doneText="Deleted"
+        text="Its files, readings, summary and notes are removed for good. Only a receipt stays (the Case File id, who and when; no patient details)."
+        onConfirm={async () => { await deletePrivateCase(id); nav("/cases", { replace: true }); }} />
       <ArchiveDialog open={archiveOpen} onOpenChange={setArchiveOpen} patient={cf.case.patient?.name || id} onConfirm={async (reason) => { await archiveCase(id, reason); nav("/cases", { replace: true }); }} />
       <MarkReadyDialog open={readyOpen} onOpenChange={setReadyOpen} slots={slotsq.data} resident={resident} consultantName={consultantName} onConfirm={onMarkReady} team={teamq.data ?? null} openCount={steps?.left ?? null}
         boardQuestionMissing={!steps?.question.text} />

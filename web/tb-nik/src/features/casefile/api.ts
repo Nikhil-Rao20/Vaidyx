@@ -150,6 +150,8 @@ export const approveProposal = (id: string, pid: string, note?: string) => api.p
 export const returnProposal = (id: string, pid: string, note: string) => api.post(`${caseUrl(id)}/proposals/${enc(pid)}/return`, { note });
 export const setUrgency = (id: string, level: number, note?: string) => api.put<{ urgency?: Urgency; proposal?: Proposal }>(`${caseUrl(id)}/urgency`, { level, note });
 export const archiveCase = (id: string, reason: string) => api.post(`${caseUrl(id)}/archive`, { reason });
+/** A guest reviewer deletes its own private Case File (DELETE /cases/{id}: folder, records and notices gone; a receipt without patient details stays). */
+export const deletePrivateCase = (id: string) => api.del(`${caseUrl(id)}`);
 export const unarchiveCase = (id: string) => api.post(`${caseUrl(id)}/unarchive`, {});
 
 // ---- fallback: the fill-in summary derived from the old checklist ----------------------------------------------------

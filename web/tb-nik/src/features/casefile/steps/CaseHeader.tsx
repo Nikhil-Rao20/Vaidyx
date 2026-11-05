@@ -7,7 +7,7 @@
 // consultant changes it in place (at most 160 characters) or goes back to the Vaidyx line.
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Archive, CalendarDays, CalendarMinus, CalendarSync, ChevronDown, ClipboardList, Download, MessageSquare, FileDown, MoreHorizontal, Pencil, Printer, Send, Users } from "lucide-react";
+import { Archive, Trash2, CalendarDays, CalendarMinus, CalendarSync, ChevronDown, ClipboardList, Download, MessageSquare, FileDown, MoreHorizontal, Pencil, Printer, Send, Users } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { consultantTitle, drName } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -76,10 +76,10 @@ function SummaryLineRow({ caseId, line, canEdit }: { caseId: string; line: Summa
   );
 }
 
-export function CaseHeader({ cf, team, steps, onSend, onPanel, onPrint, boardPdfHref, exportHref, exportAllowed, onArchive, onMove, onWithdraw, resident, consultantName }: {
+export function CaseHeader({ cf, team, steps, onSend, onPanel, onPrint, boardPdfHref, exportHref, exportAllowed, onArchive, onDelete, onMove, onWithdraw, resident, consultantName }: {
   cf: CaseFile; team: Team | null; steps: Steps | null; onSend: () => void; onPanel: (p: MorePanel) => void; onPrint: () => void;
   /** The board record PDF (meetings-v2 4.1, in place of the .pptx deck); null before the board or inside a read-only window. */
-  boardPdfHref: string | null; exportHref: string; exportAllowed: boolean; onArchive?: () => void; resident: boolean; consultantName: string;
+  boardPdfHref: string | null; exportHref: string; exportAllowed: boolean; onArchive?: () => void; onDelete?: () => void; resident: boolean; consultantName: string;
   /** Move to another meeting / Take off the agenda (night-v3 item 1.6): given only when the viewer may act (owner's consultant or coordinator). */
   onMove?: () => void; onWithdraw?: () => void;
 }) {
@@ -151,6 +151,7 @@ export function CaseHeader({ cf, team, steps, onSend, onPanel, onPrint, boardPdf
               {sent && onMove ? <DropdownMenuItem onSelect={onMove} data-testid="more-move"><CalendarSync className="size-4" />Move to another meeting</DropdownMenuItem> : null}
               {sent && onWithdraw && c.meeting_id ? <DropdownMenuItem onSelect={onWithdraw} data-testid="more-withdraw"><CalendarMinus className="size-4" />Take off the agenda</DropdownMenuItem> : null}
               {onArchive ? <><DropdownMenuSeparator /><DropdownMenuItem onSelect={onArchive}><Archive className="size-4" />Archive</DropdownMenuItem></> : null}
+              {onDelete ? <><DropdownMenuSeparator /><DropdownMenuItem onSelect={onDelete} className="text-destructive" data-testid="more-delete"><Trash2 className="size-4" />Delete this Case File</DropdownMenuItem></> : null}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

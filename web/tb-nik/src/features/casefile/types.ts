@@ -611,6 +611,8 @@ export interface CaseFile {
   facts: Record<string, ResolvedFact>;
   timeline: TimelineEvent[];
   permissions: {
+    /** A guest reviewer deletes its own private Case File (5 Nov 2026). */
+    delete_case?: boolean;
     upload?: boolean;
     refetch?: boolean;
     review?: boolean;
