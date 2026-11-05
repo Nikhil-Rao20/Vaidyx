@@ -53,6 +53,14 @@ deploying a commit from before the move starts the site on it again. The search 
 its source `Snowflake/...`, so its cache folder is `models--Snowflake--...`; the vectors are bit-identical). chromadb has advisories
 without a fix; the Tumour Board does not use it.
 
+## Voice (speech to text, read aloud)
+
+The site has its own speech service on `127.0.0.1:7340` (Whisper large-v3 turbo for speech to text, Kokoro for read aloud; audio is never
+stored), started by `vx.sh` before the app, with its own token `/data/vaidyx/tb_deploy/tumour_board/audio_token.json` (mode 600). It runs
+from the pinned checkout in the shared audio environment `/data/vaidyx/venv/audio`. If it does not start, the site runs with the mic and
+read-aloud buttons hidden. `vx.sh restart-audio` restarts it. Live voice between people in a meeting is a separate thing (the video
+server) and needs the firewall ports.
+
 ## Everyday commands (H200)
 
 ```bash

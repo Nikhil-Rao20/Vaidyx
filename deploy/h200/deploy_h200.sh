@@ -65,6 +65,8 @@ if changed deploy/h200/vx.sh; then
   "$VX" restart-link || echo "link restart failed"
 fi
 
+if changed tumour_board/audio_service; then echo "speech service changed: restarting it"; "$VX" restart-audio || echo "speech service restart failed (voice off)"; fi
+
 if "$VX" restart-app && "$VX" ensure; then
   note "deployed ${SHA:0:7} (from ${PREV:0:7}) ci=${CI:-skipped} · $("$VX" status | tr '\n' ' ')"
 else

@@ -2,7 +2,7 @@
 # Doctors' instance on the H200 (deployment Plan B, see deploy/README.md): the app (:7300), the gate (:7301) and the secure
 # link to the VM (chisel client). No sudo needed.
 #
-#   deploy/h200/vx.sh start | stop | status | ensure | restart-app | restart-gate | restart-link | restart-his
+#   deploy/h200/vx.sh start | stop | status | ensure | restart-app | restart-gate | restart-link | restart-his | restart-audio
 #
 # The public site's own copy of the synthetic demo hospital (HIMS) runs here too, on :7330 with its own data
 # ($ROOT/his_mock, set up by setup_instance.py); the internal development HIMS (:7130) is never reached from outside.
@@ -11,7 +11,7 @@
 # (mode 600) and are passed through the environment or a file descriptor, never on a command line (other users of the H200
 # can read command lines with ps).
 #
-# Ports held by someone else: the H200 is shared, and 7300 / 7301 / 7330 are ordinary ports. If either is listening but not owned
+# Ports held by someone else: the H200 is shared, and 7300 / 7301 / 7330 / 7340 are ordinary ports. If either is listening but not owned
 # by us (ss shows no pid for another user's socket), the link is stopped and stays stopped, so the VM never forwards doctors
 # to a stranger's process (security review 4 Nov).
 set -u
@@ -25,8 +25,12 @@ LOG=$ROOT/logs
 # for a rollback (deploy an earlier commit). The shared /data/vaidyx/venv/app (internal app, public demo) is not touched by either.
 PY=${VX_PY:-/data/vaidyx/venv/tb_deploy312/bin/python}
 CHISEL=${VX_CHISEL:-/data/vaidyx/tools/chisel-1.13.0/chisel}
+# Voice (5 Nov 2026): the site's own speech service (Whisper large-v3 turbo, Kokoro; audio never stored) on 127.0.0.1:7340 with its own
+# token, run from the pinned checkout in the shared audio environment. If it does not start, the site runs with voice off.
+AUDIO_PY=${VX_AUDIO_PY:-/data/vaidyx/venv/audio/bin/python}
+AUDIO_TOKEN=$ROOT/tumour_board/audio_token.json
 HOST=${VX_PUBLIC_HOST:-vaidyx-tb-8-231-83-210.sslip.io}
-APP_PORT=7300; GATE_PORT=7301; HIS_PORT=7330; LINK_REMOTE="R:127.0.0.1:970:127.0.0.1:$GATE_PORT"   # 970: below 1024, so no other VM user can listen there
+APP_PORT=7300; GATE_PORT=7301; HIS_PORT=7330; AUDIO_PORT=7340; LINK_REMOTE="R:127.0.0.1:970:127.0.0.1:$GATE_PORT"   # 970: below 1024, so no other VM user can listen there
 mkdir -p "$LOG"; chmod 700 "$ROOT" 2>/dev/null
 
 pid_on() { ss -Hltnp "sport = :$1" 2>/dev/null | grep -oE 'pid=[0-9]+' | head -1 | cut -d= -f2; }
@@ -40,7 +44,7 @@ gate_ok() { curl -s -m 5 -o /dev/null -w '%{http_code}' -H @<(printf 'X-Vaidyx-G
 stop_link() { P=$(link_pid); [ -n "$P" ] && kill "$P"; return 0; }
 
 guard() {
-  for port in $APP_PORT $GATE_PORT $HIS_PORT; do
+  for port in $APP_PORT $GATE_PORT $HIS_PORT $AUDIO_PORT; do
     if held_by_other $port; then
       stop_link
       echo "ALERT $(date '+%F %T'): port $port is held by another user's process; the link is stopped until it is ours again" | tee -a "$LOG/alerts.log" >&2
@@ -58,6 +62,7 @@ start_app() {
   ( cd "$APP" || exit 1; APP_BIND=127.0.0.1 APP_PORT=$APP_PORT VAIDYX_DATA_DIR=$ROOT/vaidyx_data TB_DATA_ROOT=$ROOT/tumour_board \
       TB_GUIDELINE_DIR=$ROOT/guidelines TB_PROTECTED_CASES=TB-2026-bharath TB_STAGING=off CLEANUP_ENABLED=false LOCALHOST_BYPASS=false \
       TB_UPLOAD_POLICY=private_only TB_PRIVATE_RETENTION_DAYS=90 TB_REAL_DATA_2FA=0 \
+      TB_AUDIO_URL=http://127.0.0.1:$AUDIO_PORT TB_AUDIO_TOKEN_FILE=$AUDIO_TOKEN \
       exec setsid nohup "$PY" app.py ) >> "$LOG/app.log" 2>&1 < /dev/null &
   for _ in $(seq 1 90); do up $APP_PORT && curl -s -o /dev/null -m 3 "http://127.0.0.1:$APP_PORT/login" && return 0; sleep 2; done
   echo "app: did not start, see $LOG/app.log"; return 1
@@ -72,6 +77,15 @@ start_his() {
       --no-proxy-headers ) >> "$LOG/his.log" 2>&1 < /dev/null &
   for _ in $(seq 1 30); do up $HIS_PORT && curl -s -o /dev/null -m 2 "http://127.0.0.1:$HIS_PORT/health" && return 0; sleep 1; done
   echo "his: did not start, see $LOG/his.log"; return 1
+}
+
+start_audio() {
+  up $AUDIO_PORT && return 0
+  [ -s "$AUDIO_TOKEN" ] || { echo "audio: no token file $AUDIO_TOKEN (voice stays off)"; return 1; }
+  ( cd "$APP" || exit 1; exec setsid nohup "$AUDIO_PY" -m tumour_board.audio_service --host 127.0.0.1 --port $AUDIO_PORT --device auto --warm \
+      --token-file "$AUDIO_TOKEN" ) >> "$LOG/audio.log" 2>&1 < /dev/null &
+  for _ in $(seq 1 90); do up $AUDIO_PORT && curl -s -o /dev/null -m 2 "http://127.0.0.1:$AUDIO_PORT/health" && return 0; sleep 2; done
+  echo "audio: did not start, see $LOG/audio.log (voice stays off)"; return 1
 }
 
 start_gate() {
@@ -103,7 +117,7 @@ stop_port() {
 
 stop_all() {
   stop_link
-  stop_port $GATE_PORT; stop_port $APP_PORT; stop_port $HIS_PORT
+  stop_port $GATE_PORT; stop_port $APP_PORT; stop_port $HIS_PORT; stop_port $AUDIO_PORT
   echo "stopped: link, gate, app, demo hospital copy (internal :7000, :7130, public demo and models untouched)"
 }
 
@@ -111,17 +125,19 @@ status() {
   echo "app  :$APP_PORT  $(up $APP_PORT && echo up || { held_by_other $APP_PORT && echo "HELD BY ANOTHER USER" || echo DOWN; })  code $(git -C "$APP" rev-parse --short HEAD 2>/dev/null)"
   echo "gate :$GATE_PORT  $(up $GATE_PORT && echo "up (health $(gate_ok))" || { held_by_other $GATE_PORT && echo "HELD BY ANOTHER USER" || echo DOWN; })"
   echo "his  :$HIS_PORT  $(up $HIS_PORT && echo up || { held_by_other $HIS_PORT && echo "HELD BY ANOTHER USER" || echo DOWN; })  (demo hospital copy)"
+  echo "audio :$AUDIO_PORT $(up $AUDIO_PORT && echo up || { held_by_other $AUDIO_PORT && echo "HELD BY ANOTHER USER" || echo "DOWN (voice off)"; })  (speech service)"
   echo "link       $([ -n "$(link_pid)" ] && echo up || echo DOWN)  -> https://$HOST/vx-link"
   echo "public     $(curl -s -m 10 -o /dev/null -w '%{http_code}' "https://$HOST/sign-in")  https://$HOST/"
 }
 
 case "${1:-}" in
-  start|ensure) guard && start_his && start_app && start_gate && guard && start_link; rc=$?; [ "$1" = start ] && status; exit $rc ;;
+  start|ensure) guard && start_his && { start_audio || true; } && start_app && start_gate && guard && start_link; rc=$?; [ "$1" = start ] && status; exit $rc ;;
   stop) stop_all ;;
   restart-app) stop_port $APP_PORT && guard && start_app ;;
   restart-gate) stop_port $GATE_PORT && guard && start_gate ;;
   restart-link) stop_link; sleep 1; guard && start_link ;;
   restart-his) stop_port $HIS_PORT && guard && start_his ;;
+  restart-audio) stop_port $AUDIO_PORT && guard && start_audio ;;
   status) status ;;
-  *) echo "usage: $0 start|stop|status|ensure|restart-app|restart-gate|restart-link|restart-his"; exit 2 ;;
+  *) echo "usage: $0 start|stop|status|ensure|restart-app|restart-gate|restart-link|restart-his|restart-audio"; exit 2 ;;
 esac
