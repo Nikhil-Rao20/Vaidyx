@@ -451,3 +451,13 @@ def test_the_next_step_on_a_private_case_file_is_adding_files_not_sending_reques
     assert nxt == {"section": "reports", "label": "Add 2 missing files"}
     assert steps._next(missing=[1], groups={"x": {}}, doc_todo=[], problems=[], unconfirmed=[], question_done=True, prose={}, sent=False,
                        warns=[])["label"] == "Send 1 request"
+
+
+def test_a_private_case_file_names_only_its_own_guest_as_the_doctor(app):
+    """5 Nov 2026: two guest reviewers in one department: the Case File header and team notices name the creator, never the other guest."""
+    from tumour_board import team
+    o = org.load(); o["users"]["aaa.other.guest@example.org"] = {"departments": {"breast_surgery": "member"}, "display_name": "Other guest", "real_data": True}
+    org.save(o, by="test")
+    cid = create_private(app)["case_id"]
+    assert team.owner_consultants(store.get_case(cid)) == [GR]
+    assert team.owner_consultants({"case_id": "TB-X", "department": "breast_surgery"})[0] == "aaa.other.guest@example.org"   # ordinary rule elsewhere

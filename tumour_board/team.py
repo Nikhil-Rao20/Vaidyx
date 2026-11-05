@@ -105,6 +105,9 @@ def owner_consultants(case: dict) -> list[str]:
     for u, v in sorted((org.load().get("users") or {}).items()):
         if isinstance(v, dict) and (v.get("departments") or {}).get(own) in org.DEPT_ROLES and not v.get("disabled"):
             out.append(u)
+    if config.is_private(case.get("case_id")):  # a guest reviewer's private Case File: its creator only, never another guest of the department (5 Nov 2026)
+        by = str(case.get("created_by") or "")
+        return [by] if by in out else []
     return out
 
 
