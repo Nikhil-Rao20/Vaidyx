@@ -616,7 +616,7 @@ def prepare_session_agents(sid, user, roles=None, case_ids=None, refresh=False):
     from . import board
     s = board.get(sid)
     wanted = [r for r in roles if r in board.ROLE_DEPARTMENT] if roles else None  # explicit roles: also an on-demand agent (V2 item 6.2)
-    cases = [a["case_id"] for a in s["agenda"] if (case_ids is None or a["case_id"] in case_ids) and a["case_id"] not in config.HIDDEN_CASES]
+    cases = [a["case_id"] for a in s["agenda"] if (case_ids is None or a["case_id"] in case_ids) and a["case_id"] not in config.BOARD_HIDDEN]
     busy = {(c, r) for c, by_role in (s.get("agents") or {}).items() for r, x in by_role.items()
             if x.get("status") in AGENT_WAITING and SESSION_TASKS.get(sid)}
     # the roles active per Case File: a head not recorded present, a specialty marked absent, the Surgical Oncology agent only where no

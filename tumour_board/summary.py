@@ -1,5 +1,6 @@
 """Case File summary: a concise narrative for the board, compiled once the Pre-Authorization gate is met.
 Every sentence carries verified quotes; stage appears only as recorded in a signed report (copied, never derived)."""
+import re
 import time
 
 from . import config, discord, grounding, guardrails, llm, protocol, qa, rules, search, store, units
@@ -104,6 +105,37 @@ def encounter_lines(case_id, case=None):
     return out
 
 
+def age_sex(patient: dict):
+    """(age, sex) of the Case File's patient record: the age and sex fields (a manual or private Case File), else "48 Y / F" (agesex)."""
+    p = patient or {}
+    age, sex = p.get("age"), str(p.get("sex") or "").strip().upper()[:1] or None
+    m = re.match(r"\s*(\d{1,3})\s*(?:y(?:ears?|rs?)?\.?)?\s*[/,]?\s*([MF])?", str(p.get("agesex") or ""), re.I)
+    if m:
+        age = age if age not in (None, "") else int(m.group(1))
+        sex = sex or (m.group(2) or "").upper() or None
+    try:
+        age = int(age) if age not in (None, "") else None
+    except (TypeError, ValueError):
+        age = None
+    return (age if age is not None and 0 < age < 120 else None), (sex if sex in ("F", "M") else None)
+
+
+def introduction(case: dict, presentation: list):
+    """The opening line of the presentation (Eswar, 5 Nov 2026: the board summary starts with who the patient is): the age and sex of
+    the Case File's patient record, said to come from that record (the hospital system's registration, or what was entered when the Case
+    File was made), with no quote. None when the model's own verified presentation already gives the age, or nothing is recorded."""
+    age, sex = age_sex((case or {}).get("patient"))
+    if age is None and sex is None:
+        return None
+    if age is not None and any(re.search(rf"\b{age}\s*(?:-|\s)?\s*(?:year|yr|y\b)", x.get("text") or "", re.I) for x in presentation or []):
+        return None
+    child = age is not None and age < 18
+    who = {"F": "girl" if child else "woman", "M": "boy" if child else "man"}.get(sex, "patient")
+    src = "as registered in the hospital system" if (case or {}).get("his") else "as entered in the Case File"
+    text = f"Patient: {age}-year-old {who} (age and sex {src})." if age is not None else f"Patient: {who} (sex {src})."
+    return {"text": text, "citations": [], "from_case_record": True}
+
+
 NOT_LISTED = "This Case File is not listed yet: list it (cancer protocol, NCG setting, board date) before compiling the summary"
 
 SYS = ("You compile the Case File summary for a Tumour Board from signed clinical records. Write like a careful registrar presenting "
@@ -129,10 +161,14 @@ async def build(case_id, force=False):
     # the stage as recorded, or the FIGO stage as recorded (cervix, V1 item 9.2): the newest verified of the two, copied, never derived
     stage = max([c for c in (facts.get(f, {}).get("current") for f in ("recorded_stage", "figo_stage")) if c and c["verification"] in rules.VERIFIED],
                 key=lambda c: (c.get("date") or "", c.get("report_date") or ""), default=None)
+    age, sex = age_sex(case.get("patient"))
+    who = ", ".join(x for x in (f"{age} years" if age is not None else "", {"F": "female", "M": "male"}.get(sex or "", "")) if x)
     msgs = [{"role": "system", "content": SYS},
-            {"role": "user", "content": f"Patient: {case['patient'].get('name')}, {case['patient'].get('agesex', '')}.\n\nDOCUMENTS:\n{full}\n\n"
+            {"role": "user", "content": f"Patient: {case['patient'].get('name')}{', ' + who if who else ''}.\n\nDOCUMENTS:\n{full}\n\n"
              "Write the Case File summary in the National Cancer Grid Virtual Tumour Board structure: " + "; ".join(f"{k} = {t}" for k, t in SECTIONS) +
-             ". Findings in date order within a section. Prefer FINAL signed reports; mention when a report is draft, preliminary or superseded. "
+             ". The presentation section opens with a short introduction of the patient: age and sex as printed in a report, the relevant "
+             "comorbidities and any previous cancer treatment, each only if documented and cited (leave out what is not documented); then the "
+             "presenting complaints and examination. Findings in date order within a section. Prefer FINAL signed reports; mention when a report is draft, preliminary or superseded. "
              "Fitness = performance status, comorbidities and the latest laboratory values as recorded (no judgement of fitness). Questions = the "
              "treating team's documented question(s) for the board only. Keep each quote short (the line that carries the value). Then list points for review."}]
     r = await llm.chat("reasoner", msgs, json_schema=SCHEMA, max_tokens=3500, purpose="case file summary", audit=au)
@@ -166,6 +202,9 @@ async def build(case_id, force=False):
     except Exception:
         diffs = {}
     filled = fill_from_facts(sections, facts, cat, diffs)
+    intro = introduction(case, sections[0]["sentences"])  # SECTIONS[0] is the presentation
+    if intro:
+        sections[0]["sentences"].insert(0, intro)
     paras = [sec["sentences"] for sec in sections if sec["sentences"]]
     pts = _check(r.get("points_for_review"), "points_for_review")
     # the system's own findings: reports that disagree, each citing both reports (code, no model; 12 Oct)

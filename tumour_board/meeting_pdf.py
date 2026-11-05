@@ -155,7 +155,7 @@ def _is_synthetic(hospital: dict, cases: list) -> bool:
 
 def _case(cid) -> dict | None:
     """The Case File, or None (missing, a bad id, or protected: real patient data is never printed)."""
-    if not cid or cid in config.HIDDEN_CASES:
+    if not cid or cid in config.BOARD_HIDDEN:
         return None
     try:
         c = store.get_case(cid)
@@ -164,7 +164,7 @@ def _case(cid) -> dict | None:
     if not isinstance(c, dict):
         return None
     try:
-        if access.is_protected(c):
+        if c.get("case_id") in config.BOARD_HIDDEN:  # the real case; a private one until it is sent to the board (5 Nov 2026)
             return None
     except Exception:
         return None
@@ -225,7 +225,7 @@ def discussion_notes(meeting: dict, case_id: str, r: dict | None = None) -> list
 
     The section prints NOTES_HEADING ("Discussion notes (AI draft, not reviewed)", or reviewed by whom), each line with its "said" words
     and speaker beneath."""
-    if not isinstance(meeting, dict) or not case_id or case_id in config.HIDDEN_CASES:
+    if not isinstance(meeting, dict) or not case_id or case_id in config.BOARD_HIDDEN:
         return []
     e = (meeting.get("notes") or {}).get(case_id) if isinstance(meeting.get("notes"), dict) else None
     if not isinstance(e, dict) or not e.get("lines"):
@@ -234,7 +234,7 @@ def discussion_notes(meeting: dict, case_id: str, r: dict | None = None) -> list
         if not isinstance(r, dict) or r.get("disabled"):
             return []
         c = store.get_case(case_id)
-        if not c or access.is_protected(c):
+        if not c or c.get("case_id") in config.BOARD_HIDDEN:
             return []
         try:
             full = access.scope(r, c) == access.FULL

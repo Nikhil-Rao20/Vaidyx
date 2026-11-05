@@ -656,7 +656,7 @@ def build(case_id, roles=None) -> dict:
                      "action": {"kind": "remind", "label": "Send reminder", "action_id": (w["request"] or {}).get("action_id")}} for w in waiting]
 
     warnings_list = warnings(case, docs, view)
-    nxt = _next(missing, groups, doc_todo, open_problems, unconfirmed, question_done, prose, sent, warnings_list)
+    nxt = _next(missing, groups, doc_todo, open_problems, unconfirmed, question_done, prose, sent, warnings_list, private=config.is_private(case_id))
     glance = _glance(prot, by_fact)
     return {"case_id": case_id, "mode": "prepare" if prepare else "read", "role": "consultant" if consultant else "resident" if resident else "reader",
             "sections": sections, "next": nxt if prepare else None, "todo": todo if prepare else [], "waiting": waiting_rows if prepare else [],
@@ -682,7 +682,7 @@ def _problem_words(conf) -> str:
     return "Please check against the report"
 
 
-def _next(missing, groups, doc_todo, problems, unconfirmed, question_done, prose, sent, warns) -> dict | None:
+def _next(missing, groups, doc_todo, problems, unconfirmed, question_done, prose, sent, warns, private=False) -> dict | None:
     """The one next thing (B1 Continue). Order: the cancer check, the question (research: the question first), requests to other departments
     (they take days, so they go out early), reports to check, values to check, the summary, then Send to the board."""
     w = next((x for x in warns if x["kind"] == "cancer_mismatch"), None)
@@ -690,6 +690,9 @@ def _next(missing, groups, doc_todo, problems, unconfirmed, question_done, prose
         return {"section": "overview", "label": "Check the cancer chosen", "target": w["id"]}
     if not question_done:
         return {"section": "question", "label": "Write the question for the board"}
+    if missing and private:  # a guest reviewer's private Case File asks no department: the reviewer adds the files (5 Nov 2026)
+        n = len(groups)
+        return {"section": "reports", "label": f"Add {n} missing {'file' if n == 1 else 'files'}" if n else "Add the missing files"}
     if missing:
         n = len(groups)
         return {"section": "pre_authorization", "label": f"Send {n} {'request' if n == 1 else 'requests'}" if n else "Settle what is missing"}

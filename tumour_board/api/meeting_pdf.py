@@ -56,7 +56,7 @@ async def case_board_pdf(case_id: str, request: Request):
         fail(e.status, str(e), e.code)
     if str(access.scope(rl, c) or "").upper() != "FULL":
         fail(403, "Only the people who may open the whole Case File download its board record.", "forbidden")
-    if cid in config.HIDDEN_CASES or access.is_protected(c):
+    if cid in config.BOARD_HIDDEN:  # the real case; a private one until it is sent to the board (5 Nov 2026)
         fail(403, "A protected Case File is never printed.", "protected")
     st = store.get_state(cid) or {}
     if not [x for x in st.get("board_records") or [] if isinstance(x, dict)]:

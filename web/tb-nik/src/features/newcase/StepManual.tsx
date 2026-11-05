@@ -18,7 +18,7 @@ export function StepManual({ form, onChange }: { form: NewCaseForm; onChange: (p
     <div className="grid gap-5">
       <div className="flex items-start gap-3 rounded-md bg-muted p-4 text-sm">
         <Lock className="mt-0.5 size-4 shrink-0" aria-hidden />
-        <p><span className="font-medium">Private: only you and the MDT Coordinator can see this Case File.</span> It is not fetched from a hospital system: you add the anonymized files yourself in Records, after Create.</p>
+        <p><span className="font-medium">Private: only you and the MDT Coordinator can see this Case File (and the people in its meeting, once you send it to the board).</span> It is not fetched from a hospital system: you add the anonymized files yourself in Records, after Create.</p>
       </div>
       <div className="grid gap-4 sm:grid-cols-[2fr_1fr]">
         <Field id="manual-label" label="Case label" hint="Something you recognise, such as Case A. Never the patient's name or a hospital number.">

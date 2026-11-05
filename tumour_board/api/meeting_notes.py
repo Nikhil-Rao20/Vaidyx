@@ -176,6 +176,6 @@ async def case_meeting_notes(case_id: str, request: Request):
         common.fail(403, "The meeting notes are shown to the readers of the whole Case File.", "not_full")
     cid = str(c.get("case_id") or c.get("id") or case_id)
     out = mn.case_view(cid)
-    if cid not in config.HIDDEN_CASES:
+    if cid not in config.BOARD_HIDDEN:
         store.audit(cid, {"kind": "meeting_notes_read", "by": u, "meetings": len(out["meetings"])})
     return out

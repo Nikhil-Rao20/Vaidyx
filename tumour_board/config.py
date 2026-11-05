@@ -79,7 +79,8 @@ PROTECTED_CASES = {c.strip() for c in os.getenv("TB_PROTECTED_CASES", "TB-2026-b
 
 # Private Case Files (guest reviewers' own anonymized files, 5 Nov 2026): created by a login with the real_data flag; its folder holds
 # the PRIVATE marker. HIDDEN_CASES = PROTECTED_CASES + every private Case File: never listed, named, shown in a meeting, matched,
-# counted or suggested to anyone but the login that created it (the visibility checks use HIDDEN_CASES). PROTECTED_CASES alone
+# counted or suggested to anyone but the login that created it and the MDT Coordinator (the visibility checks use HIDDEN_CASES); once
+# sent to the board it may be on a meeting (BOARD_HIDDEN, the board and meeting code only). PROTECTED_CASES alone
 # keeps its second meaning: no AI processing (summary, helper briefs, preparation), which a private Case File does get.
 PRIVATE_MARKER = "PRIVATE"
 _PRIVATE_ID = __import__("re").compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$")
@@ -109,6 +110,30 @@ class _HiddenCases:
 
 
 HIDDEN_CASES = _HiddenCases()
+
+
+def sent_to_board(case_id) -> bool:
+    """A private Case File its guest reviewer sent to the board (Eswar, 5 Nov 2026): the last entry of case.json board_ready_history is a
+    send, not a take-back. Read from the file on every check (config never imports store)."""
+    import json
+    try:
+        c = json.loads((globals()["CASES_DIR"] / str(case_id) / "case.json").read_text())
+    except (OSError, ValueError):
+        return False
+    h = [x for x in (c.get("board_ready_history") or []) if isinstance(x, dict)]
+    return bool(h) and bool(h[-1].get("ready"))
+
+
+class _BoardHidden:
+    """`cid in BOARD_HIDDEN`, for the board and meeting code only (agenda, meeting screens, notes, PDF, the meeting window): the real case
+    always; a private Case File until its guest reviewer sends it to the board (Eswar, 5 Nov 2026: "Allow the board": the MDT Coordinator
+    puts it on a meeting and the people in that meeting see it there, read only). Everywhere else HIDDEN_CASES still applies."""
+
+    def __contains__(self, cid) -> bool:
+        return (cid in globals()["PROTECTED_CASES"]) or (is_private(cid) and not sent_to_board(cid))
+
+
+BOARD_HIDDEN = _BoardHidden()
 
 
 def near_match() -> bool:

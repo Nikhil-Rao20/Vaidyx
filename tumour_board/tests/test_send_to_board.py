@@ -235,7 +235,7 @@ def test_mark_ready_direct_calls_work_as_before(ready_case):
 def test_a_meeting_that_refuses_the_add_leaves_no_ready_mark_and_no_notice(full, ready_case, meeting, monkeypatch):
     _open(monkeypatch, 0)
 
-    def refuse(ids, listed=True, keep=()):
+    def refuse(ids, listed=True, keep=(), sending=()):
         raise meetings.MeetingError(f"Case File {CASE} is archived. Take it out of the archive first.", 409, "archived")
     monkeypatch.setattr(meetings, "_check", refuse)
     r = full.as_(RAO).post(f"/cases/{CASE}/ready", {"ready": True, "meeting_id": meeting["id"]})

@@ -128,7 +128,7 @@ export function CaseHeader({ cf, team, steps, onSend, onPanel, onPrint, boardPdf
         <div className="flex shrink-0 flex-wrap items-center gap-2 print:hidden">
           {sent ? <StatusChip kind="ok" icon={Send}>Sent to the board{c.board_ready?.at ? `, ${fmtDate(c.board_ready.at)}` : ""}</StatusChip> : null}
           {withdrawn ? <StatusChip kind="warn" icon={CalendarMinus} title={c.board_send?.withdrawn?.reason ? `Reason: ${c.board_send.withdrawn.reason}` : undefined}>Taken off the agenda{c.board_send?.withdrawn?.at ? `, ${fmtDate(c.board_send.withdrawn.at)}` : ""}</StatusChip> : null}
-          {prepare && !sent && !c.private ? (  /* a guest reviewer's private Case File does not go to a board */
+          {prepare && !sent ? (  /* a guest reviewer's private Case File may go to a board too (5 Nov 2026) */
             <Button onClick={onSend} data-testid="send-to-board" title={steps?.left ? `${steps.left} still open: you will be asked why the board should discuss it anyway` : "Send this Case File to the board"}>
               <Send className="size-4" />{resident ? `Send to ${consultantTitle(consultantName)} for sign-off` : "Send to the board"}
             </Button>

@@ -52,8 +52,9 @@ _TWO_FACTOR_FIRST_OK = _re.compile(r"^/api/tb/(me|me/password|me/profile|health)
 # What a guest reviewer never reaches: intake (department uploads and new Case Files from them), demo imports, referrals and the
 # hospital system of a Case File (5 Nov 2026 review: these made ordinary, visible Case Files or showed a private one to others).
 _GUEST_NEVER = _re.compile(r"^/api/tb/(intake|demo|his)(/|$)|^/api/tb/cases/[^/]+/(referrals|his)(/|$)")
-# ... and on a private Case File nothing that brings other people in: requests to departments, Send to the board, meetings, team codes
-_GUEST_NO_WRITE = _re.compile(r"^/api/tb/cases/[^/]+/(ready|requests|meeting|team)(/|$)")
+# ... and on a private Case File nothing that brings other people in: requests to departments, team codes. Send to the board and its
+# meeting are allowed (Eswar, 5 Nov 2026, "Allow the board"): the people in that meeting read it there (config.BOARD_HIDDEN).
+_GUEST_NO_WRITE = _re.compile(r"^/api/tb/cases/[^/]+/(requests|team)(/|$)")
 _CASE_ID_OK = _re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$")
 
 
@@ -375,12 +376,13 @@ def _case_permissions_all(r, c, st, docs):
 
 def _case_permissions(r, c, st, docs):
     """_case_permissions_all, with a private Case File (guest reviewer) offering nothing that brings other people in: no requests to
-    departments, no referral, no participants, no Send to the board, no reminders (the routes refuse them too, _GUEST_NO_WRITE)."""
+    departments, no referral, no participants, no reminders (the routes refuse them too, _GUEST_NO_WRITE). Send to the board stays
+    (Eswar, 5 Nov 2026: "Allow the board")."""
     p = _case_permissions_all(r, c, st, docs)
     if config.is_private(c.get("case_id")) and not access.is_creator(r, c):  # the coordinator reads it (scope READ): nothing to do
         return {k: (False if isinstance(v, bool) else {kk: False for kk in v} if isinstance(v, dict) else v) for k, v in p.items()}
     if config.is_private(c.get("case_id")):
-        for k in ("send_request", "create_request", "close_request", "refer", "manage_participants", "withdraw_referral", "mark_ready",
+        for k in ("send_request", "create_request", "close_request", "refer", "manage_participants", "withdraw_referral",
                   "remind", "refetch", "link_registration", "set_owner"):
             if k in p:
                 p[k] = False

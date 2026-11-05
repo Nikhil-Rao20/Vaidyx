@@ -363,7 +363,7 @@ def test_office_company_and_comment_authors_are_removed():
     assert b"Sunrise" not in z.read("docProps/app.xml") and b"Dr Somebody" not in z.read("word/comments.xml")
 
 
-@pytest.mark.parametrize("path", ["/ready", "/requests", "/meeting/move", "/team/code"])
+@pytest.mark.parametrize("path", ["/requests", "/team/code"])
 def test_a_private_case_file_brings_nobody_in(app, path):
     cid = create_private(app)["case_id"]
     r = app.as_(GR).post(f"/cases/{cid}{path}", json={})
@@ -373,8 +373,24 @@ def test_a_private_case_file_brings_nobody_in(app, path):
 def test_a_private_case_file_offers_no_sharing_actions(app):
     cid = create_private(app)["case_id"]
     p = app.as_(GR).get(f"/cases/{cid}").json()["permissions"]
-    assert not any(p.get(k) for k in ("send_request", "create_request", "refer", "mark_ready", "manage_participants", "remind"))
+    assert not any(p.get(k) for k in ("send_request", "create_request", "refer", "manage_participants", "remind"))
     assert p["upload"] is True and p["delete_case"] is True
+    assert p["mark_ready"] is True              # Send to the board is allowed (Eswar, 5 Nov 2026, "Allow the board")
+
+
+def test_the_guest_sends_a_private_case_file_to_the_board(app):
+    """Eswar, 5 Nov 2026: Send to the board works for a private Case File; it then belongs on the board (not hidden from the meeting
+    code), still hidden everywhere else; taking it back hides it from the board again."""
+    from tumour_board import steps
+    cid = create_private(app)["case_id"]
+    c = store.get_case(cid); c["board_question"] = "Sequencing of treatment?"; store.save_case(c)
+    st = store.get_state(cid); st["board_question"] = "Sequencing of treatment?"; store.save_state(cid, st)
+    r = app.as_(GR).post(f"/cases/{cid}/ready", json={"list": "discussion", "reason": "test with items open"})
+    assert r.status_code == 200, r.text
+    assert config.sent_to_board(cid) and cid not in config.BOARD_HIDDEN and cid in config.HIDDEN_CASES
+    assert cid not in [x.get("case_id") for x in _cases(app, RAO)]              # still not listed for other doctors
+    r = app.as_(GR).post(f"/cases/{cid}/ready", json={"ready": False})
+    assert r.status_code == 200 and cid in config.BOARD_HIDDEN
 
 
 def test_the_coordinator_lists_and_reads_a_private_case_file_but_changes_nothing(app):
@@ -426,3 +442,12 @@ def test_a_private_case_file_has_no_patient_to_match(app):
     doc = store.list_docs(cid)[0]; doc.update(state="ready", identity="mismatch_or_missing"); store.save_doc(cid, doc)
     g = rules.evaluate(cid)
     assert not g or not (g.get("documents") or {}).get("identity_flags")
+
+
+def test_the_next_step_on_a_private_case_file_is_adding_files_not_sending_requests():
+    from tumour_board import steps
+    nxt = steps._next(missing=[1], groups={"x": {}, "y": {}}, doc_todo=[], problems=[], unconfirmed=[], question_done=True, prose={}, sent=False,
+                      warns=[], private=True)
+    assert nxt == {"section": "reports", "label": "Add 2 missing files"}
+    assert steps._next(missing=[1], groups={"x": {}}, doc_todo=[], problems=[], unconfirmed=[], question_done=True, prose={}, sent=False,
+                       warns=[])["label"] == "Send 1 request"

@@ -66,7 +66,7 @@ export function CaseRow({ c, q = "", showOwner = true, onMeeting }: { c: CaseLis
         {c.imaging_present ? <Camera className="ml-1.5 inline size-3.5 align-[-2px] text-muted-foreground" aria-label="Imaging present" /> : null}
       </p>
       {c.summary_line ? <p className="truncate text-xs text-muted-foreground" data-testid="row-summary-line"><Highlight text={c.summary_line} q={q} /></p> : null}
-      {c.private ? <p className="mt-1"><Pill icon={Lock} title="Only the guest reviewer and the MDT Coordinator can see this Case File">Private</Pill></p> : null}
+      {c.private ? <p className="mt-1"><Pill icon={Lock} title="Only the guest reviewer and the MDT Coordinator can see this Case File (and its meeting, once sent to the board)">Private</Pill></p> : null}
       {linkedOnly ? <p className="mt-1"><Pill icon={Link2} title="Linked to a Case File of your department; you can read it, not change it">Owned by {ownedBy}, read-only</Pill></p> : null}
     </div>
   );

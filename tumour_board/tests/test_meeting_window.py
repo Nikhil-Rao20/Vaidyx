@@ -277,3 +277,62 @@ def test_an_outside_expert_follows_with_the_identity_withheld(tc):  # noqa: F811
     c = store.get_case("TB-001"); c["consent"] = {"outside_discussion": True}; store.save_case(c)
     assert As(tc, "guest").get(f"/meetings/{mid}").json()["view"]["quote"] == line
     assert meetings.shows_record(roles("guest"), "TB-001", doc["doc_id"]) == mid  # the report the view shows, as the old shared screen did
+
+
+# ---- a guest reviewer's private Case File on the board (Eswar, 5 Nov 2026, "Allow the board") ----------------------------------------
+
+def _private(cid, sent):
+    (store.case_dir(cid) / config.PRIVATE_MARKER).write_text("")
+    c = store.get_case(cid)
+    c["board_ready_history"] = [{"ready": True, "by": "guest", "at": store.now_iso(), "note": ""}] if sent else []
+    store.save_case(c)
+
+
+def test_a_private_case_file_is_kept_off_the_board_until_it_is_sent(tc):  # noqa: F811
+    _private("TB-001", sent=False)
+    assert "TB-001" in config.BOARD_HIDDEN and "TB-001" in config.HIDDEN_CASES
+    _private("TB-001", sent=True)
+    assert "TB-001" not in config.BOARD_HIDDEN and "TB-001" in config.HIDDEN_CASES   # on the board, still hidden everywhere else
+    c = store.get_case("TB-001"); c["board_ready_history"].append({"ready": False, "by": "guest", "at": store.now_iso(), "note": "taken back"})
+    store.save_case(c)
+    assert "TB-001" in config.BOARD_HIDDEN                                            # taken back: off the board again
+
+
+def test_people_in_the_meeting_read_a_sent_private_case_file_only_while_it_is_on_the_floor(tc):  # noqa: F811
+    _private("TB-001", sent=True)
+    mid = started(tc, discussion=("TB-001", "TB-002"), noting=())                    # TB-001 on the floor
+    assert sc("ravi", "TB-001") is None                                               # not in the meeting: nothing
+    join_and_admit(tc, mid, "ravi")
+    assert sc("ravi", "TB-001") == access.READ and steps_status("ravi", "TB-001") == 200
+    assert As(tc, "ravi").put("/cases/TB-001/reason", json={"value": "staging"}).status_code == 403   # read only
+    assert access.visible(roles("ravi"), [store.get_case("TB-001")]) == []          # never listed among the doctor's own
+    assert "TB-001" in As(tc, "anil").get(f"/meetings/{mid}").text                    # on the coordinator's agenda
+    c = store.get_case("TB-001"); c["board_ready_history"].append({"ready": False, "by": "guest", "at": store.now_iso(), "note": ""})
+    store.save_case(c)
+    assert sc("ravi", "TB-001") is None                                               # taken back: the window closes
+
+
+def test_a_private_case_file_not_sent_gives_no_meeting_window(tc):  # noqa: F811
+    mid = started(tc, discussion=("TB-001", "TB-002"), noting=())
+    join_and_admit(tc, mid, "ravi")
+    _private("TB-001", sent=False)                                                    # made private and never sent
+    assert sc("ravi", "TB-001") is None and steps_status("ravi", "TB-001") in (403, 404)
+
+
+def test_the_guest_sends_a_private_case_file_onto_a_planned_meeting(tc):  # noqa: F811
+    """The send checks the agenda before it marks the send: a private Case File being sent passes that check, the real case never."""
+    owned("TB-001")
+    _private("TB-001", sent=False)
+    mid = new_meeting(tc)
+    with pytest.raises(ValueError):
+        board._check_cases(["TB-001"])                                             # not sent: not on any agenda
+    assert board._check_cases(["TB-001"], sending=("TB-001",)) == ["TB-001"]       # the send itself may put it there
+    assert "TB-001" in config.BOARD_HIDDEN
+    config.PROTECTED_CASES.add("TB-001") if isinstance(config.PROTECTED_CASES, set) else None
+    try:
+        if "TB-001" in config.PROTECTED_CASES:
+            with pytest.raises(ValueError):
+                board._check_cases(["TB-001"], sending=("TB-001",))                # the real case: never
+    finally:
+        config.PROTECTED_CASES.discard("TB-001") if isinstance(config.PROTECTED_CASES, set) else None
+    assert mid

@@ -13,7 +13,7 @@ of the Case File's own surgical department, else the Surgical Oncology agent sta
 Nuclear Medicine agents stay on demand.
 
 Storage: data/tumour_board/sessions/<sid>.json (atomic writes) and sessions/audit.jsonl (every change). Changes about one Case
-File are also written to that Case File's audit.jsonl. A protected Case File (config.HIDDEN_CASES, real patient data) never
+File are also written to that Case File's audit.jsonl. A protected Case File (config.BOARD_HIDDEN, real patient data) never
 joins a session.
 
 All functions are synchronous read-modify-write with no awaits: in the app's single event loop each call is atomic relative to
@@ -91,7 +91,7 @@ def audit_session(sid: str, event: dict) -> None:
 def _audit(sid, kind, by, case_id=None, case_kind=None, **extra):
     """sessions/audit.jsonl always; the Case File's audit.jsonl too when the change is about one Case File (case_kind given)."""
     audit_session(sid, {"kind": kind, "by": by or "", **({"case_id": case_id} if case_id else {}), **extra})
-    if case_id and case_kind and case_id not in config.HIDDEN_CASES:
+    if case_id and case_kind and case_id not in config.BOARD_HIDDEN:
         store.audit(case_id, {"kind": f"board_session_{case_kind}", "session": sid, "by": by or "", **extra})
 
 
@@ -154,7 +154,7 @@ def attendance_list(session) -> list[dict]:
     for did in org.hospital().get("board_attendance") or []:
         add(did, "hospital attendance list")
     for a in (session or {}).get("agenda") or []:
-        c = store.get_case(a["case_id"]) if a.get("case_id") not in config.HIDDEN_CASES else None
+        c = store.get_case(a["case_id"]) if a.get("case_id") not in config.BOARD_HIDDEN else None
         for i, did in enumerate(_case_departments(c)):
             add(did, f"{'owner' if i == 0 else 'participant'}: {a['case_id']}")
     for did, v in attendance(session).items():
@@ -183,7 +183,7 @@ def listed_for_date(date: str) -> list[dict]:
     """The Case Files listed for a board date, in listing order, each with what the coordinator needs to build the agenda (V2 item 6.1):
     the owner, whether the owner marked it ready, the Pre-Authorization result and the summary state."""
     date = _check_date(date)
-    rows = [c for c in store.list_cases() if c.get("case_id") not in config.HIDDEN_CASES and _listed(c) and c.get("board_date") == date
+    rows = [c for c in store.list_cases() if c.get("case_id") not in config.BOARD_HIDDEN and _listed(c) and c.get("board_date") == date
             and not (isinstance(c.get("archived"), dict) and c["archived"].get("at"))]  # an archived Case File is never a candidate (review #8)
     rows.sort(key=lambda c: ((c.get("listing") or {}).get("listed_at") or "", c["case_id"]))
     out = []
@@ -202,7 +202,7 @@ def mark_ready(case_id: str, user: str, ready: bool = True, note: str = "", *, e
     the agenda from the ready Case Files (V2 item 6.1). Audited. A Case File must be listed to be marked ready. `extra_text` is added to
     the coordinator's notice (send_to_board: the meeting, the list and the presenter)."""
     from . import notify
-    if case_id in config.HIDDEN_CASES:
+    if case_id in config.PROTECTED_CASES:  # the real case; a private Case File is put on the board by this very send (5 Nov 2026)
         raise ValueError("That Case File is protected")
     c = store.get_case(case_id)
     if not c:
@@ -247,7 +247,7 @@ def send_to_board(case_id: str, user: str, *, list: str = "discussion", meeting_
     not past its time; meetings.meeting_for_send), board_send.auto = true; with none it waits (case.json board_waiting) and joins the first
     meeting made later (meetings.create, the weekly series)."""
     from . import access, meetings, profiles, steps
-    if case_id in config.HIDDEN_CASES:
+    if case_id in config.PROTECTED_CASES:  # the real case; a private Case File is put on the board by this very send (5 Nov 2026)
         raise ValueError("That Case File is protected")
     c = store.get_case(case_id)
     if not c:
@@ -286,7 +286,7 @@ def send_to_board(case_id: str, user: str, *, list: str = "discussion", meeting_
     if s:
         try:  # the checks add_to_agenda makes, before anything is written: a refused add leaves no ready mark and no notice
             meetings._active(s)
-            meetings._check([case_id])
+            meetings._check([case_id], sending=(case_id,))
         except meetings.MeetingError as e:
             raise ValueError(str(e)) from None
     now = store.now_iso()
@@ -317,7 +317,7 @@ def send_to_board(case_id: str, user: str, *, list: str = "discussion", meeting_
     return c
 
 
-def _check_cases(case_ids, listed=True, keep=()) -> list[str]:
+def _check_cases(case_ids, listed=True, keep=(), sending=()) -> list[str]:
     """Explicit agenda: order kept, duplicates dropped; each Case File must exist, be listed (unless listed=False: the meeting's not-ready
     list takes a Case File that is not listed yet), not be protected and not be archived (security review #8; `keep`: the ids already
     on this agenda, which stay even when archived since)."""
@@ -330,7 +330,9 @@ def _check_cases(case_ids, listed=True, keep=()) -> list[str]:
             cid = store.safe_id(raw)  # the id as stored on disk: the protected check below cannot be dodged by spelling
         except ValueError:
             raise ValueError(f"Invalid Case File id {raw!r}") from None
-        if cid in config.HIDDEN_CASES:  # checked before anything is read from it
+        # checked before anything is read from it; `sending`: a private Case File being sent to the board right now (send_to_board checks
+        # before it marks the send, 5 Nov 2026); the real case never passes
+        if cid in config.BOARD_HIDDEN and not (cid in sending and cid not in config.PROTECTED_CASES and config.is_private(cid)):
             raise ValueError(f"Case File {cid} holds real patient data and cannot join a board session")
         if cid != raw:
             raise ValueError(f"Invalid Case File id {raw!r}")
@@ -492,7 +494,7 @@ def sync_agenda_lists(s, by) -> list[str]:
     for k in ("discussion", "noting"):
         for it in lists.get(k) or []:
             cid = (it or {}).get("case_id")
-            if cid and cid not in ids and cid not in config.HIDDEN_CASES:
+            if cid and cid not in ids and cid not in config.BOARD_HIDDEN:
                 ids.append(cid)
     old = {a["case_id"]: a for a in s.get("agenda") or []}
     now = store.now_iso()
@@ -702,7 +704,7 @@ def absent_roles(session, case_id=None) -> list[str]:
     for r, d in ROLE_DEPARTMENT.items():
         active = att.get(d) == "absent" or (d in hs and att.get(d, "not_marked") != "present")
         if r == SURGICAL_ROLE and case_id and active:
-            c = store.get_case(case_id) if case_id not in config.HIDDEN_CASES else None
+            c = store.get_case(case_id) if case_id not in config.BOARD_HIDDEN else None
             active = not seat(session, c)["filled"]
         if active:
             out.append(r)
@@ -729,7 +731,7 @@ def may_open(r: dict, session) -> bool:
     if mine & {d["id"] for d in attendance_list(session)}:
         return True
     for a in (session or {}).get("agenda") or []:
-        c = store.get_case(a["case_id"]) if a.get("case_id") not in config.HIDDEN_CASES else None
+        c = store.get_case(a["case_id"]) if a.get("case_id") not in config.BOARD_HIDDEN else None
         if c and access.scope(r, c) == access.FULL:
             return True
     return False
@@ -745,7 +747,7 @@ def allowed_cases(r: dict, session) -> set | None:
     out = set()
     for a in (session or {}).get("agenda") or []:
         cid = a.get("case_id")
-        c = store.get_case(cid) if cid and cid not in config.HIDDEN_CASES else None
+        c = store.get_case(cid) if cid and cid not in config.BOARD_HIDDEN else None
         if c and isinstance(r, dict) and access.scope(r, c) == access.FULL:
             out.add(cid)
     return out
@@ -769,7 +771,7 @@ def session_surgical(session) -> set:
     out = set()
     for a in (session or {}).get("agenda") or []:
         cid = a.get("case_id")
-        c = store.get_case(cid) if cid and cid not in config.HIDDEN_CASES else None
+        c = store.get_case(cid) if cid and cid not in config.BOARD_HIDDEN else None
         if c:
             out.update(_case_surgical(c))
     return out
@@ -1093,7 +1095,7 @@ def followup(session, allowed=None) -> dict:
     today = store.now_iso()[:10]
     rows = []
     for cid, d in ((session or {}).get("decisions") or {}).items():
-        if cid in config.HIDDEN_CASES or (allowed is not None and cid not in allowed):
+        if cid in config.BOARD_HIDDEN or (allowed is not None and cid not in allowed):
             continue
         st = store.get_state(cid)
         for a in st.get("actions") or []:
@@ -1147,7 +1149,7 @@ def minutes(sid, allowed=None) -> dict:
         cid = a["case_id"]
         if allowed is not None and cid not in allowed:
             cases.append({"n": i + 1, "case_id": cid, "restricted": True}); continue
-        c = store.get_case(cid) if cid not in config.HIDDEN_CASES else None
+        c = store.get_case(cid) if cid not in config.BOARD_HIDDEN else None
         if not c:
             cases.append({"n": i + 1, "case_id": cid, "missing": True}); continue
         st = store.get_state(cid)

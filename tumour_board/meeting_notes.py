@@ -485,7 +485,7 @@ async def build_notes(mid: str, case_id: str, by: str = "", trigger: str = "on_d
     """Write (again) the notes of one Case File of this meeting from its segments. Returns notes_view of the stored notes, or
     {"status": "nothing_recorded"} when no segment was stored for it (nothing saved). The model is called with no meeting record held;
     the result is saved by a fresh read-modify-write. llm.LLMError propagates (the old notes stay)."""
-    if case_id in config.HIDDEN_CASES:
+    if case_id in config.BOARD_HIDDEN:
         raise MeetingError("Notes are never written for a protected Case File.", 403, "protected")
     s = meetings.need(mid)
     segs = segments(mid, case_id)
@@ -631,7 +631,7 @@ def meeting_view(s: dict, r: dict) -> dict:
         if not isinstance(e, dict):
             continue
         if r.get("outside_expert") and not meetings.manage(r):
-            c = store.get_case(cid) if cid not in config.HIDDEN_CASES else None
+            c = store.get_case(cid) if cid not in config.BOARD_HIDDEN else None
             if not c or meetings.outside_view(r, c):
                 cases.append({"case_id": cid, "withheld": True, "note": WITHHELD_NOTE})
                 continue
@@ -713,7 +713,7 @@ def schedule(mid: str, case_id: str, by: str = "", trigger: str = "on_demand") -
     asked; a Case File already waiting is not queued twice). {"scheduled", "how": loop|queued|off|no_loop}."""
     if not enabled():
         return {"scheduled": False, "how": "off"}
-    if case_id in config.HIDDEN_CASES:
+    if case_id in config.BOARD_HIDDEN:
         return {"scheduled": False, "how": "off", "reason": "protected Case File"}
     try:
         loop = asyncio.get_running_loop()
@@ -770,7 +770,7 @@ def on_meeting_ended(mid: str, by: str = "") -> dict:
         seen = {x.get("case_id") for x in segments(mid) if x.get("case_id")}
         order = [c for c in _agenda_order(s) if c in seen] + sorted(c for c in seen if c not in _agenda_order(s))
         for cid in order:
-            if cid not in config.HIDDEN_CASES and _stale(s, cid) and schedule(mid, cid, by, "meeting_ended").get("scheduled"):
+            if cid not in config.BOARD_HIDDEN and _stale(s, cid) and schedule(mid, cid, by, "meeting_ended").get("scheduled"):
                 out["scheduled"].append(cid)
     except Exception as e:
         log.warning("meeting %s: end-of-meeting recorder step failed (%s)", mid, e.__class__.__name__)

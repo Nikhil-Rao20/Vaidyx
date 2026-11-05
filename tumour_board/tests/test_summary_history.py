@@ -55,12 +55,12 @@ def test_rebuild_archives_the_earlier_version_with_its_review(ihc_case, monkeypa
     old = a["summary_history"][0]
     assert old["archived_reason"] == "rebuilt" and old["archived_at"] and old["archived_at"] > first["generated"]
     assert old["generated"] == first["generated"] and old["signature"] == first["signature"]
-    assert [s["text"] for sec in old["sections"] for s in sec["sentences"]] == [GOOD["text"]]
+    assert [s["text"] for sec in old["sections"] for s in sec["sentences"] if not s.get("from_case_record")] == [GOOD["text"]]
     assert old["review"] == {"status": "reviewed", "comment": "Checked against the IHC report", "by": "dr.rao", "at": rv["at"],
                              "generated": first["generated"]}
     live = a["summary"]
     assert live["generated"] == second["generated"] and live["review"] == {"status": "ai_draft"} and "archived_at" not in live
-    assert [s["text"] for sec in live["sections"] for s in sec["sentences"]] == [GOOD["text"], HER2["text"]]
+    assert [s["text"] for sec in live["sections"] for s in sec["sentences"] if not s.get("from_case_record")] == [GOOD["text"], HER2["text"]]
 
 
 def test_history_is_oldest_first_and_never_trimmed(ihc_case, monkeypatch):

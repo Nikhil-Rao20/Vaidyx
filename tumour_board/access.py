@@ -499,7 +499,7 @@ def _meeting_floors() -> dict:
         from . import board, meetings  # lazy: both import this module
         for s in board.running_sessions():
             cid = s.get("current")
-            if not cid or str(cid) in config.HIDDEN_CASES:
+            if not cid or str(cid) in config.BOARD_HIDDEN:  # a private Case File sent to the board may be on the floor (5 Nov 2026)
                 continue
             for u, p in (s.get("people") or {}).items():
                 if isinstance(p, dict) and p.get("status") in meetings.ADMITTED and not p.get("outside_expert"):
@@ -513,11 +513,11 @@ def _meeting_floors() -> dict:
 
 def meeting_window(r: dict, case) -> str | None:
     """The id of the running meeting whose Case File on the floor is this one and to which `r` is admitted (present or remote), else
-    None. Never an outside expert, a disabled or expired login, or a protected Case File."""
+    None. Never an outside expert, a disabled or expired login, the real case, or a private Case File not sent to the board."""
     if not isinstance(r, dict) or not isinstance(case, dict) or r.get("outside_expert") or r.get("disabled") or r.get("expired"):
         return None
     u, cid = str(r.get("user") or ""), str(case.get("case_id") or "")
-    if not u or not cid or is_protected(case):
+    if not u or not cid or cid in config.BOARD_HIDDEN:  # the real case never; a private one once sent to the board (5 Nov 2026)
         return None
     return _meeting_floors().get(cid, {}).get(u)
 
@@ -537,6 +537,9 @@ def scope(r: dict, case: dict, state=None) -> str | None:
         if is_creator(r, case) or (r.get("vaidyx_admin") and break_glass_window(r.get("user") or "", case.get("case_id")) is not None):
             return FULL
         if coordinator_view(r, case):  # a guest reviewer's private Case File: the MDT Coordinator reads it too (Eswar, 5 Nov 2026)
+            return READ
+        if (config.is_private(case.get("case_id")) and str(case.get("case_id")) not in config.BOARD_HIDDEN and r.get("known")
+                and meeting_window(r, case)):  # sent to the board: the people admitted to the meeting read it while it is on the floor
             return READ
         return None
     if r.get("admin"):
