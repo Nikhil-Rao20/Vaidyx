@@ -402,3 +402,27 @@ def test_the_coordinator_lists_and_reads_a_private_case_file_but_changes_nothing
     assert access.scope(org.roles(ANIL), store.get_case(cid)) == access.READ
     assert not access.coordinator_view(org.roles(GR), store.get_case(cid))      # a guest never gets the coordinator's view
     assert not access.coordinator_view(org.roles(ANIL), store.get_case("TB-2026-bharath") or {"case_id": "TB-2026-bharath"})  # never the real case
+
+
+def test_a_guest_needs_no_registration_number(app):
+    """Eswar, 5 Nov 2026: an outside reviewer may have no medical council number; a name is enough to finish the set-up."""
+    from tumour_board import profiles
+    assert not profiles.is_doctor(org.roles(GR)) and profiles.is_doctor(org.roles(RAO))
+    r = app.as_(GR).put("/me/profile", json={"display_name": "Guest Reviewer"})
+    assert r.status_code == 200, r.text
+    assert r.json()["setup_needed"] is False
+
+
+def test_a_private_case_file_has_no_patient_to_match(app):
+    """Eswar, 5 Nov 2026: anonymized files on a labelled private Case File never show "name or number does not match"."""
+    from tumour_board import rules, steps
+    cid = create_private(app)["case_id"]
+    c = store.get_case(cid)
+    d = {"doc_id": "D1", "state": "ready", "identity": "mismatch_or_missing", "classification": {}, "fields": {}}
+    assert not any("does not match" in x for x in steps.doc_check(d, c)["reasons"])
+    plain = store.create_case("TB-PLAIN3", {"name": "SYNTHETIC P"}, "breast", created_by=RAO)
+    assert any("does not match" in x for x in steps.doc_check(d, plain)["reasons"])       # an ordinary Case File keeps the check
+    assert upload(app.as_(GR), cid, [CLEAN_TXT], anonymized="1").status_code == 200
+    doc = store.list_docs(cid)[0]; doc.update(state="ready", identity="mismatch_or_missing"); store.save_doc(cid, doc)
+    g = rules.evaluate(cid)
+    assert not g or not (g.get("documents") or {}).get("identity_flags")

@@ -29,6 +29,7 @@ export function ProfileSection() {
   const [visible, setVisible] = useState(Boolean(me?.profile?.phone_visible));
   const [errors, setErrors] = useState<{ name?: string; reg?: string; phone?: string }>({});
   const doctor = me ? isDoctor(me) : false;
+  const regRequired = doctor && !me?.real_data;  // a guest reviewer may have no registration number (5 Nov 2026)
   const dirty = Boolean(me) && (
     name !== (me?.display_name && me.display_name !== me.user ? me.display_name : "") || title !== savedTitle || reg !== (me?.profile?.registration_no || "") ||
     photo !== (me?.profile?.photo || "") || phone !== (me?.profile?.phone || "") || visible !== Boolean(me?.profile?.phone_visible)
@@ -41,7 +42,7 @@ export function ProfileSection() {
     e.preventDefault();
     const er: typeof errors = {};
     if (name.trim().length < 2) er.name = "Type your name as colleagues know it.";
-    if (doctor && !reg.trim()) er.reg = "Your medical council registration number is needed for doctors.";
+    if (regRequired && !reg.trim()) er.reg = "Your medical council registration number is needed for doctors.";
     else if (reg.trim() && !/^[A-Za-z0-9 /.-]{2,40}$/.test(reg.trim())) er.reg = "Letters, digits, spaces, slashes, dots and hyphens only.";
     if (phone.trim() && !/^\+?[0-9][0-9 -]{6,19}$/.test(phone.trim())) er.phone = "Digits, spaces and hyphens, with an optional + at the start.";
     setErrors(er);
@@ -62,7 +63,7 @@ export function ProfileSection() {
             <Input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" maxLength={80} />
           </Field>
         </div>
-        <Field id="s-reg" label="Registration number" required={doctor} optional={!doctor} error={errors.reg} hint="State or National Medical Council; printed on the board record.">
+        <Field id="s-reg" label="Registration number" required={regRequired} optional={!regRequired} error={errors.reg} hint="State or National Medical Council; printed on the board record.">
           <Input value={reg} onChange={(e) => setReg(e.target.value)} className="mono" maxLength={40} />
         </Field>
         <div>

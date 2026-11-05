@@ -46,6 +46,7 @@ export default function Welcome() {
   const [uhid, setUhid] = useState("");
   const [errors, setErrors] = useState<{ name?: string; reg?: string; phone?: string }>({});
   const doctor = me ? isDoctor(me) : false;
+  const regRequired = doctor && !me?.real_data;  // a guest reviewer may have no registration number (5 Nov 2026)
   const org = useOrg();
   const deptNames = new Map((org.data?.departments ?? []).map((d) => [d.id, d.name]));
   const canCreate = Boolean(me && ((me.roles.treating || []).length || me.roles.coordinator));
@@ -68,7 +69,7 @@ export default function Welcome() {
     const er: typeof errors = {};
     if (s === 1) {
       if (name.trim().length < 2) er.name = "Type your name as colleagues know it.";
-      if (doctor && !reg.trim()) er.reg = "Your medical council registration number.";
+      if (regRequired && !reg.trim()) er.reg = "Your medical council registration number.";
     }
     if (s === 3 && phone && !/^\+?[\d\s-]{8,15}$/.test(phone)) er.phone = "Type a mobile number with digits only, e.g. +91 98765 43210.";
     setErrors(er);
@@ -129,7 +130,7 @@ export default function Welcome() {
               </p>
             ) : null}
             {doctor ? (
-              <Field id="reg" label="Registration number" required error={errors.reg} hint="State or National Medical Council; printed on the board record.">
+              <Field id="reg" label="Registration number" required={regRequired} optional={!regRequired} error={errors.reg} hint="State or National Medical Council; printed on the board record.">
                 <Input value={reg} onChange={(e) => setReg(e.target.value)} placeholder="e.g. TNMC 12345" className="mono" />
               </Field>
             ) : null}

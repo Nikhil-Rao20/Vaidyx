@@ -332,6 +332,9 @@ def refresh_identity(case_id, doc_id, case_patient):
     doc = store.get_doc(case_id, doc_id)
     if not doc or doc.get("state") != "ready" or not doc.get("identity_read"):
         return doc
+    from . import config
+    if config.is_private(case_id):  # a label, not a patient: nothing to match (5 Nov 2026)
+        return doc
     ident, m = identity_check(_doc_text(doc.get("pages") or []), case_patient, doc["identity_read"])
     if ident and ident != doc.get("identity"):
         doc["identity"] = ident
@@ -375,7 +378,9 @@ async def process_document(case_id, doc_id, protocol_id, case_patient=None, prog
         if not doc.get("identity_read"):
             from . import intake  # the same reader as the intake area (model fallback quote checked)
             doc["identity_read"] = intake.read_identity(doc, identity.patient_record(case_patient or {})["ids"])
-        ident, m = identity_check(full, case_patient, doc["identity_read"])
+        from . import config
+        # a guest reviewer's private Case File carries a label, not a patient: no name or number to match (Eswar, 5 Nov 2026)
+        ident, m = (None, None) if config.is_private(case_id) else identity_check(full, case_patient, doc["identity_read"])
         if ident:
             doc["identity"] = ident
             if ident == "match" and m is not None and m["decision"] == "auto_link":  # an exact identifier: the Case File learns the record's other identifiers

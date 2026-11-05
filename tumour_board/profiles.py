@@ -66,8 +66,9 @@ def get(username: str) -> dict:
 
 
 def is_doctor(r: dict) -> bool:
-    """Whether the registration number is part of the set-up: anyone placed in a department (consultant or resident)."""
-    return bool((r or {}).get("departments"))
+    """Whether the registration number is part of the set-up: anyone placed in a department (consultant or resident). A guest reviewer
+    (real_data) may leave it empty: an outside reviewer may have none (Eswar, 5 Nov 2026)."""
+    return bool((r or {}).get("departments")) and not (r or {}).get("real_data")
 
 
 def _complete(p: dict, doctor: bool) -> bool:

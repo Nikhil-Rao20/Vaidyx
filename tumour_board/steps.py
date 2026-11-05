@@ -168,7 +168,7 @@ def doc_check(d, case, cat=None) -> dict:
     if state != "ready":
         return {"status": "reading", "reasons": ["Being read"], "values": values}
     reasons = []
-    ident = d.get("identity")
+    ident = None if config.is_private((case or {}).get("case_id")) else d.get("identity")  # a private Case File has no patient to match (5 Nov 2026)
     if ident in ("id_differs", "mismatch_or_missing") and not d.get("identity_confirmed_by"):
         reasons.append("The patient's name or number does not match this Case File")
     elif ident == "name_match" and not d.get("identity_confirmed_by"):

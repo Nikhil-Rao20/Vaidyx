@@ -9,7 +9,7 @@ import re
 import uuid
 from datetime import date, datetime, timedelta
 
-from . import confirm, dates, doctype, grounding, protocol, scanned, store
+from . import config, confirm, dates, doctype, grounding, protocol, scanned, store
 
 FINAL_OK = {"FINAL", "AMENDED", "CORRECTED"}
 VERIFIED = {"verified", "confirmed"}  # a value counts when code found its quote, or a clinician confirmed it against the source (V1 item 2.2)
@@ -578,6 +578,8 @@ def evaluate(case_id):
     state = store.get_state(case_id)
     docs = case_docs(case_id, state)
     ready = [d for d in docs if d.get("state") == "ready" and not d.get("superseded")]  # an earlier version of an amended HIS report is history (V2 item 3.5)
+    if config.is_private(case_id):  # a guest reviewer's private Case File: a label, not a patient, so no identity flag (5 Nov 2026)
+        ready = [{k: v for k, v in d.items() if k != "identity"} for d in ready]
     overrides = state.get("overrides") or {}
     facts = typed_overlay(case, resolve_facts(docs, overrides), prot, cat)  # values the doctor typed count for the gate only (18 Oct, slots.py)
     his = case.get("his") or {}
