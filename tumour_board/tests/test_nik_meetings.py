@@ -5,6 +5,8 @@ for the heads), slides. Hermetic: a fake login system, synthetic Case Files, no 
 import asyncio, copy, time
 from datetime import date, datetime, timedelta
 
+FUT = (date.today() + timedelta(days=7)).isoformat()  # a meeting date never in the past (a fixed date failed once it passed, 6 Nov 2026)
+
 import pytest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
@@ -158,14 +160,14 @@ def kinds(dept=None, role=None, user=None):
 # ---- create, list, update, cancel -------------------------------------------------------------------------------------------------------
 
 def test_create_update_list_and_cancel(tc):
-    r = As(tc, "anil").post("/meetings", json={"date": "2026-11-05", "time": "09:00", "room": "Room 4", "video": True, "minutes_per_case": 8})
+    r = As(tc, "anil").post("/meetings", json={"date": FUT, "time": "09:00", "room": "Room 4", "video": True, "minutes_per_case": 8})
     assert r.status_code == 200
     m = r.json()["meeting"]
     assert m["status"] == "planned" and m["time"] == "09:00" and m["room"] == "Room 4" and m["video"] is True and m["minutes_per_case"] == 8
     assert m["counts"] == {"discussion": 0, "noting": 0, "not_ready": 0} and m["agenda_sent_at"] is None
     mid = m["id"]
     assert board.get(mid)["agenda"] == [] and board.get(mid)["status"] == "planned"  # the old session file, same shape
-    assert As(tc, "priya").post("/meetings", json={"date": "2026-11-05"}).status_code == 403
+    assert As(tc, "priya").post("/meetings", json={"date": FUT}).status_code == 403
     assert As(tc, "anil").post("/meetings", json={"date": "5/11/2026"}).status_code == 400
     assert As(tc, "anil").post("/meetings", json={"date": "2026-11-06", "time": "9am"}).json()["detail"]["code"] == "bad_time"
     r = As(tc, "anil").put(f"/meetings/{mid}", json={"time": "09:30", "room": "Room 5", "video": False})
@@ -184,7 +186,7 @@ def test_create_update_list_and_cancel(tc):
 def test_defaults_come_from_the_hospital_settings(tc):
     o = org.load(); o["hospital"]["meeting_defaults"] = {"weekday": 2, "time": "14:00", "room": "Oncology seminar room", "minutes_per_case": 12}
     org.save(o, by="test")
-    m = As(tc, "anil").post("/meetings", json={"date": "2026-11-05"}).json()["meeting"]
+    m = As(tc, "anil").post("/meetings", json={"date": FUT}).json()["meeting"]
     assert m["time"] == "14:00" and m["room"] == "Oncology seminar room" and m["minutes_per_case"] == 12
 
 
