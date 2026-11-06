@@ -20,7 +20,7 @@ OWNERS = {"TB-001": "pulmonology", "TB-002": "breast_surgery", "TB-003": "colore
 REASON = "Doctors' demo instance set-up: the practice Case File gets its treating department"
 SECRET = open(os.path.expanduser(os.getenv("VX_GATE_SECRET_FILE", "~/vaidyx/deploy_vm/secrets/gate_secret"))).read().strip()
 LOGINS = os.path.expanduser(os.getenv("VX_LOGINS", "~/vaidyx/.tb_deploy_logins"))
-HEAD = {"Host": os.getenv("VX_PUBLIC_HOST", "vaidyx-tb-8-231-83-210.sslip.io"), "X-Vaidyx-Gate": SECRET,
+HEAD = {"Host": os.getenv("VX_PUBLIC_HOST", "vaidyx.tanuh.ai"), "X-Vaidyx-Gate": SECRET,
         "X-Forwarded-For": "127.0.0.2", "X-Forwarded-Proto": "https"}
 
 

@@ -7,7 +7,7 @@
 set -u
 export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH
 HERE=$(cd "$(dirname "$0")" && pwd)
-HOST=${VX_PUBLIC_HOST:-vaidyx-tb-8-231-83-210.sslip.io}
+HOST=${VX_PUBLIC_HOST:-vaidyx.tanuh.ai}
 ROOT=${VX_DEPLOY_ROOT:-/data/vaidyx/tb_deploy}
 OUT=${VX_CHECK_LOG:-$HOME/vaidyx/deploy_vm/logs/daily_check.log}
 mkdir -p "$(dirname "$OUT")"

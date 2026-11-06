@@ -13,7 +13,8 @@
 #   sudo ./setup-vm.sh uninstall           remove everything of ours (one step back for every step above)
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
-HOSTNAME_TB=vaidyx-tb-8-231-83-210.sslip.io
+HOSTNAME_TB=vaidyx.tanuh.ai                     # the site (6 Nov 2026)
+OLD_NAME=vaidyx-tb-8-231-83-210.sslip.io          # the first address: on the same certificate, redirects to the site
 ETC=/etc/vaidyx-tb
 DATA=/mnt/data/vaidyx-tb
 CHISEL_SHA256=b34230fc7f316d77335d59ccff3b4824298c4297ffd9d1d65f9813e01af4ebb1   # chisel 1.13.0 linux amd64
@@ -90,7 +91,7 @@ cert() {
   say "stopping nginx for the TLS-ALPN challenge (about 12 seconds)"
   systemctl stop nginx
   trap 'systemctl start nginx' EXIT
-  timeout 180 lego --path "$ETC/lego" --email "$email" --domains "$HOSTNAME_TB" --accept-tos --tls run
+  timeout 180 lego --path "$ETC/lego" --email "$email" --domains "$HOSTNAME_TB" --domains "$OLD_NAME" --accept-tos --tls run
   systemctl start nginx; trap - EXIT
   systemctl is-active nginx
   say "after: $(neighbours)"
@@ -103,7 +104,7 @@ renew() {
   left=$(( ( $(date -d "$end" +%s) - $(date +%s) ) / 86400 ))
   [ "$left" -ge 30 ] && { say "certificate has $left days left: no renewal needed"; return 0; }
   say "before: $(neighbours)"; systemctl stop nginx; trap 'systemctl start nginx' EXIT
-  timeout 180 lego --path "$ETC/lego" --email "$email" --domains "$HOSTNAME_TB" --accept-tos --tls renew --days 30
+  timeout 180 lego --path "$ETC/lego" --email "$email" --domains "$HOSTNAME_TB" --domains "$OLD_NAME" --accept-tos --tls renew --days 30
   systemctl start nginx; trap - EXIT; say "after: $(neighbours)"
 }
 

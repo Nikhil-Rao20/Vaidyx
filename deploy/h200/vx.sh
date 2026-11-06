@@ -29,7 +29,7 @@ CHISEL=${VX_CHISEL:-/data/vaidyx/tools/chisel-1.13.0/chisel}
 # token, run from the pinned checkout in the shared audio environment. If it does not start, the site runs with voice off.
 AUDIO_PY=${VX_AUDIO_PY:-/data/vaidyx/venv/audio/bin/python}
 AUDIO_TOKEN=$ROOT/tumour_board/audio_token.json
-HOST=${VX_PUBLIC_HOST:-vaidyx-tb-8-231-83-210.sslip.io}
+HOST=${VX_PUBLIC_HOST:-vaidyx.tanuh.ai}
 APP_PORT=7300; GATE_PORT=7301; HIS_PORT=7330; AUDIO_PORT=7340; LINK_REMOTE="R:127.0.0.1:970:127.0.0.1:$GATE_PORT"   # 970: below 1024, so no other VM user can listen there
 mkdir -p "$LOG"; chmod 700 "$ROOT" 2>/dev/null
 
