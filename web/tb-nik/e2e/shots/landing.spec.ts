@@ -33,6 +33,96 @@ test.describe("landing", () => {
     expect(errors, errors.join("\n")).toEqual([]);
   });
 
+  // 12 Nov: the five boxes under the hero ("What Vaidyx does"), the sections they open, and "Customisable for your hospital".
+  test("the five boxes, their sections and the customisable section", async ({ page }) => {
+    const errors = watchConsole(page);
+    await visit(page, "/", { signedOut: true });
+    await expect(page.getByTestId("landing-hero")).toBeVisible();
+    const boxes = [
+      { key: "proof", to: "sources", title: "Every answer shows its proof" },
+      { key: "pubmed", to: "pubmed", title: "Evidence from PubMed" },
+      { key: "benchmark", to: "benchmark", title: "Models tested before use" },
+      { key: "local", to: "local", title: "Runs inside your hospital" },
+      { key: "assistant", to: "how", title: "One assistant, start to finish" },
+    ];
+    const pillars = page.getByTestId("pillars");
+    await expect(pillars.locator("a.l-pillar")).toHaveCount(5);
+    // under the hero: the boxes start below the hero's end and before the problem section
+    const order = await page.evaluate(() => {
+      const y = (sel: string) => (document.querySelector(sel) as HTMLElement).getBoundingClientRect().top + window.scrollY;
+      const hero = document.querySelector('[data-testid="landing-hero"]') as HTMLElement;
+      return { heroEnd: y('[data-testid="landing-hero"]') + hero.offsetHeight, boxes: y('[data-testid="pillars"]'), why: y("#why") };
+    });
+    expect(order.boxes).toBeGreaterThanOrEqual(order.heroEnd);
+    expect(order.boxes).toBeLessThan(order.why);
+    for (const b of boxes) {
+      const box = page.getByTestId(`pillar-${b.key}`);
+      await box.scrollIntoViewIfNeeded();
+      await expect(box).toBeVisible();
+      await expect(box).toContainText(b.title);
+      await expect(box).toHaveAttribute("href", `#${b.to}`);
+      await box.click();
+      // the click lands on the section: its heading is in view and clear of the top bar (16 px + 56 px)
+      const heading = page.locator(`#${b.to} h2`).first();
+      await expect(heading).toBeInViewport();
+      expect(await heading.evaluate((e) => e.getBoundingClientRect().top)).toBeGreaterThanOrEqual(72);
+    }
+    // a box is a link a keyboard reaches
+    await page.getByTestId("pillar-proof").focus();
+    await expect(page.getByTestId("pillar-proof")).toBeFocused();
+    // the three new sections show what they say
+    await expect(page.getByTestId("pubmed-line")).toHaveCount(2);
+    await expect(page.getByTestId("pubmed-label")).toContainText("Published evidence, not advice for this patient.");
+    await expect(page.getByTestId("pubmed-demo").locator('a[href^="https://pubmed.ncbi.nlm.nih.gov/"]')).toHaveCount(2);
+    await expect(page.getByTestId("benchmark-row")).toHaveCount(13);
+    await expect(page.locator('[data-testid="benchmark-row"][data-kind="general"]')).toHaveCount(2);
+    await expect(page.getByTestId("benchmark-row").first()).toContainText("Gemma-4-31B-it");
+    await expect(page.getByTestId("benchmark-row").first()).toContainText("76.6");
+    await expect(page.getByTestId("benchmark-link")).toHaveAttribute("href", /\/research$/);
+    await expect(page.getByTestId("local-server")).toContainText("Gemma-4-31B (non-medical)");
+    await expect(page.getByTestId("local-server")).toContainText("Qwen3.5-4B (Chinese, non-medical)");
+    await expect(page.getByTestId("local-pubmed")).toBeAttached();
+    // Customisable for your hospital: the tabs change the panel, the level switch changes the checklist, arrows move the tabs
+    const custom = page.getByTestId("customise");
+    await custom.scrollIntoViewIfNeeded();
+    await expect(custom.getByRole("heading", { level: 2 })).toContainText("for your hospital");
+    const panel = page.getByTestId("custom-panel");
+    await expect(custom.getByRole("tab")).toHaveCount(6);
+    await expect(panel).toHaveAttribute("data-tab", "hospital");
+    await expect(page.getByTestId("custom-pmjay")).toHaveAttribute("aria-checked", "true");
+    await page.getByTestId("custom-pmjay").click();
+    await expect(page.getByTestId("custom-pmjay")).toHaveAttribute("aria-checked", "false");
+    await page.getByTestId("custom-tab-checklists").click();
+    await expect(panel).toHaveAttribute("data-tab", "checklists");
+    await expect(page.getByTestId("custom-tab-checklists")).toHaveAttribute("aria-selected", "true");
+    await expect(panel).toContainText("Breast cancer");
+    await expect(page.locator('[data-testid="custom-check-row"][data-needed="true"]')).toHaveCount(3);
+    await page.getByTestId("custom-level-optimal").click();
+    await expect(page.locator('[data-testid="custom-check-row"][data-needed="true"]')).toHaveCount(4);
+    await page.getByTestId("custom-tab-checklists").focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(panel).toHaveAttribute("data-tab", "agents");
+    await expect(page.getByTestId("custom-tab-agents")).toBeFocused();
+    await expect(panel).toContainText("Radiology support");
+    await page.keyboard.press("End");
+    await expect(panel).toHaveAttribute("data-tab", "meetings");
+    await expect(panel).toContainText("Every week on Friday");
+    await shoot(page, "landing", "customise", { fullPage: false, sizes: [SIZES[0], SIZES[2]], before: async (pg) => { await pg.getByTestId("customise").scrollIntoViewIfNeeded(); } });
+    // a phone: nothing scrolls sideways, and nothing in the new sections is wider than the screen
+    await page.setViewportSize(SIZES[2]);
+    await page.waitForTimeout(300);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+    const wide = await page.evaluate(() => ["what", "pubmed", "benchmark", "local", "customise"].flatMap((id) =>
+      [...document.querySelectorAll(`#${id} :is(h2, h3, p, li, a, .l-card, .l-tile, .l-box, .l-zone)`)]
+        .filter((e) => !e.closest('[role="tablist"]') && e.getBoundingClientRect().right > window.innerWidth + 1)
+        .map((e) => `${id}: ${e.tagName} ${(e.textContent ?? "").slice(0, 40)}`)));
+    expect(wide, wide.join("\n")).toEqual([]);
+    await page.getByTestId("pillar-local").scrollIntoViewIfNeeded();
+    await page.getByTestId("pillar-local").click();
+    await expect(page.locator("#local h2").first()).toBeInViewport();
+    expect(errors, errors.join("\n")).toEqual([]);
+  });
+
   test("about, docs and contact", async ({ page }) => {
     await visit(page, "/about", { signedOut: true });
     await expect(page.getByRole("heading", { level: 1 })).toContainText("Meet");
