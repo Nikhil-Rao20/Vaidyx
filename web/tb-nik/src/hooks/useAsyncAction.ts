@@ -25,7 +25,7 @@ export function useAsyncAction<A extends unknown[], R>(fn: (...args: A) => Promi
   const [error, setError] = useState<string | null>(null);
   const timer = useRef<number | null>(null);
   const alive = useRef(true);
-  useEffect(() => () => { alive.current = false; if (timer.current) window.clearTimeout(timer.current); }, []);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; if (timer.current) window.clearTimeout(timer.current); }; }, []); // set true again: React StrictMode (dev) runs the cleanup once before the real mount
   const reset = useCallback(() => { setState("idle"); setError(null); }, []);
   const run = useCallback(async (...args: A) => {
     if (state === "loading") return undefined;
