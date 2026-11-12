@@ -552,6 +552,7 @@ async def fetch(case_id: str, client, *, since: str = "", start: str = "", end: 
                                              "performer_department", "reported_by", "signature", "observations", "imaging_study_ref", "conclusion",
                                              "amendment_note", "last_updated")}
         doc["his"]["label"] = client.label
+        doc["his"]["signature_carried"] = bool(getattr(client, "carries_signature", True))
         doc["his"]["fetched_at"] = store.now_iso()
         doc["his"]["fetch_reason"] = reason
         doc["his"]["document_sha256"] = (r.get("document") or {}).get("sha256") or d.get("sha256")

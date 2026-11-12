@@ -75,6 +75,14 @@ def apply_status(doc: dict) -> dict:
             notes.append("HIS: the signed document hash does not match the file received from the hospital system: not counted as signed")
         elif text_unsigned:
             notes.append("HIS: the hospital system holds a signature but the report text says it is not signed: not counted as signed until the two agree")
+    elif his_status and h.get("signature_carried") is False:
+        # a connection that cannot carry a verifiable signature (HL7 v2 files, a report folder, plain FHIR without Provenance): the
+        # signature is not known from the hospital system, so the report text decides, exactly as for an uploaded report (a signature
+        # line, "unsigned" printed on it, or nothing and a doctor attests). Never "yes" from the connection itself.
+        c["signed"] = c.get("text_signed")
+        c["signed_source"] = "text"
+        c.pop("his_signature", None)
+        notes.append("HIS: this connection carries no digital signature: whether the report is signed is read from its text")
     elif his_status:  # the HIS knows the report and holds no signature for this version
         c["signed"] = "no"
         c["signed_source"] = "his"

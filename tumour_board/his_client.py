@@ -26,6 +26,8 @@ codes) are candidates only; Vaidyx-TB checks every one against the report text, 
 
 Settings: <DATA_ROOT>/his.json {"kind": "fhir"|"mcp"|"none", "label", "url", "token", "token_file", "connector", "enabled", "pacs_url" (6.3)},
 environment overrides TB_HIS_URL, TB_HIS_TOKEN, TB_HIS_TOKEN_FILE; without the file the demo's mock hospital is used.
+More connection methods (kinds fhir_generic, hl7v2_folder, folder_bridge, abdm_bundles, with their settings under "adapter") live in
+his_adapters; client(), validate_settings(), save_settings() and public() hand those kinds to his_adapters.registry.
 Code tables (document type, Observation -> fact): protocols/his_codes.json.
 """
 import asyncio
@@ -584,6 +586,10 @@ class HISClient:
     """The HIS interface every transport implements (see the module docstring for the shapes)."""
     kind = ""
     label = ""
+    # False for a transport that cannot carry a signature Vaidyx-TB can verify (HL7 v2 files, a report folder, plain FHIR without
+    # Provenance): a report without one is then "signature not known" and the report text decides, as for an uploaded report;
+    # True (the demo hospital, NRCeS FHIR): no signature for a version means it is not signed.
+    carries_signature = True
 
     async def ping(self) -> dict:
         raise NotImplementedError
@@ -1112,6 +1118,8 @@ def settings() -> dict:
             saved = json.loads(p.read_text())
             if isinstance(saved, dict):
                 d.update({k: v for k, v in saved.items() if k in d})
+                if isinstance(saved.get("adapter"), dict):  # the settings of a connection method added by his_adapters (absent for fhir / mcp / none)
+                    d["adapter"] = saved["adapter"]
         except (OSError, ValueError):
             pass
     if os.getenv("TB_HIS_URL"):
@@ -1142,6 +1150,9 @@ def public(d: dict, manager: bool = True) -> dict:
     """Settings without the token (the UI only learns whether one is available); the token file's server path only for a manager."""
     out = {k: v for k, v in d.items() if k != "token"} | {"has_token": bool(token(d))}
     out.setdefault("pacs_url", DEFAULT_PACS_URL)  # not secret: the app forwards the image viewer to it (pacs.py), the browser never goes there
+    if "adapter" in out:  # his_adapters: no secret and no secret path ("set" / "not set"); the folder's server path only for a manager
+        from .his_adapters import registry
+        out["adapter"] = registry.public_adapter(d, manager)
     if not manager:
         out["token_file"] = bool(out.get("token_file"))
     return out
@@ -1176,6 +1187,9 @@ def validate_settings(d: dict, existing: dict | None = None, allow_remote: bool 
     existing = existing or {}
     kind = str(d.get("kind") or "fhir").strip().lower()
     if kind not in KINDS:
+        from .his_adapters import registry
+        if registry.is_adapter_kind(kind):  # fhir_generic, hl7v2_folder, folder_bridge, abdm_bundles: their own fields and rules
+            return registry.validate(d, existing, allow_remote=allow_remote)
         raise ValueError("kind must be fhir, mcp or none")
     label = str(d.get("label") or "").strip()[:80] or (DEFAULT_LABEL if kind == "fhir" else "")
     url = str(d.get("url") or "").strip().rstrip("/")
@@ -1222,6 +1236,8 @@ def save_settings(d: dict, by: str = "", allow_remote: bool = False) -> dict:
     if not existing:
         existing = {k: v for k, v in _default_settings().items()}  # the demo defaults are the saved state of a fresh server
     clean = validate_settings(d, existing, allow_remote=allow_remote)
+    from .his_adapters import registry
+    clean = registry.finalize(clean)  # his_adapters: new secrets to their owner-only files, left-over ones removed (nothing else for fhir / mcp / none)
     p.parent.mkdir(parents=True, exist_ok=True)
     tmp = p.with_suffix(".tmp")
     tmp.write_text(json.dumps(clean, indent=1))
@@ -1232,7 +1248,7 @@ def save_settings(d: dict, by: str = "", allow_remote: bool = False) -> dict:
     tmp.replace(p)
     org.audit("his_settings_saved", by, his_kind=clean["kind"], label=clean["label"], url=clean["url"], pacs_url=clean["pacs_url"],
               token_file=clean["token_file"], connector=clean["connector"], enabled=clean["enabled"],
-              has_token=bool(clean["token"] or clean["token_file"]))
+              has_token=bool(clean["token"] or clean["token_file"]), **registry.audit_fields(clean))
     return public(clean)
 
 
@@ -1245,4 +1261,8 @@ def client(d: dict | None = None, transport=None) -> HISClient | None:
         from . import connectors
         c = connectors.get(d.get("connector") or "")
         return MCPHISClient(c) if c else None
+    if d.get("kind") not in KINDS:  # a connection method of his_adapters (fhir_generic, hl7v2_folder, folder_bridge, abdm_bundles)
+        from .his_adapters import registry
+        if registry.is_adapter_kind(d.get("kind")):
+            return registry.make(d, transport=transport)
     return FHIRClient(d.get("url") or DEFAULT_URL, token(d), label=d.get("label") or "", transport=transport)

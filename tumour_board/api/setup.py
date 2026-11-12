@@ -230,6 +230,9 @@ async def run_his_test(by: str = "") -> dict:
                     out["hospital_name"] = ping.get("name") or ""
                     out["error"] = f"hospital record: {type(e).__name__}: {str(e)[:120]}"
                 out["patients"], out["reports"] = await _counts(c)
+                counts = ping.get("counts") if isinstance(ping.get("counts"), dict) else None
+                if counts and out["patients"] is None and out["reports"] is None:  # a folder method (his_adapters) counts what it read
+                    out["patients"], out["reports"] = counts.get("patients"), counts.get("reports")
         except Exception as e:
             out["error"] = f"{type(e).__name__}: {str(e)[:160]}"
     out["latency_ms"] = round((time.monotonic() - t0) * 1000, 1)
@@ -276,10 +279,48 @@ async def his_test(request: Request):
     return await run_his_test(r["user"])
 
 
+HIS_FIELDS = ("label", "url", "token", "preset", "base_path", "identifier_systems", "auth", "username", "password", "api_key_header", "api_key",
+              "token_url", "client_id", "client_secret", "scope", "folder", "pacs_url")
+
+
+@router.get("/his/kinds")
+async def his_kinds(request: Request):
+    """"Choose your hospital system": the connection methods (kind, label, description, fields, what each cannot do), the hospital systems
+    to pick from (presets) and what is saved now. For those who may save the connection; never a secret (only "set" / "not set")."""
+    r = roles(request); need(r, "manage_org")
+    from tumour_board.his_adapters import _common, registry
+    cfg = his_client.settings()
+    return {"kinds": registry.describe(), "presets": registry.presets(),
+            "current": {"kind": cfg.get("kind"), "preset": (cfg.get("adapter") or {}).get("preset") or "", "enabled": bool(cfg.get("enabled")),
+                        "settings": his_client.public(cfg)},
+            "folder_roots": [str(p) for p in _common.folder_roots()],
+            "remote_allowed": bool(r.get("admin")) or bool(his_client.allowed_hosts())}
+
+
 @router.post("/setup/his")
 async def setup_his(request: Request):
-    """{url, token?}: saves the connection (the token never comes back) and runs the test; the step is done only when the test passes."""
+    """{url, token?}: saves the connection (the token never comes back) and runs the test; the step is done only when the test passes.
+    With {"kind"} or {"preset"} (GET /his/kinds) the fields of that connection method are saved instead: a plain FHIR server, an HL7 v2
+    folder, a report folder or ABDM bundles. Secrets go to owner-only files and never come back."""
     r = roles(request); need(r, "manage_org"); b = await body(request)
+    if str(b.get("kind") or "").strip() or str(b.get("preset") or "").strip():
+        from tumour_board.his_adapters import registry
+        pre = registry.preset(str(b.get("preset") or "").strip()) if str(b.get("preset") or "").strip() else None
+        if str(b.get("preset") or "").strip() and not pre:
+            fail(400, "That hospital system is not in the list.", "bad_his")
+        kind = str(b.get("kind") or "").strip().lower() or pre["kind"]
+        if registry.is_adapter_kind(kind):
+            payload = {k: b[k] for k in HIS_FIELDS if k in b} | {"kind": kind, "enabled": True}
+            try:
+                his_client.save_settings(payload, by=r["user"], allow_remote=bool(r.get("admin")))
+            except ValueError as e:
+                fail(400, str(e)[:1].upper() + str(e)[1:], "bad_his")
+            test = await run_his_test(r["user"])
+            return {"ok": test["ok"], "step": "his", "test": test, **view()}
+        if kind != "fhir":
+            fail(400, "Choose a hospital system from the list.", "bad_his")
+        if pre and not str(b.get("url") or "").strip():
+            b = {**b, "url": (pre.get("defaults") or {}).get("url") or ""}
     url = str(b.get("url") or "").strip()
     if not url:
         fail(400, "Give the hospital system's URL.", "url_required")
