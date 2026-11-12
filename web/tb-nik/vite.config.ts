@@ -5,6 +5,9 @@ import path from "node:path";
 
 // The build lands in static/tb-nik (served by FastAPI at /static/tb-nik, shell at /tb-nik).
 // In development, Vite proxies the API to the running Vaidyx app on :7000.
+// TBNIK_API_TARGET points the development server at another app instance (the after-healthathon copy runs on :7400).
+const API = process.env.TBNIK_API_TARGET || "http://127.0.0.1:7000";
+
 export default defineConfig({
   plugins: [
     react(),
@@ -37,8 +40,8 @@ export default defineConfig({
     strictPort: true,
     host: "127.0.0.1",
     proxy: {
-      "/api": { target: "http://127.0.0.1:7000", changeOrigin: false, ws: true },
-      "/static/tb/fonts": { target: "http://127.0.0.1:7000", changeOrigin: false },
+      "/api": { target: API, changeOrigin: false, ws: true },
+      "/static/tb/fonts": { target: API, changeOrigin: false },
     },
   },
 });
