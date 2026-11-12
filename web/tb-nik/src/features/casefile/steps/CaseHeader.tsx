@@ -60,7 +60,7 @@ function SummaryLineRow({ caseId, line, canEdit }: { caseId: string; line: Summa
     );
   }
   return (
-    <p className="mt-1 flex max-w-3xl items-start gap-1 text-sm text-muted-foreground" data-testid="summary-line">
+    <div className="mt-1 flex max-w-3xl items-start gap-1 text-sm text-muted-foreground" data-testid="summary-line">
       {liveNode}
       <span className="line-clamp-2 min-w-0">
         {cur?.text && !cur.edited ? <span className="mr-1.5 rounded bg-muted px-1 py-px text-xs" data-testid="summary-line-vaidyx-tag">Vaidyx line</span> : null}
@@ -72,7 +72,7 @@ function SummaryLineRow({ caseId, line, canEdit }: { caseId: string; line: Summa
         <button type="button" onClick={() => { setText(cur?.text ?? ""); setEditing(true); }} aria-label="Change the summary line" data-testid="summary-line-pencil"
           className="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground print:hidden"><Pencil className="size-3.5" aria-hidden /></button>
       ) : null}
-    </p>
+    </div>
   );
 }
 

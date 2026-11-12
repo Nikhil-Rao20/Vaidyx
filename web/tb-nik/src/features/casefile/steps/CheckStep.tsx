@@ -63,7 +63,7 @@ function WrongValue({ k, h, deptLabel, caseId }: { k: CheckItem; h: CheckHandler
       {mode === "idle" ? (
         <div className="flex flex-wrap gap-1.5">
           <Button size="xs" variant="ghost" onClick={() => setMode("correct")}>This is wrong: correct it</Button>
-          <LoadingButton size="xs" variant="ghost" loading={busy === "amend"} onClick={() => void run("amend", async () => { await h.askAmend(k); setSent(true); })}>Send request to {deptLabel} to amend the report</LoadingButton>
+          <LoadingButton size="xs" variant="ghost" className="h-auto min-h-6 max-w-full shrink py-0.5 text-left whitespace-normal" loading={busy === "amend"} onClick={() => void run("amend", async () => { await h.askAmend(k); setSent(true); })}>Send request to {deptLabel} to amend the report</LoadingButton>
         </div>
       ) : (
         <form className="space-y-1.5 rounded-md border border-border bg-muted/40 p-2" onSubmit={(e) => { e.preventDefault(); void run("correct", () => h.correct(k, value.trim(), reason.trim())); }}>
@@ -144,7 +144,7 @@ export function CheckStep({ steps, caseId, docs, h, canConfirm, consultantName, 
   }
   return (
     <div className="space-y-4" data-testid="section-check">
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(320px,0.95fr)_minmax(0,1.05fr)]">
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(320px,0.95fr)_minmax(0,1.05fr)]">
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">{open ? `${open} to do. Read each value against its report line on the right.` : "Every value here is confirmed."}</p>
           {problems.length ? (
