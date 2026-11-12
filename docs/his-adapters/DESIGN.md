@@ -162,15 +162,22 @@ documented, by standard, vendor claim only, no public API found, interface not k
 |---|---|
 | Read only | Adapters only GET from a server (plus one POST to the OAuth2 token endpoint) and only read folders. Nothing is written, moved or deleted in a hospital system or its folder |
 | Candidates, not facts | Adapters deliver records and candidate values. They never mark anything verified. `his_overlay` checks each value against the report text. Text-only reports carry no candidates |
-| Signature | No adapter added here returns a signature. Unknown is never "yes" |
+| Signature | No adapter added here returns a signature. Unknown is never "yes"; the report text decides (rule below) |
 | Secrets | See section 4. Tests check logs, errors, answers and stored files |
 | Identifiers | UHID / MRN / CR No., IP / OP No., ABHA. An Aadhaar typed identifier in HL7 is dropped on read |
 | Same shapes | Reports, patients, encounters, orders and documents have the keys of the FHIR client, so `his_case` and `his_overlay` work unchanged |
 
-Open point for the owner: `his_overlay.apply_status` reads "the system gave a status and no signature" as `signed: no` with the note "no
-digital signature for this version in the hospital system". That is right for the NRCeS path. For the new kinds, which cannot carry a
-signature, it means every report counts as unsigned until the overlay is told to leave the signature to the report text. The overlay was
-not changed here; the decision is the owner's.
+Signature rule (built, `test_his_adapters_signature.py`): each client says whether its connection can carry a signature Vaidyx-TB can
+verify (`HISClient.carries_signature`: true for the demo hospital and the NRCeS FHIR path, false for the four kinds added here).
+`his_case.fetch` writes that on the document (`his.signature_carried`). In `his_overlay.apply_status`:
+
+| Connection | No signature for a version means | Where "signed" comes from |
+|---|---|---|
+| Carries signatures (`fhir`, the demo hospital) | Not signed (unchanged rule) | The hospital system |
+| Carries none (`fhir_generic`, `hl7v2_folder`, `folder_bridge`, `abdm_bundles`) | Not known | The report text, as for an uploaded report |
+
+The hospital system's status (preliminary, final, amended) still stands on every connection: a preliminary report never counts as
+signed. The connection alone never gives "yes".
 
 ## 7. Out of scope
 
