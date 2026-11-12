@@ -55,8 +55,11 @@ test.describe("Meetings: AI agents", () => {
       const live = await open(page, `/meetings/${MID}`, { wait: "control-view", state: meetingState("in_session") });
       const pathology = page.locator("[data-testid=agent-tile][data-role=pathology]");
       await expect(pathology).toHaveAttribute("data-agent-state", "thinking");
-      await expect(pathology).toContainText("Pathology, AI agent standing in");
-      await expect(pathology).toContainText("AI agent, support only");
+      // 11 Nov 2026: one-line tiles (the department and the state); the list carries "AI agents, support only" and the full line is the
+      // button's name and hover text.
+      await expect(pathology.locator("[data-part=title]")).toHaveText("Pathology");
+      await expect(page.getByTestId("agents-label")).toContainText(/AI agents,?\s*support only/);
+      await expect(pathology.getByRole("button").first()).toHaveAttribute("title", /Pathology, AI agent standing in/);
       await expect(pathology).toContainText("Thinking");
       // Listening to a name, then speaking.
       live.push({ type: "agent_state", role: "nuclear_medicine", state: "listening", by: "shanthi@vxh.example", by_name: "Shanthi Raman", question: null });
@@ -104,9 +107,9 @@ test.describe("Meetings: AI agents", () => {
       const pathology = page.locator("[data-testid=agent-tile][data-role=pathology]");
       const nm = page.locator("[data-testid=agent-tile][data-role=nuclear_medicine]");
       if (size.width > 1000) {
-        // The count on the tile (a narrow phone tile leaves it to the panel).
-        await expect(pathology.locator("[data-part=count]")).toHaveText("3 points from the records");
-        await expect(nm.locator("[data-part=count]")).toHaveText("No points yet");
+        // The count is in the one-line tile's hover text and name (11 Nov 2026); the Agents panel shows it.
+        await expect(pathology.getByRole("button").first()).toHaveAttribute("title", /3 points from the records/);
+        await expect(nm.getByRole("button").first()).toHaveAttribute("title", /No points yet/);
       }
       await expect(pathology.getByRole("button", { name: /Thinking, 3 points from the records\. Open the Agents panel$/ })).toBeAttached();
       // The tile menu offers Present your points, disabled with the reason when the brief lists no points.
@@ -160,7 +163,7 @@ test.describe("Meetings: AI agents", () => {
       await expect(card.getByTestId("present-why")).toHaveText("The brief is still being prepared from the records.");
       await expect(card.getByTestId("present-points")).toBeDisabled();
       await expect(card.getByTestId("agent-points")).toContainText("Reading the records for Pathology");
-      if (size.width > 1000) await expect(pathology.locator("[data-part=count]")).toHaveText("Reading the records");
+      if (size.width > 1000) await expect(pathology.getByRole("button").first()).toHaveAttribute("title", /Reading the records/);
       expect(real(errors)).toEqual([]);
     });
   }

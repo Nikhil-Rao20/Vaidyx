@@ -46,11 +46,15 @@ test.describe("Meetings: case flow", () => {
     await expect(now.getByTestId("rail-presenter")).toHaveText("Presenter: Asha Menon");
     await expect(rail.locator("[data-state=next]").getByTestId("rail-planned")).toHaveText("· 10 min");
     await expect(rail.locator("[data-state=later]").first().getByTestId("rail-planned")).toHaveText("· 10 min");
-    // The quorum block: the three sentences (no person names in the compact rail); agents listed apart, never counted.
+    // The quorum block (11 Nov 2026): two short lines in the rail; the three full sentences (no person names; agents listed apart,
+    // never counted) are its hover text.
     const q = rail.getByTestId("quorum-line");
-    await expect(q.locator("[data-part=heads]")).toHaveText("Heads present 2 of 5: Radiology, Medical Oncology.");
-    await expect(q.locator("[data-part=absent]")).toHaveText("Not here: Surgical Oncology, Pathology, Radiation Oncology (AI agents standing in: Pathology, Nuclear Medicine; support only, never counted).");
-    await expect(q.locator("[data-part=pmjay]")).toHaveText("PM-JAY advises Surgical, Radiation and Medical Oncology: 1 of 3 present as people.");
+    await expect(q.locator("[data-part=heads]")).toHaveText("Heads present 2 of 5 · 2 AI agents standing in");
+    await expect(q.locator("[data-part=pmjay]")).toHaveText("PM-JAY seats present 1 of 3");
+    const full = (await q.getAttribute("title")) ?? "";
+    expect(full).toContain("Heads present 2 of 5: Radiology (Shanthi Raman), Medical Oncology (Thomas Joseph).");
+    expect(full).toContain("Not here: Surgical Oncology, Pathology, Radiation Oncology (AI agents standing in: Pathology, Nuclear Medicine; support only, never counted).");
+    expect(full).toContain("PM-JAY advises Surgical, Radiation and Medical Oncology: 1 of 3 present as people.");
     await expect(q).not.toContainText("requires");
     // Under 2 minutes left: amber with the words; at 0: "time up" (the words carry it, the colour repeats it).
     live.push({ type: "timer", timer: { seconds_left: 95, running: true, total: 600 } });

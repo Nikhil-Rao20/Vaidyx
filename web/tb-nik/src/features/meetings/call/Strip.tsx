@@ -489,7 +489,7 @@ export function AgentCallTile({ agent, big, compact, className }: { agent: Agent
           </motion.span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-xs font-medium leading-tight text-stage-fg" data-part="title">{dept}</span>
-            <span className={cn("flex items-center gap-1 truncate text-[11px] leading-tight", key === "error" ? "text-bad" : "text-stage-muted")} aria-live="polite" data-part="state">{word}{busy ? <Dots /> : null}</span>
+            <span className={cn("flex items-center gap-1 truncate text-[11px] leading-tight", key === "error" ? "text-bad" : "text-stage-muted")} aria-live="polite" data-part="state"><span className="min-w-0 truncate">{word}</span>{busy ? <Dots /> : null}</span>
           </span>
         </button>
         {interactive ? (
@@ -639,7 +639,10 @@ export function Strip({ orientation, max, maxAgents, small, className }: { orien
     <div className={cn(cls, className)} data-testid="tile-grid" data-orientation={orientation} aria-label="People in the call" role="list">
       {showContent ? <div role="listitem"><ContentTile big={room} /></div> : null}
       {shownPeople.map((p) => <div role="listitem" key={p.key}><CallTile p={p} size={tileSize} big={room} dense={small} /></div>)}
-      {agents.length && !room && orientation === "column" ? <p className="px-0.5 pt-1 text-[11px] font-medium uppercase tracking-wide text-stage-muted" aria-hidden>AI agents · {agents.length}</p> : null}
+      {/* the label every agent list carries on screen: "AI agents, support only" (the one-line tiles show only the department and the state) */}
+      {agents.length && !room ? (orientation === "column"
+        ? <p className="px-0.5 pt-1 text-[11px] font-medium uppercase tracking-wide text-stage-muted" aria-hidden data-testid="agents-label">AI agents, support only · {agents.length}</p>
+        : <p role="listitem" className="!w-auto self-center text-[10px] font-medium uppercase leading-tight tracking-wide text-stage-muted" aria-hidden data-testid="agents-label">AI agents<br />support only</p>) : null}
       {/* a compact agent takes the width its name needs in a row (11 Nov 2026: "Ra..." on a phone was unreadable) */}
       {agents.map((a) => <div role="listitem" key={`agent-${a.role}`} className={orientation === "row" && !room ? "!w-auto" : undefined}><AgentCallTile agent={a} big={room} compact={!room} className={orientation === "row" && !room ? "min-w-[8.5rem]" : undefined} /></div>)}
       {hidden > 0 ? (

@@ -166,17 +166,17 @@ test.describe("Phone and room screen", () => {
     await expect(people.getByTestId("agent-tile")).toHaveCount(2);
     expect(await people.evaluate((el) => el.scrollHeight <= el.clientHeight + 1), "the remote column fits without clipping").toBe(true);
     expect(await px(people.getByTestId("tile-name").first())).toBeGreaterThanOrEqual(20);
-    // The agenda column: numbers, patient lines, Done or Now words, 20 px, no click; the current case is Now.
+    // The agenda column: numbers, patient lines, Done or Now words, 16 px, no click; the current case is Now.
     const rail = page.getByTestId("agenda-rail");
     await expect(rail).toHaveAttribute("data-look", "room");
     await expect(rail).toHaveAttribute("data-open", "true");
     const now = rail.locator("li[data-state=now]");
     await expect(now).toContainText("Now");
     await expect(now).toContainText("Priya Venkatesan");
-    expect(await px(now)).toBeGreaterThanOrEqual(20);
+    expect(await px(now)).toBeGreaterThanOrEqual(16);  // 11 Nov 2026 (owner): the room screen toned down from the projector sizes
     await expect(rail.locator("button")).toHaveCount(0);
-    // The decision strip at 28 px; every line of the Board view at 18 px or more, the body at 24 px, the question for the board larger.
-    expect(await px(page.getByTestId("decision-strip").locator("p"))).toBeGreaterThanOrEqual(28);
+    // 11 Nov 2026: the decision strip at 20 px; every line of the Board view at 15 px or more; the question for the board the largest (22 px).
+    expect(await px(page.getByTestId("decision-strip").locator("p"))).toBeGreaterThanOrEqual(20);
     const boardSizes = await board.evaluate((el) => {
       const out: number[] = [];
       el.querySelectorAll("*").forEach((n) => {
@@ -187,8 +187,8 @@ test.describe("Phone and room screen", () => {
       return out;
     });
     expect(boardSizes.length).toBeGreaterThan(5);
-    expect(Math.min(...boardSizes)).toBeGreaterThanOrEqual(18);
-    expect(await px(page.getByTestId("board-question").locator("p").first())).toBeGreaterThanOrEqual(28);
+    expect(Math.min(...boardSizes)).toBeGreaterThanOrEqual(15);
+    expect(await px(page.getByTestId("board-question").locator("p").first())).toBeGreaterThanOrEqual(22);
     // The hands by name; the agent voices chip.
     await expect(page.getByTestId("room-hands")).toContainText("Shanthi Raman");
     await expect(page.getByTestId("agent-voices")).toBeVisible();

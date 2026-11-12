@@ -88,7 +88,7 @@ test.describe("Meetings", () => {
     await expect(board).toHaveAttribute("data-mode", "drive");
     await expect(board).toHaveAttribute("data-tab", "summary");
     await expect(page.getByTestId("board-question")).toContainText("breast conservation surgery");
-    await expect(page.getByTestId("board-follow")).toContainText("You lead: everyone follows what you open.");
+    await expect(page.getByTestId("board-follow")).toContainText("You lead: everyone follows what you open");
     await expect(page.getByTestId("shared-screen")).toHaveAttribute("data-stage", "board");
     await expect(page.getByTestId("record")).toBeEnabled();  // meetings-v2 5.2: the recorder (meetings-recorder.spec.ts checks it)
     await expect(page.getByTestId("stage-tabs")).toHaveCount(0);
