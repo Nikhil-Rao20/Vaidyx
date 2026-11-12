@@ -15,7 +15,7 @@ function Glance({ steps, open }: { steps: Steps; open: (t: SourceTarget) => void
   const checked = useMemo(() => new Map((steps.check?.keys ?? []).filter((k) => k.confirmed).map((k) => [k.slot_id, k.confirmed_by || ""])), [steps.check]);
   return (
     <section aria-labelledby="bv-glance" data-testid="board-glance">
-      <h2 id="bv-glance" className="mb-2 text-lg font-semibold text-foreground">The patient at a glance</h2>
+      <h2 id="bv-glance" className="mb-2 text-base font-semibold text-foreground">The patient at a glance</h2>
       {steps.glance.length ? (
         <div className="grid gap-4 @4xl:grid-cols-2">
           {steps.glance.map((g) => (

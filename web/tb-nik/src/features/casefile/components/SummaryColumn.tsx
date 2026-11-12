@@ -3,7 +3,7 @@
 // the record sections folded, each with its counts, to open when a value is needed. Every line is a SlotLine.
 import { useMemo, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { Bot, CheckCheck, ChevronDown, ChevronsDownUp, ChevronsUpDown, CircleAlert, Hourglass, ListChecks, MessageSquareQuote, ShieldCheck, Sparkles } from "lucide-react";
+import { Bot, CheckCheck, ChevronDown, ChevronsDownUp, ChevronsUpDown, CircleAlert, FileText, Hourglass, ListChecks, MessageSquareQuote, ShieldCheck, Sparkles } from "lucide-react";
 import type { Citation, DocFinal, ProseSection, Slot, SlotSection, SlotsResponse } from "../types";
 import { SlotLine, type SlotContext, type SlotHandlers } from "./SlotLine";
 import { LoadingButton, NotYetState, SkeletonLines, StatusChip, NotSigned, docTitleOf, finalWordOf, fmtDate, fmtDateTime, indianDates, modelLabel } from "./common";
@@ -51,11 +51,19 @@ export function SaidChip({ c, label }: { c: SaidCitation; label?: string }) {
 /** One citation chip: a record line opens its report with the quote marked (as before); the Case summary (night-v3 3.4) also cites a
  *  board-record field ("Board DD/MM/YYYY, Decision", opens Board decisions when `onBoard` is given), an action, the stage confirmation
  *  or a member's card (no click: the quote shows on hover), and what was said at the board (SaidChip, meetings-v2 5.4). */
-export function CiteChip({ c, docs, h, onBoard }: { c: Citation | CaseCitation; docs?: Docs; h: Pick<SlotHandlers, "openSource">; onBoard?: () => void }) {
+export function CiteChip({ c, docs, h, onBoard, compact }: { c: Citation | CaseCitation; docs?: Docs; h: Pick<SlotHandlers, "openSource">; onBoard?: () => void; /** a small document icon; the report and page on hover (the meeting's Board view, 11 Nov 2026) */ compact?: boolean }) {
   const kind = "kind" in c ? c.kind : undefined;
   if (!kind) {
     const r = c as Citation;
     const title = docTitleOf(docs, r.doc_id, r.doc_title);
+    if (compact) {
+      const where = `${title}${typeof r.page === "number" ? `, page ${r.page + 1}` : ""}`;
+      return (
+        <button type="button" className="quote-chip cite-icon ml-1 align-middle active:scale-95" onClick={() => h.openSource({ docId: r.doc_id, page: r.page ?? 0, quote: r.quote, title })} title={`${where}: open with the quote marked`} aria-label={`Source: ${where}`} data-testid="cite-icon">
+          <FileText aria-hidden /><NotSigned word={finalWordOf(docs, r.doc_id)} />
+        </button>
+      );
+    }
     return (
       <button type="button" className="quote-chip ml-1 align-middle active:scale-95" onClick={() => h.openSource({ docId: r.doc_id, page: r.page ?? 0, quote: r.quote, title })} title={`Open ${title} with the quote marked`}>
         {title}{typeof r.page === "number" ? ` p. ${r.page + 1}` : ""}<NotSigned word={finalWordOf(docs, r.doc_id)} />
@@ -75,11 +83,11 @@ export function CiteChip({ c, docs, h, onBoard }: { c: Citation | CaseCitation; 
   return <span className="quote-chip ml-1 align-middle" title={quote} data-cite={x.kind}>{words}</span>;
 }
 
-export function Cites({ cites, docs, h, onBoard, max = 3 }: { cites?: Array<Citation | CaseCitation>; docs?: Docs; h: Pick<SlotHandlers, "openSource">; onBoard?: () => void; max?: number }) {
-  return <>{(cites ?? []).slice(0, max).map((c, j) => <CiteChip key={j} c={c} docs={docs} h={h} onBoard={onBoard} />)}</>;
+export function Cites({ cites, docs, h, onBoard, max = 3, compact }: { cites?: Array<Citation | CaseCitation>; docs?: Docs; h: Pick<SlotHandlers, "openSource">; onBoard?: () => void; max?: number; compact?: boolean }) {
+  return <>{(cites ?? []).slice(0, max).map((c, j) => <CiteChip key={j} c={c} docs={docs} h={h} onBoard={onBoard} compact={compact} />)}</>;
 }
 
-export function ProseBlock({ p, docs, h }: { p: string | ProseSection; docs?: Docs; h: SlotHandlers }) {
+export function ProseBlock({ p, docs, h, compact }: { p: string | ProseSection; docs?: Docs; h: SlotHandlers; compact?: boolean }) {
   if (typeof p === "string") return <p className="text-foreground">{indianDates(p)}</p>;
   const sentences = p.sentences ?? [];
   if (!sentences.length) return null;
@@ -87,7 +95,7 @@ export function ProseBlock({ p, docs, h }: { p: string | ProseSection; docs?: Do
     <section>
       {p.title ? <h4 className="text-sm font-semibold text-foreground">{p.title}</h4> : null}
       <p className="text-foreground">
-        {sentences.map((x, i) => (typeof x === "string" ? <span key={i}>{indianDates(x)} </span> : <span key={i}>{indianDates(x.text)}<Cites cites={x.citations} docs={docs} h={h} /> </span>))}
+        {sentences.map((x, i) => (typeof x === "string" ? <span key={i}>{indianDates(x)} </span> : <span key={i}>{indianDates(x.text)}<Cites cites={x.citations} docs={docs} h={h} compact={compact} /> </span>))}
       </p>
     </section>
   );

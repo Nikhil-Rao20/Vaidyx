@@ -28,16 +28,16 @@ function Question({ steps }: { steps: Steps }) {
   const q = steps.question;
   const meta = [q.reason?.label, q.by ? `written by ${q.by}` : "", q.at ? fmtDate(q.at) : ""].filter(Boolean).join(" · ");
   return (
-    <section className="surface px-4 py-4 @2xl:px-6 @2xl:py-5" aria-labelledby="bv-question" data-testid="board-question">
-      <h2 id="bv-question" className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-        <MessageSquareQuote className="size-5 text-brand" aria-hidden />Question for the board
+    <section className="surface px-4 py-3 @2xl:px-5 @2xl:py-4" aria-labelledby="bv-question" data-testid="board-question">
+      <h2 id="bv-question" className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <MessageSquareQuote className="size-4 text-brand" aria-hidden />Question for the board
       </h2>
       {q.text ? (
         <>
-          <p className="mt-2 text-2xl font-semibold leading-snug text-foreground @3xl:text-3xl">{indianDates(q.text)}</p>
+          <p className="mt-1.5 text-lg font-semibold leading-snug text-foreground @3xl:text-xl">{indianDates(q.text)}</p>
           {meta ? <p className="mt-2 text-xs text-muted-foreground">{meta}</p> : null}
         </>
-      ) : <p className="mt-2 text-lg text-muted-foreground">No question was written for the board.</p>}
+      ) : <p className="mt-1.5 text-sm text-muted-foreground">No question was written for the board.</p>}
     </section>
   );
 }
@@ -47,7 +47,7 @@ function CaseSentenceLine({ s, sec, docs, open }: { s: CaseSentence; sec: CaseSu
     <span data-testid="board-cs-sentence" data-id={s.id}>
       {indianDates(s.text)}
       {modelMark(s, sec) ? <Bot className="ml-1 inline size-4 align-[-2px] text-review" aria-label="Written by the AI model" /> : null}
-      <Cites cites={s.citations} docs={docs} h={{ openSource: open }} max={4} />
+      <Cites cites={s.citations} docs={docs} h={{ openSource: open }} max={4} compact />
       {s.approximate ? <span className="ml-1 text-xs text-muted-foreground">(quote matched closely, not word for word)</span> : null}
       {s.edited ? <span className="ml-1 text-xs text-muted-foreground">(edited by {drName(s.edited.by_name || s.edited.by)} on {fmtDate(s.edited.at)})</span> : null}
       {" "}
@@ -58,7 +58,7 @@ function CaseSentenceLine({ s, sec, docs, open }: { s: CaseSentence; sec: CaseSu
 /** The Case summary, read-only: its sections with every sentence's chips; no version picker, no edit, no review. */
 function AfterBoard({ view, docs, open }: { view: CaseSummaryView; docs?: CaseDocument[]; open: Open }) {
   return (
-    <Panel labelId="bv-after" testId="board-summary-after" title="Summary after the board" icon={<Sparkles className="size-5 text-brand" aria-hidden />}
+    <Panel labelId="bv-after" testId="board-summary-after" title="Summary after the board" icon={<Sparkles className="size-4 text-brand" aria-hidden />}
       aside={<CaseSummaryLabel v={view} />}>
       <p className="text-xs text-muted-foreground">Version {view.current}{view.built_at ? `, written ${fmtDateTime(view.built_at)}` : ""} by {modelWords(view)}</p>
       <div className={cn("mt-3 space-y-4 text-base leading-relaxed", view.review?.status !== "reviewed" && "border-l-2 border-review/50 pl-3")}>
@@ -90,19 +90,19 @@ function BeforeBoard({ steps, docs, open }: { steps: Steps; docs?: CaseDocument[
     : prose.reviewed ? <StatusChip kind="ok" icon={CheckCheck}>Read{prose.reviewed_by ? ` by ${prose.reviewed_by}` : ""}</StatusChip>
     : <StatusChip kind="review" icon={Bot}>AI draft, not reviewed</StatusChip>;
   return (
-    <Panel labelId="bv-before" testId="board-summary-before" title="Summary before the board" icon={<Sparkles className="size-5 text-brand" aria-hidden />} aside={label}>
+    <Panel labelId="bv-before" testId="board-summary-before" title="Summary before the board" icon={<Sparkles className="size-4 text-brand" aria-hidden />} aside={label}>
       {shown ? (
         <div className="space-y-4">
           {prose.status === "stale" ? <p className="rounded-md status-warn px-3 py-2 text-sm">The reports changed after this was written{prose.stale_reason ? `: ${prose.stale_reason}` : ""}.</p> : null}
           <div className={cn("space-y-3 text-base leading-relaxed", !prose.reviewed && "border-l-2 border-review/50 pl-3")} data-testid="board-prose">
-            {prose.paragraphs.map((p, i) => <ProseBlock key={i} p={p} docs={docs} h={h} />)}
+            {prose.paragraphs.map((p, i) => <ProseBlock key={i} p={p} docs={docs} h={h} compact />)}
           </div>
           <p className="text-xs text-muted-foreground">{[prose.generated ? `Written ${fmtDateTime(prose.generated)}` : "", prose.model ? `by ${modelLabel(prose.model)}` : ""].filter(Boolean).join(" ")}</p>
           {(prose.points_for_review ?? []).length ? (
             <div className="rounded-md border border-border bg-muted/40 px-4 py-3" data-testid="board-points">
               <h3 className="text-sm font-semibold text-foreground">Points for review</h3>
               <ol className="mt-1 list-decimal space-y-1.5 pl-6 text-base">
-                {prose.points_for_review!.map((pt, i) => <li key={i} className="text-foreground">{indianDates(pt.text)}<Cites cites={pt.citations} docs={docs} h={h} /></li>)}
+                {prose.points_for_review!.map((pt, i) => <li key={i} className="text-foreground">{indianDates(pt.text)}<Cites cites={pt.citations} docs={docs} h={h} compact /></li>)}
               </ol>
             </div>
           ) : null}
@@ -119,7 +119,7 @@ const prefixWord = (x?: string) => (!x ? "" : x === "c" ? "clinical" : x === "p"
 function WrittenRow({ w, docs, open }: { w: Written; docs?: CaseDocument[]; open: Open }) {
   return (
     <li className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-2" data-testid="board-stage-written">
-      <span className="text-xl font-semibold text-foreground">{w.kind === "prognostic" && w.stage ? `Prognostic stage ${w.stage}` : w.value}</span>
+      <span className="text-base font-semibold text-foreground">{w.kind === "prognostic" && w.stage ? `Prognostic stage ${w.stage}` : w.value}</span>
       {w.prefix ? <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-semibold uppercase text-muted-foreground">{prefixWord(w.prefix)}</span> : null}
       <span className="text-xs text-muted-foreground">{w.date ? fmtDate(w.date) : "date not stated"}</span>
       <span className="inline-flex items-center">
@@ -142,7 +142,7 @@ function StageNow({ staging, docs, open }: { staging: StagingView | null | undef
   const progConfirmed = confirmed && p && p.status === "staged" && p.stage && p.confirmed && !p.rejected ? p : null;
   const cmp = staging.comparison;
   return (
-    <Panel labelId="bv-stage" testId="board-stage-now" title="Stage" icon={<Layers className="size-5 text-brand" aria-hidden />}
+    <Panel labelId="bv-stage" testId="board-stage-now" title="Stage" icon={<Layers className="size-4 text-brand" aria-hidden />}
       aside={staging.system ? <span className="text-xs text-muted-foreground">{staging.system}</span> : null}>
       <div className="space-y-3">
         <div>
@@ -154,8 +154,8 @@ function StageNow({ staging, docs, open }: { staging: StagingView | null | undef
         {confirmed ? (
           <div className="rounded-lg border border-border bg-secondary/50 px-4 py-3" data-testid="board-stage-confirmed">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Vaidyx draft stage, confirmed by {confirmed.confirmed!.by_name || confirmed.confirmed!.by} on {fmtDate(confirmed.confirmed!.at)}</p>
-            <p className="mt-1 text-2xl font-bold tracking-tight text-foreground">Stage {confirmed.stage}</p>
-            {progConfirmed ? <p className="mt-1 text-lg font-semibold text-foreground">Prognostic stage {progConfirmed.stage}<span className="ml-2 text-xs font-normal text-muted-foreground">confirmed by {progConfirmed.confirmed!.by_name || progConfirmed.confirmed!.by}</span></p> : null}
+            <p className="mt-1 text-xl font-bold tracking-tight text-foreground">Stage {confirmed.stage}</p>
+            {progConfirmed ? <p className="mt-1 text-base font-semibold text-foreground">Prognostic stage {progConfirmed.stage}<span className="ml-2 text-xs font-normal text-muted-foreground">confirmed by {progConfirmed.confirmed!.by_name || progConfirmed.confirmed!.by}</span></p> : null}
             {staging.stale ? <p className="mt-1 rounded-md status-warn px-2 py-1 text-sm">The reports changed after this draft was worked out.</p> : null}
             {cmp && cmp.result !== "matches" ? (
               <p className="mt-2 rounded-md status-warn px-2 py-1 text-sm" data-testid="board-stage-differs">

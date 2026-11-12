@@ -177,8 +177,8 @@ export function CaseFlow() {
           // role status for the tests and assistive tools; aria-live off because the shell's polite region already says it once.
           <motion.p key="case-toast" role="status" aria-live="off" data-testid="case-toast"
             initial={reduce ? { opacity: 0 } : { opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
-            className={cn("inline-flex max-w-full items-center gap-2 rounded-xl border border-stage-line bg-stage-panel/95 px-4 py-2 font-medium text-stage-fg shadow-[var(--shadow-lift)] backdrop-blur", room ? "text-xl" : "text-sm")}>
-            <ArrowRightLeft className={cn("shrink-0 text-primary", room ? "size-6" : "size-4")} aria-hidden />
+            className={cn("inline-flex max-w-full items-center gap-1.5 rounded-lg border border-stage-line bg-stage-panel/95 px-3 py-1.5 font-medium text-stage-fg shadow-[var(--shadow-lift)] backdrop-blur", room ? "text-lg" : "text-xs")}>
+            <ArrowRightLeft className={cn("shrink-0 text-primary", room ? "size-5" : "size-3.5")} aria-hidden />
             <span className="min-w-0 truncate">{toast.text}</span>
           </motion.p>
         ) : null}
@@ -186,8 +186,8 @@ export function CaseFlow() {
           // aria-live off: the shell's polite region says it once (c.announce above)
           <motion.p key={`agents-${agentsToast.key}`} role="status" aria-live="off" data-testid="agents-notice"
             initial={reduce ? { opacity: 0 } : { opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
-            className={cn("inline-flex max-w-full items-start gap-2 rounded-xl border border-stage-line bg-stage-panel/95 px-4 py-2 font-medium text-stage-fg shadow-[var(--shadow-lift)] backdrop-blur", room ? "max-w-[min(100%,56rem)] text-sm lg:text-xl" : "text-sm")}>
-            <Bot className={cn("mt-0.5 shrink-0 text-primary", room ? "size-4 lg:size-6" : "size-4")} aria-hidden />
+            className={cn("inline-flex items-start gap-1.5 rounded-lg border border-stage-line bg-stage-panel/95 px-3 py-1.5 text-stage-fg shadow-[var(--shadow-lift)] backdrop-blur", room ? "max-w-[min(100%,56rem)] text-sm lg:text-base" : "max-w-[min(100%,40rem)] text-xs")}>
+            <Bot className={cn("mt-px shrink-0 text-primary", room ? "size-4 lg:size-5" : "size-3.5")} aria-hidden />
             <span className="min-w-0">{agentsToast.text}</span>
           </motion.p>
         ) : null}

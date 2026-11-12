@@ -72,7 +72,7 @@ function ImageViewer({ caseId, view, mode, doc, interactive, onNavigate }: {
     <section className="flex flex-col gap-3 @3xl:h-full" aria-labelledby="bv-viewer-title" data-testid="board-image-viewer" data-doc={view.doc_id ?? ""}>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         {interactive ? <Button variant="outline" onClick={() => onNavigate("images")} data-testid="board-all-images"><ArrowLeft className="size-4" />All images</Button> : null}
-        <h2 id="bv-viewer-title" className="min-w-0 flex-1 break-words text-xl font-semibold text-foreground">{title}</h2>
+        <h2 id="bv-viewer-title" className="min-w-0 flex-1 break-words text-base font-semibold text-foreground">{title}</h2>
         {view.opened?.modality ? <span className="rounded-md bg-muted px-2 py-0.5 text-sm text-muted-foreground">{view.opened.modality}</span> : null}
         {interactive && view.doc_id ? <Button variant="outline" onClick={() => onNavigate("reports", view.doc_id, 0)}><FileText className="size-4" />Read the report</Button> : null}
       </div>

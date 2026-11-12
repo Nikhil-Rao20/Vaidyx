@@ -35,7 +35,7 @@ export function Panel({ title, icon, aside, children, testId, className, labelId
     <section className={cn("surface overflow-hidden", className)} aria-labelledby={labelId} data-testid={testId}>
       <header className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border px-4 py-3 @2xl:px-5">
         {icon}
-        <h2 id={labelId} className="text-lg font-semibold text-foreground">{title}</h2>
+        <h2 id={labelId} className="text-base font-semibold text-foreground">{title}</h2>
         {aside ? <div className="flex flex-wrap items-center gap-2">{aside}</div> : null}
       </header>
       <div className="px-4 py-3 @2xl:px-5 @2xl:py-4">{children}</div>

@@ -132,9 +132,10 @@ export function TopBar() {
       left={<span className="hidden truncate text-sm text-stage-muted sm:inline" title={meetingLine(c, room || coordinator)}>{meetingLine(c, room || coordinator)}</span>}
       center={(
         <div className="min-w-0">
-          {room ? <h1 className="truncate text-xl text-stage-fg lg:text-2xl">{headline}</h1> : <p className="truncate text-sm font-semibold text-stage-fg" data-testid="case-headline">{headline}</p>}
-          {question ? <p className={cn("truncate text-stage-muted", room ? "text-sm lg:text-base" : "text-xs")}><span className="text-stage-muted">Board question: </span><span className="text-stage-fg/90">{question}</span></p>
-            : coordinator && c.row ? <p className="truncate text-xs text-stage-muted">The board question is not written on this Case File</p> : null}
+          {room ? <h1 className="truncate text-lg font-semibold text-stage-fg lg:text-xl">{headline}</h1> : <p className="truncate text-sm font-semibold text-stage-fg" data-testid="case-headline">{headline}</p>}
+          {/* the board question is on the Board view's Summary; the top bar repeats it only on the room screen (11 Nov 2026, owner) */}
+          {room && question ? <p className="truncate text-sm text-stage-muted lg:text-base"><span className="text-stage-muted">Board question: </span><span className="text-stage-fg/90">{question}</span></p>
+            : coordinator && c.row && !question ? <p className="truncate text-xs text-stage-muted">The board question is not written on this Case File</p> : null}
         </div>
       )}
       right={(

@@ -467,7 +467,7 @@ function AgentTileMenu({ agent, line }: { agent: AgentInfo; line: string }) {
 /** An AI agent in the meeting (standing in for an absent head, or called by the coordinator): dashed with a ring per state, the
  * Vaidyx mark, its title, "AI agent, support only" and its true state (with the asker's name while listening); a click opens the
  * Agents panel. Never a member of the board. */
-export function AgentCallTile({ agent, big, className }: { agent: AgentInfo; big?: boolean; className?: string }) {
+export function AgentCallTile({ agent, big, compact, className }: { agent: AgentInfo; big?: boolean; /** one line (the laptop's strip, 11 Nov 2026) */ compact?: boolean; className?: string }) {
   const ctx = useCall();
   const reduce = useReducedMotion();
   const key = agentStateKey(agent.state);
@@ -475,6 +475,31 @@ export function AgentCallTile({ agent, big, className }: { agent: AgentInfo; big
   const busy = agentBusy(key);
   const line = agentTitle(agent);
   const count = pointsLine(agent);
+  if (compact && !big) {
+    // one line: the Vaidyx mark, the department, the state; the rest is in the Agents panel (11 Nov 2026, owner: the tiles were big
+    // and repeated). Same test ids, state and menu as the tile.
+    const dept = agentDept(agent);
+    const label = agentTileLabel(line, word, count);
+    const interactive = ctx.variant !== "room";
+    return (
+      <div className={cn("group/tile relative flex items-center rounded-lg border border-dashed bg-stage-raised", AGENT_RING[key] ?? "border-stage-line", className)} data-testid="agent-tile" data-agent-state={key} data-role={agent.role} data-compact="">
+        <button type="button" disabled={!interactive} onClick={() => ctx.setPanel("agents")} className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary" aria-label={`${label}. Open the Agents panel`} title={`${line}. ${word}. ${count}`}>
+          <motion.span animate={reduce ? {} : busy ? { scale: [1, 1.12, 1] } : { scale: 1 }} transition={busy ? { repeat: Infinity, duration: 1 } : {}} className="grid size-6 shrink-0 place-items-center rounded-full bg-stage-panel" aria-hidden>
+            <VaidyxIcon className="h-3" />
+          </motion.span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-xs font-medium leading-tight text-stage-fg" data-part="title">{dept}</span>
+            <span className={cn("flex items-center gap-1 truncate text-[11px] leading-tight", key === "error" ? "text-bad" : "text-stage-muted")} aria-live="polite" data-part="state">{word}{busy ? <Dots /> : null}</span>
+          </span>
+        </button>
+        {interactive ? (
+          <div className="mr-1 opacity-100 lg:opacity-0 lg:group-hover/tile:opacity-100 lg:group-focus-within/tile:opacity-100 [&:has([data-state=open])]:opacity-100">
+            <AgentTileMenu agent={agent} line={line} />
+          </div>
+        ) : null}
+      </div>
+    );
+  }
   // The first point on a big tile goes with its source and the brief's true review status and model (review 9 C, S2).
   const p0 = big && agent.brief?.status !== "preparing" ? agent.points?.[0] ?? null : null;
   const c0 = p0?.citations?.[0];
@@ -483,13 +508,13 @@ export function AgentCallTile({ agent, big, className }: { agent: AgentInfo; big
   const interactive = ctx.variant !== "room";
   const body = (
     <>
-      <motion.span animate={reduce ? {} : busy ? { scale: [1, 1.08, 1] } : { scale: 1 }} transition={busy ? { repeat: Infinity, duration: key === "thinking" || key === "preparing" ? 1.2 : 0.8 } : {}} className={cn("grid shrink-0 place-items-center rounded-full bg-stage-panel", big ? "size-14" : "size-9")} aria-hidden>
-        <VaidyxIcon className={big ? "h-7" : "h-4"} />
+      <motion.span animate={reduce ? {} : busy ? { scale: [1, 1.08, 1] } : { scale: 1 }} transition={busy ? { repeat: Infinity, duration: key === "thinking" || key === "preparing" ? 1.2 : 0.8 } : {}} className={cn("grid shrink-0 place-items-center rounded-full bg-stage-panel", big ? "size-10" : "size-9")} aria-hidden>
+        <VaidyxIcon className={big ? "h-5" : "h-4"} />
       </motion.span>
       <span className="min-w-0 flex-1 text-left">
-        <span className={cn("block truncate font-medium leading-tight text-stage-fg", big ? "text-xl" : "text-xs")} data-part="title">{line}</span>{" "}
-        <span className={cn("block truncate", big ? "text-base text-stage-fg/80" : "text-[10px] text-stage-muted")}>AI agent, support only</span>{" "}
-        <span className={cn("block truncate", key === "error" ? "text-bad" : "text-stage-fg", big ? "text-lg" : "text-[11px]")} aria-live="polite" data-part="state">
+        <span className={cn("block truncate font-medium leading-tight text-stage-fg", big ? "text-base" : "text-xs")} data-part="title">{line}</span>{" "}
+        <span className={cn("block truncate", big ? "text-sm text-stage-fg/80" : "text-[10px] text-stage-muted")}>AI agent, support only</span>{" "}
+        <span className={cn("block truncate", key === "error" ? "text-bad" : "text-stage-fg", big ? "text-sm" : "text-[11px]")} aria-live="polite" data-part="state">
           <AnimatePresence mode="wait" initial={false}>
             <motion.span key={`${key}:${word}`} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} className="inline-flex items-center gap-1">{word}{busy ? <Dots /> : null}</motion.span>
           </AnimatePresence>
@@ -499,7 +524,7 @@ export function AgentCallTile({ agent, big, className }: { agent: AgentInfo; big
         {first ? (
           <span className="block [@media(max-height:899px)]:hidden" title={`${firstStatus}: ${first}`}>
             <span className="block truncate text-xs font-semibold text-stage-fg/80" data-part="point-status">{firstStatus}</span>
-            <span className="block truncate text-base text-stage-fg/80" data-part="point">{first}</span>
+            <span className="block truncate text-sm text-stage-fg/80" data-part="point">{first}</span>
           </span>
         ) : null}
       </span>
@@ -574,10 +599,10 @@ function RoomStrip({ people, agents, showContent, max, maxAgents = 4, className 
           </div>
           {cut.more > 0 ? <p className="text-xl text-stage-fg/80" data-testid="strip-more">+{cut.more} more</p> : null}
         </section>
-      ) : <p className="text-xl text-stage-fg/80">No remote members</p>}
+      ) : <p className="text-base text-stage-fg/80">No remote members</p>}
       {agents.length ? (
         <section aria-label="AI agents in this meeting" className="space-y-1.5">
-          <h2 className="text-lg font-semibold text-stage-fg/80">AI agents in this meeting</h2>
+          <h2 className="text-base font-semibold text-stage-fg/80">AI agents in this meeting</h2>
           <div className="space-y-2" role="list">
             {agentCut.shown.map((a) => <div role="listitem" key={`agent-${a.role}`}><AgentCallTile agent={a} big className="aspect-auto h-24 [@media(min-height:900px)]:h-32" /></div>)}
           </div>
@@ -607,14 +632,16 @@ export function Strip({ orientation, max, maxAgents, small, className }: { orien
   const hidden = ordered.length - shownPeople.length;
   const cls = orientation === "column"
     ? "scroll-thin flex min-h-0 flex-col gap-2 overflow-y-auto"
-    : cn("scroll-thin flex snap-x gap-2 overflow-x-auto pb-1 [&>*]:shrink-0 [&>*]:snap-start", room ? "[&>*]:w-56" : "[&>*]:w-28 sm:[&>*]:w-40");
+    : cn("scroll-thin flex snap-x items-start gap-2 overflow-x-auto pb-1 [&>*]:shrink-0 [&>*]:snap-start", room ? "[&>*]:w-56" : "[&>*]:w-28 sm:[&>*]:w-40");
   if (!people.length && !agents.length) return <p className={cn("text-sm text-stage-muted", className)} data-testid="tile-grid">No one has joined yet.</p>;
   const tileSize = small ? "sm" : orientation === "column" || room ? "md" : "sm";
   return (
     <div className={cn(cls, className)} data-testid="tile-grid" data-orientation={orientation} aria-label="People in the call" role="list">
       {showContent ? <div role="listitem"><ContentTile big={room} /></div> : null}
       {shownPeople.map((p) => <div role="listitem" key={p.key}><CallTile p={p} size={tileSize} big={room} dense={small} /></div>)}
-      {agents.map((a) => <div role="listitem" key={`agent-${a.role}`}><AgentCallTile agent={a} big={room} /></div>)}
+      {agents.length && !room && orientation === "column" ? <p className="px-0.5 pt-1 text-[11px] font-medium uppercase tracking-wide text-stage-muted" aria-hidden>AI agents · {agents.length}</p> : null}
+      {/* a compact agent takes the width its name needs in a row (11 Nov 2026: "Ra..." on a phone was unreadable) */}
+      {agents.map((a) => <div role="listitem" key={`agent-${a.role}`} className={orientation === "row" && !room ? "!w-auto" : undefined}><AgentCallTile agent={a} big={room} compact={!room} className={orientation === "row" && !room ? "min-w-[8.5rem]" : undefined} /></div>)}
       {hidden > 0 ? (
         <div role="listitem">
           {room ? <div className="grid aspect-video place-items-center rounded-xl bg-stage-raised text-sm text-stage-fg/80">+{hidden} more</div>

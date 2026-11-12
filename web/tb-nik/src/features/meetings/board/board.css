@@ -1,64 +1,35 @@
-/* The Board view's type for a mirrored projector (meetings-v2 item 2.3): base text 18 px on a laptop, so the room reads it from the back.
-   Tailwind's text sizes read the --text-* variables, so the Case File pieces reused here (values, chips, the staging card) grow inside
-   the Board view without a change of their own; the few fixed pixel sizes they use are raised one by one. A phone gets a step smaller.
-   Light theme tokens only: colours come from the app's own variables. */
+/* The Board view's type. 11 Nov 2026 (owner): on the laptop (coordinator and members) the Board view uses the app's own sizes, the
+   same as the Case File page; the earlier projector-size type (meetings-v2 item 2.3) read as zoomed in. Only the room screen (a
+   separate projector PC) keeps a step larger, toned down from before. Light theme tokens only: colours come from the app's own
+   variables. */
 .board-view {
-  --text-xs: 0.9375rem;   /* 15 px: dates, notes under a line */
-  --text-sm: 1.125rem;    /* 18 px: values, rows, buttons */
-  --text-base: 1.25rem;   /* 20 px: the summary's sentences */
-  --text-lg: 1.375rem;
-  --text-xl: 1.5rem;
-  --text-2xl: 1.75rem;
-  --text-3xl: 2.125rem;
-  font-size: 1.125rem;
-  line-height: 1.5;
-}
-.board-view .quote-chip { font-size: 0.9375rem; }
-.board-view .text-\[10px\],
-.board-view .text-\[11px\] { font-size: 0.875rem; }
-.board-view .text-\[15px\] { font-size: 1.25rem; }
-.board-view .text-\[0\.95rem\],
-.board-view .text-\[0\.97rem\] { font-size: 1.25rem; }
-.board-view .text-\[1\.05rem\] { font-size: 1.375rem; }
-
-@media (max-width: 639px) {
-  .board-view {
-    --text-xs: 0.8125rem;
-    --text-sm: 1rem;
-    --text-base: 1.0625rem;
-    --text-lg: 1.1875rem;
-    --text-xl: 1.3125rem;
-    --text-2xl: 1.5rem;
-    --text-3xl: 1.75rem;
-    font-size: 1rem;
-  }
-  .board-view .quote-chip { font-size: 0.8125rem; }
-  .board-view .text-\[10px\],
-  .board-view .text-\[11px\] { font-size: 0.75rem; }
-  .board-view .text-\[15px\] { font-size: 1.0625rem; }
-  .board-view .text-\[0\.95rem\],
-  .board-view .text-\[0\.97rem\] { font-size: 1.0625rem; }
-  .board-view .text-\[1\.05rem\] { font-size: 1.1875rem; }
+  line-height: 1.55;
 }
 
-/* The room screen (a separate projector PC, meetings-v2 2.5): the same Board view a step larger again, so the back of the room reads
-   it; nothing smaller than 18 px. Only on a wide screen: a narrow window keeps the sizes above. */
+/* The summary's sources (11 Nov 2026, owner): a small document icon after each sentence instead of the report's name every time; the
+   name and page show on hover (title) and are read by assistive tools; a click opens the report at the line as before. */
+.board-view .cite-icon { padding: 0.125rem 0.25rem; vertical-align: -1px; }
+.board-view .cite-icon svg { width: 0.75rem; height: 0.75rem; }
+
+/* The room screen (a separate projector PC, meetings-v2 2.5): a step larger so the back of the room reads it. Only on a wide screen: a
+   narrow window keeps the app's sizes. */
 @media (min-width: 1024px) {
   .board-view.board-big {
-    --text-xs: 1.125rem;    /* 18 px */
-    --text-sm: 1.3125rem;   /* 21 px */
-    --text-base: 1.5rem;    /* 24 px */
-    --text-lg: 1.625rem;
-    --text-xl: 1.75rem;
-    --text-2xl: 2rem;
-    --text-3xl: 2.5rem;
-    font-size: 1.3125rem;
+    --text-xs: 0.9375rem;   /* 15 px */
+    --text-sm: 1.0625rem;   /* 17 px */
+    --text-base: 1.125rem;  /* 18 px */
+    --text-lg: 1.25rem;
+    --text-xl: 1.375rem;
+    --text-2xl: 1.625rem;
+    --text-3xl: 1.875rem;
+    font-size: 1.0625rem;
   }
   .board-view.board-big .quote-chip,
   .board-view.board-big .text-\[10px\],
-  .board-view.board-big .text-\[11px\] { font-size: 1.125rem; }
+  .board-view.board-big .text-\[11px\] { font-size: 0.875rem; }
   .board-view.board-big .text-\[15px\],
   .board-view.board-big .text-\[0\.95rem\],
-  .board-view.board-big .text-\[0\.97rem\] { font-size: 1.5rem; }
-  .board-view.board-big .text-\[1\.05rem\] { font-size: 1.625rem; }
+  .board-view.board-big .text-\[0\.97rem\] { font-size: 1.125rem; }
+  .board-view.board-big .text-\[1\.05rem\] { font-size: 1.25rem; }
+  .board-view.board-big .cite-icon svg { width: 0.9375rem; height: 0.9375rem; }
 }

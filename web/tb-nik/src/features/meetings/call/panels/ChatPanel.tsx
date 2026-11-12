@@ -250,8 +250,9 @@ export function QuestionForm({ role, roleLabel, id = "member-q", text, onText, m
       <label htmlFor={id} className="sr-only">{roleLabel ? `Ask ${roleLabel} about this Case File` : "Type a question"}</label>
       <Textarea ref={questionRef} id={id} value={question} onChange={(e) => change(e.target.value)} className="min-h-16 text-base md:text-base"
         placeholder={roleLabel ? `Ask ${roleLabel} about this Case File` : "Type a question; it shows on the room screen with your name"} maxLength={500} disabled={pending || !inSession || !cid} />
-      <div className="flex items-center gap-2">
-        {error ? <p role="alert" className="flex-1 text-xs text-bad" data-testid="ask-error">{error}</p> : <span className="flex-1 text-xs text-muted-foreground">{hint}</span>}
+      {/* wraps on a narrow screen: while the microphone listens the hint takes its own line instead of one word a line (11 Nov 2026) */}
+      <div className="flex flex-wrap items-center gap-2">
+        {error ? <p role="alert" className="min-w-[10rem] flex-1 text-xs text-bad" data-testid="ask-error">{error}</p> : <span className="min-w-[10rem] flex-1 text-xs text-muted-foreground">{hint}</span>}
         {inSession && cid ? (
           <MicButton target={questionRef} screen="meeting-q" context="question" label={roleLabel ? `Dictate the question for ${roleLabel}` : "Dictate the question"} caseId={cid} className="max-w-[60%] shrink-0"
             hintText={role ? "Heard this. Check it before asking." : undefined}

@@ -593,7 +593,7 @@ function RoomBody({ videoOn, liveText, ended, voiceChip }: { videoOn: boolean; l
           {handNames.length ? <span className="rounded-full bg-warn-soft px-3 py-0.5 text-base font-medium text-warn lg:text-xl" data-testid="room-hands">{handNames.length} hand{handNames.length === 1 ? "" : "s"} raised: {handNames.join(", ")}</span> : null}
           {c.video.error ? <span className="text-lg text-bad">{c.video.error}</span> : null}
         </div>
-        <DecisionStrip text={liveText} saved={c.savedNow} big className={cn("[&>p]:line-clamp-2 [&>p]:text-lg lg:[&>p]:text-[28px] [&>span]:text-sm lg:[&>span]:text-base", !liveText && !c.savedNow && "hidden")} />
+        <DecisionStrip text={liveText} saved={c.savedNow} big className={cn("[&>p]:line-clamp-2 [&>p]:text-base lg:[&>p]:text-xl [&>span]:text-sm", !liveText && !c.savedNow && "hidden")} />
         {!liveText && !c.savedNow ? <p className="rounded-xl border border-dashed border-stage-line px-4 py-2 text-base text-stage-fg/80 lg:text-xl">The decision appears here as the coordinator types it, until it is read back and saved.</p> : null}
       </footer>
     </>

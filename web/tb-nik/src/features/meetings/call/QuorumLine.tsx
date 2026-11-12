@@ -58,8 +58,17 @@ export function QuorumLine({ compact, big }: { compact?: boolean; big?: boolean 
   const t = quorumSentences(q, agents, !compact);
   const full = quorumSentences(q, agents, true);
   const chip = cn("inline-flex items-center rounded-full bg-secondary px-1.5 py-px align-baseline font-medium tabular-nums text-secondary-foreground", big ? "text-sm" : compact ? "text-[10px]" : "text-xs");
+  if (compact) {
+    // the agenda rail (11 Nov 2026, owner: the paragraph was too long): two short lines; the full sentences on hover
+    return (
+      <div className="space-y-0.5 text-xs leading-snug text-muted-foreground" data-testid="quorum-line" title={[full.present, full.absent, full.pmjay].filter(Boolean).join(" ")}>
+        <p data-part="heads"><span className="font-medium text-foreground">Heads present</span> {t.headsCount}{agents.length ? <> · {agents.length} AI agent{agents.length === 1 ? "" : "s"} standing in</> : null}</p>
+        {t.pmjay ? <p data-part="pmjay">PM-JAY seats present <span className={chip}>{t.pmjayCount}</span></p> : null}
+      </div>
+    );
+  }
   return (
-    <div className={cn("space-y-1 text-muted-foreground", compact ? "text-[11px] leading-snug" : big ? "text-lg leading-snug" : "text-sm")} data-testid="quorum-line" title={compact ? [full.present, full.absent, full.pmjay].filter(Boolean).join(" ") : undefined}>
+    <div className={cn("space-y-1 text-muted-foreground", big ? "text-lg leading-snug" : "text-sm")} data-testid="quorum-line" title={compact ? [full.present, full.absent, full.pmjay].filter(Boolean).join(" ") : undefined}>
       <p data-part="heads"><span className="font-medium text-foreground">Heads present</span>{t.present.slice("Heads present".length)}</p>
       {t.absent ? <p data-part="absent">{t.absent}</p> : null}
       {t.pmjay ? (

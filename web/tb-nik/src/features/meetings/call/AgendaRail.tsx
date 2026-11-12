@@ -89,7 +89,7 @@ function RoomAgenda({ className }: { className?: string }) {
           const word = ROOM_WORD[st];
           return (
             <li key={r.case_id} aria-current={st === "now" ? "true" : undefined} data-state={st} aria-label={`${n}. ${line}, ${word}`} title={`${n}. ${line}, ${word}`}
-              className={cn("rounded-lg px-2 py-1.5 text-[20px] leading-snug", st === "now" && "bg-stage-raised ring-2 ring-primary/70")}>
+              className={cn("rounded-lg px-2 py-1.5 text-base leading-snug", st === "now" && "bg-stage-raised ring-2 ring-primary/70")}>
               {open ? (
                 <div className="flex items-baseline gap-2">
                   <span className="w-7 shrink-0 tabular-nums text-stage-fg/80">{n}.</span>
@@ -103,7 +103,7 @@ function RoomAgenda({ className }: { className?: string }) {
           );
         })}
       </ol>
-      {more > 0 ? <p className="border-t border-stage-line px-2 py-1.5 text-center text-[20px] text-stage-fg/80" data-testid="room-agenda-more">+{more} more</p> : null}
+      {more > 0 ? <p className="border-t border-stage-line px-2 py-1.5 text-center text-base text-stage-fg/80" data-testid="room-agenda-more">+{more} more</p> : null}
     </nav>
   );
 }

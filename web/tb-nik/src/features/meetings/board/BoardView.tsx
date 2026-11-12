@@ -65,11 +65,11 @@ function CaseLine({ cf, steps, presenter }: { cf?: CaseFile; steps?: Steps; pres
   return (
     <div className="min-w-0 space-y-1" data-testid="board-case-line">
       <p className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-        <span className="break-words text-2xl font-semibold leading-tight text-foreground">{p.name || "Unnamed patient"}</span>
-        {p.agesex ? <span className="text-lg text-muted-foreground">{p.agesex}</span> : null}
+        <span className="break-words text-xl font-semibold leading-tight text-foreground">{p.name || "Unnamed patient"}</span>
+        {p.agesex ? <span className="text-sm text-muted-foreground">{p.agesex}</span> : null}
         {p.mrn ? <span className="text-sm text-muted-foreground">UHID <span className="id text-foreground">{p.mrn}</span></span> : null}
       </p>
-      <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-base">
+      <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
         <span className="font-medium text-foreground">{cancer}{setting ? <span className="font-normal text-muted-foreground">, {setting}</span> : null}</span>
         {who ? <span className="text-muted-foreground">Presented by <span className="text-foreground">{drName(who)}</span></span> : null}
         <span className="inline-flex items-center gap-2 text-muted-foreground">Urgency<UrgencyTag level={urgency} /></span>
@@ -82,18 +82,18 @@ function FollowBar({ mode, followingName, onLookAround, onBackToRoom, pending }:
   let words: ReactNode;
   let action: ReactNode = null;
   if (mode === "drive") {
-    words = <><MonitorUp className="size-5 shrink-0 text-brand" aria-hidden />You lead: everyone follows what you open.{pending ? <Loader2 className="size-4 animate-spin" aria-label="Sending" /> : null}</>;
+    words = <><MonitorUp className="size-3.5 shrink-0 text-brand" aria-hidden />You lead: everyone follows what you open{pending ? <Loader2 className="size-3.5 animate-spin" aria-label="Sending" /> : null}</>;
   } else if (mode === "look") {
-    words = <><Eye className="size-5 shrink-0" aria-hidden />You are looking around on your own. The room has not moved.</>;
-    action = onBackToRoom ? <Button onClick={onBackToRoom} data-testid="board-back-to-room"><Users className="size-4" />Back to the room</Button> : null;
+    words = <><Eye className="size-3.5 shrink-0" aria-hidden />Looking around on your own; the room has not moved</>;
+    action = onBackToRoom ? <Button size="sm" onClick={onBackToRoom} data-testid="board-back-to-room"><Users className="size-4" />Back to the room</Button> : null;
   } else {
-    words = <><Users className="size-5 shrink-0 text-brand" aria-hidden />Following {followingName || "the room"}</>;
-    action = onLookAround ? <Button variant="outline" onClick={onLookAround} data-testid="board-look-around"><Eye className="size-4" />Look around</Button> : null;
+    words = <><Users className="size-3.5 shrink-0 text-brand" aria-hidden />Following {followingName || "the room"}</>;
+    action = onLookAround ? <Button size="sm" variant="outline" onClick={onLookAround} data-testid="board-look-around"><Eye className="size-4" />Look around</Button> : null;
   }
-  // beside the patient's line on a wide view (the tabs keep the whole width under it), under it on a narrow one
+  // a small chip beside the tabs (11 Nov 2026, owner: the two-line box was too big)
   return (
-    <div className={cn("flex w-full min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-2 rounded-lg px-3 py-1.5 @3xl:w-auto @3xl:max-w-[24rem] @3xl:shrink-0", mode === "look" ? "status-info" : "bg-muted/60")} data-testid="board-follow" data-mode={mode}>
-      <p role="status" className="flex min-w-[10rem] flex-1 items-center gap-2 text-sm font-medium text-foreground">{words}</p>
+    <div className="flex min-w-0 flex-wrap items-center justify-end gap-2" data-testid="board-follow" data-mode={mode}>
+      <p role="status" className={cn("inline-flex min-w-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium text-foreground", mode === "look" ? "status-info" : "bg-muted/70")}>{words}</p>
       {action}
     </div>
   );
@@ -139,7 +139,7 @@ export function BoardView({ caseId, view, mode, onNavigate, followingName, onLoo
     <div className={cn("board-view @container flex min-h-0 flex-col text-foreground", className)} data-testid="board-view" data-mode={mode} data-tab={tab} data-doc={view.doc_id ?? ""} data-page={view.page ?? ""}>
       {/* narrow (a phone): the header scrolls away with the content; wide (the projector): the header stays, the body scrolls */}
       <div ref={frame} className="scroll-thin flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto @3xl:overflow-visible" data-testid="board-frame">
-        <header className="space-y-3">
+        <header className="space-y-2.5">
           {/* the patient line has the whole width (it took four lines on a laptop beside the follow bar; 2 Nov review) */}
           <CaseLine cf={cf.data} steps={s} presenter={presenter} />
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -150,9 +150,9 @@ export function BoardView({ caseId, view, mode, onNavigate, followingName, onLoo
                 return (
                   <button key={t.id} ref={(el) => { tabRefs.current[i] = el; }} type="button" role="tab" id={`bv-tab-${t.id}`} aria-selected={on} aria-controls="bv-panel"
                     tabIndex={on ? 0 : -1} disabled={!interactive && !on} onClick={() => go(t.id)} data-testid={`board-tab-${t.id}`}
-                    className={cn("inline-flex items-center gap-2 rounded-full border px-4 py-2 text-base font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                    className={cn("inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                       on ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-foreground enabled:hover:bg-accent disabled:cursor-default disabled:text-muted-foreground")}>
-                    {t.label}{s && count !== null ? <span className={cn("text-sm tabular-nums", on ? "text-primary-foreground/80" : "text-muted-foreground")}>{count}</span> : null}
+                    {t.label}{s && count !== null ? <span className={cn("text-xs tabular-nums", on ? "text-primary-foreground/80" : "text-muted-foreground")}>{count}</span> : null}
                   </button>
                 );
               })}

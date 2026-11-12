@@ -64,7 +64,7 @@ function ReportList({ docs, interactive, onNavigate }: { docs: StepDocument[]; i
                 <button type="button" disabled={!interactive || d.check.status === "reading"} onClick={() => onNavigate("reports", d.doc_id, 0)}
                   className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors enabled:hover:bg-accent/60 disabled:cursor-default"
                   data-testid="board-report-row" data-doc={d.doc_id}>
-                  <FileText className="mt-1 size-5 shrink-0 text-muted-foreground" aria-hidden />
+                  <FileText className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
                   <span className="min-w-0 flex-1 space-y-1">
                     <span className="flex flex-wrap items-baseline gap-x-3">
                       <span className="text-base font-medium text-foreground">{niceTitle(d.title)}</span>
@@ -139,7 +139,7 @@ function ReportPage({ caseId, view, doc, sdoc, interactive, navigates, onNavigat
   return (
     <section className="flex flex-col gap-3 @3xl:h-full" aria-labelledby="bv-report-title" data-testid="board-report-page" data-doc={docId} data-page={page}>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm text-muted-foreground">
-        <h2 id="bv-report-title" className="min-w-0 break-words text-xl font-semibold text-foreground">{title}</h2>
+        <h2 id="bv-report-title" className="min-w-0 break-words text-base font-semibold text-foreground">{title}</h2>
         {sdoc?.final ? (
           <span className={cn("rounded-md px-1.5 py-0.5 text-xs font-semibold", sdoc.final.warn ? "status-warn" : "status-ok")} data-testid={sdoc.final.warn ? "board-final-warn" : "board-final"}>{sdoc.final.label}</span>
         ) : docStatusChip(doc)}
@@ -148,7 +148,7 @@ function ReportPage({ caseId, view, doc, sdoc, interactive, navigates, onNavigat
         {interactive ? <a className="ml-auto inline-flex items-center gap-1 text-link hover:underline" href={docFileUrl(caseId, docId)} target="_blank" rel="noopener noreferrer">Open original <ExternalLink className="size-3.5" aria-hidden /></a> : null}
       </div>
       {quote ? (
-        <blockquote className="rounded-md border-l-4 border-primary bg-secondary/60 px-4 py-2 text-lg text-foreground" data-testid="board-quote">
+        <blockquote className="rounded-md border-l-4 border-primary bg-secondary/60 px-4 py-2 text-sm text-foreground" data-testid="board-quote">
           <span className="mb-0.5 block text-xs text-muted-foreground">Quote as printed</span>
           {quote}
         </blockquote>

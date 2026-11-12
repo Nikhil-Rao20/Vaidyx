@@ -46,11 +46,11 @@ export function ExpertSummary({ mid, caseId, big = false, className }: { mid: st
             {summary?.board_question ? (
               <section className="surface px-5 py-4" aria-labelledby="ex-question">
                 <h2 id="ex-question" className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Question for the board</h2>
-                <p className="mt-1 text-2xl font-semibold leading-snug text-foreground">{summary.board_question}</p>
+                <p className="mt-1 text-lg font-semibold leading-snug text-foreground">{summary.board_question}</p>
               </section>
             ) : null}
             <section className="surface px-5 py-4" aria-labelledby="ex-summary">
-              <h2 id="ex-summary" className="text-lg font-semibold text-foreground">Summary</h2>
+              <h2 id="ex-summary" className="text-base font-semibold text-foreground">Summary</h2>
               {summary?.label ? <span className={cn("mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium", summary.reviewed ? "status-ok" : "status-review")}>{summary.label}</span> : null}
               {sections.length ? (
                 <div className="mt-2 space-y-3">
@@ -66,7 +66,7 @@ export function ExpertSummary({ mid, caseId, big = false, className }: { mid: st
             </section>
             {values.length ? (
               <section className="surface px-5 py-4" aria-labelledby="ex-values">
-                <h2 id="ex-values" className="text-lg font-semibold text-foreground">Key values</h2>
+                <h2 id="ex-values" className="text-base font-semibold text-foreground">Key values</h2>
                 <dl className="mt-2 divide-y divide-border">
                   {values.map((v) => (
                     <div key={v.id} className="grid gap-x-4 gap-y-0.5 py-2 sm:grid-cols-[minmax(8rem,14rem)_1fr]">
