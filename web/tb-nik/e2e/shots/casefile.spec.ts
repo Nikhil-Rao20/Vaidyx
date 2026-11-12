@@ -210,6 +210,25 @@ test.describe("guided Case File", () => {
     expect(errors).toEqual([]);
   });
 
+  test("Pre-Authorization on a guest's private Case File: fill in, upload and not needed stay; no requests", async ({ page }) => {
+    // 11 Nov 2026: a private Case File has no departments to ask, so Send request, Change the message and Send reminder go; the
+    // doctor still fills in a value (ECOG), uploads an outside report or marks a record not needed (the server allows all three).
+    const errors = watchConsole(page);
+    const cf = caseFileUnsent();
+    cf.case.private = true;
+    await open(page, { path: "/pre-authorization", caseFile: cf });
+    const group = page.getByTestId("missing-group");
+    await expect(group.getByTestId("missing-item")).toContainText("MRI breast");
+    await expect(group.getByRole("button", { name: "Upload outside report" })).toBeVisible();
+    await expect(group.getByRole("button", { name: "Not needed for this patient" })).toBeVisible();
+    await expect(page.getByTestId("send-request")).toHaveCount(0);
+    await expect(page.getByText("Change the message")).toHaveCount(0);
+    await expect(page.getByTestId("waiting-group").getByRole("button", { name: "Send reminder" })).toHaveCount(0);
+    await page.getByRole("button", { name: /The board may also ask for/ }).click();
+    await expect(page.getByRole("button", { name: "Fill it in myself" }).first()).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+
   test("Summary: read, then the send dialog, then sent", async ({ page }) => {
     const errors = watchConsole(page);
     await open(page, { path: "/summary", steps: stepsReadyToSend(), slots: { ...baseSlots, left_before_board: 0, blockers: [] } });

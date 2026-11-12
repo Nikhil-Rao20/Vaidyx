@@ -461,3 +461,17 @@ def test_a_private_case_file_names_only_its_own_guest_as_the_doctor(app):
     cid = create_private(app)["case_id"]
     assert team.owner_consultants(store.get_case(cid)) == [GR]
     assert team.owner_consultants({"case_id": "TB-X", "department": "breast_surgery"})[0] == "aaa.other.guest@example.org"   # ordinary rule elsewhere
+
+
+def test_a_guest_fills_in_and_waives_on_a_private_case_file(app):
+    """After the Health-a-thon (11 Nov 2026): on a private Case File the guest still types a value the doctor may type (ECOG) and marks
+    a record not needed; only the actions that bring other departments in stay refused. The Pre-Authorization screen shows these two."""
+    cid = create_private(app)["case_id"]
+    g = app.as_(GR)
+    p = g.get(f"/cases/{cid}").json()["permissions"]
+    assert p["review"] is True and p["waive"]["mri_breast"] is True and p["send_request"] is False and p["remind"] is False
+    r = g.post(f"/cases/{cid}/slots/fact:ecog/value", json={"value": "1"})
+    assert r.status_code == 200, r.text
+    assert store.get_case(cid)["typed_values"]["ecog"]["value"] == "1"
+    r = g.post(f"/cases/{cid}/slots/record:mri_breast/not-needed", json={"reason": "not done at the referring hospital"})
+    assert r.status_code == 200, r.text

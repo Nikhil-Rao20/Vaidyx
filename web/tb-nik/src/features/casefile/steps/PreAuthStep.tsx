@@ -3,6 +3,8 @@
 // message" beside it); each item: Fill it in myself (values a doctor may type), Upload outside report, Not needed for this patient (with a
 // reason). After sending: "Request sent to <department>, date · reply due"; overdue rows offer Send reminder and Call the department.
 // Voice (night-v3 item 4.4): a mic beside "Why is it not needed?" fills it as an editable edit; values filled in are typed.
+// canAct: the doctor may change this Case File (fill in, upload, not needed). canRequest: it may also bring a department in (send a
+// request, change its message, remind); false on a guest reviewer's private Case File, which has no departments to ask (11 Nov 2026).
 import { useRef, useState, type ReactNode } from "react";
 import { ArrowRight, ChevronDown, Hourglass, PenLine, Phone, Send, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -71,7 +73,7 @@ function ItemRow({ it, h, canAct, resident, caseId }: { it: MissingItem; h: PreA
   );
 }
 
-function WaitRow({ it, h, canAct }: { it: MissingItem; h: PreAuthHandlers; canAct: boolean }) {
+function WaitRow({ it, h, canRequest }: { it: MissingItem; h: PreAuthHandlers; canRequest: boolean }) {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -87,7 +89,7 @@ function WaitRow({ it, h, canAct }: { it: MissingItem; h: PreAuthHandlers; canAc
         </p>
       </div>
       {overdue && it.department?.phone ? <Button asChild size="sm" variant="outline"><a href={`tel:${it.department.phone}`}><Phone className="size-4" />Call the department</a></Button> : null}
-      {canAct && r?.action_id ? (done ? <span className="text-xs text-ok">Reminder sent</span> : (
+      {canRequest && r?.action_id ? (done ? <span className="text-xs text-ok">Reminder sent</span> : (
         <LoadingButton size="sm" variant="outline" loading={busy} onClick={async () => { setBusy(true); setErr(null); try { await h.remind(it); setDone(true); } catch (e) { setErr(errorText(e)); } finally { setBusy(false); } }}>Send reminder</LoadingButton>
       )) : null}
       {err ? <p role="alert" className="basis-full text-xs text-bad">{err}</p> : null}
@@ -95,7 +97,7 @@ function WaitRow({ it, h, canAct }: { it: MissingItem; h: PreAuthHandlers; canAc
   );
 }
 
-export function PreAuthStep({ steps, h, canAct, resident, consultantName, onNext }: { steps: Steps; h: PreAuthHandlers; canAct: boolean; resident: boolean; consultantName: string; onNext: () => void }) {
+export function PreAuthStep({ steps, h, canAct, canRequest = canAct, resident, consultantName, onNext }: { steps: Steps; h: PreAuthHandlers; canAct: boolean; canRequest?: boolean; resident: boolean; consultantName: string; onNext: () => void }) {
   const { groups, waiting, optional } = steps.pre_authorization;
   const [showOptional, setShowOptional] = useState(false);
   const setting = steps.protocol_label ? `${steps.protocol_label}` : "this cancer";
@@ -112,7 +114,7 @@ export function PreAuthStep({ steps, h, canAct, resident, consultantName, onNext
         return (
           <Card key={key} title={g.department.label} count={g.items.length} testId="missing-group">
             <ul className="divide-y divide-border">{g.items.map((it) => <ItemRow key={it.slot_id} it={it} h={h} canAct={canAct && !pending} resident={resident} caseId={steps.case_id} />)}</ul>
-            {canAct ? (
+            {canRequest ? (
               <div className="flex flex-wrap items-center gap-2 border-t border-border py-2.5">
                 <Button onClick={() => h.sendGroup(g.items, key)} disabled={pending || !g.department.name} data-testid="send-request">
                   <Send className="size-4" />{resident ? `Send to ${consultantTitle(consultantName)} for sign-off` : `Send request to ${g.department.label}`}
@@ -126,7 +128,7 @@ export function PreAuthStep({ steps, h, canAct, resident, consultantName, onNext
       })}
       {waiting.length ? (
         <Card title="Waiting on other departments" count={waiting.length} testId="waiting-group">
-          <ul className="divide-y divide-border">{waiting.map((it) => <WaitRow key={it.slot_id} it={it} h={h} canAct={canAct} />)}</ul>
+          <ul className="divide-y divide-border">{waiting.map((it) => <WaitRow key={it.slot_id} it={it} h={h} canRequest={canRequest} />)}</ul>
         </Card>
       ) : null}
       {optional.length ? (
