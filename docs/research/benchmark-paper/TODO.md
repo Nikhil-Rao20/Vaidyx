@@ -75,6 +75,21 @@ single H200, which pauses localhost and the public demo for those hours: agree t
 - **Clinician review.** A small blinded review by the clinician co-authors (for example 20 Board summaries and their extracted
   fields, rated for correctness and omissions) would give the paper its only human-judged result.
 
+## 6. LATER (owner, 8 Nov 2026): benchmark MediX-R1-30B, research only
+
+- **Why.** The professor suggested trying it; we agreed to benchmark it, not to ship it. Licence CC-BY-NC-SA 4.0, "research
+  purposes only, not for clinical or commercial use", so it can never replace a Vaidyx model. Studied 8 Nov: MBZUAI (UAE), base
+  Qwen3-VL-30B-A3B-Instruct (Chinese base, mixture of experts, ~3B active of 31B), RL only (GRPO/DAPO, ~51K items), output
+  `[MODALITY]<think>...</think><answer>...</answer>`; paper arXiv 2602.23363 (EMNLP 2026 Findings) scores 17 sets with a Qwen3-14B
+  judge (MedQA 92.9, MedMCQA 78.1, avg 73.6 vs base 69.8), no MedXpertQA. Labels: medical fine-tune, Chinese base, UAE developer.
+- **Run.** Download MBZUAI/MediX-R1-30B and its base Qwen/Qwen3-VL-30B-A3B-Instruct (bf16, ~62 GB each, no downtime). Same harness
+  as the 13 models: 5 text + 6 image sets, full splits, greedy, step-by-step and direct; parser must read the `<answer>` block
+  (and drop the modality tag). Add the oncology slice, bootstrap intervals, throughput (decode speed vs Gemma-4-31B).
+  Optional: the 476-probe grounding test with MediX as reasoner, in a research copy only.
+- **When.** The H200 is full with the live models (136 of 144 GB), so the live site's AI must be paused for a few hours: only in a
+  window the owner and Eswar approve (after the Health-a-thon evaluation).
+- **Paper.** Model 14 (+ its base) in every table; one paragraph on what the RL added under exact-match scoring.
+
 ## Not worth doing
 
 More models, more exam benchmarks, thinking-mode runs, or a language-model judge for open image answers: no model reads images in
