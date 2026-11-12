@@ -169,7 +169,7 @@ def test_create_update_list_and_cancel(tc):
     assert board.get(mid)["agenda"] == [] and board.get(mid)["status"] == "planned"  # the old session file, same shape
     assert As(tc, "priya").post("/meetings", json={"date": FUT}).status_code == 403
     assert As(tc, "anil").post("/meetings", json={"date": "5/11/2026"}).status_code == 400
-    assert As(tc, "anil").post("/meetings", json={"date": "2026-11-06", "time": "9am"}).json()["detail"]["code"] == "bad_time"
+    assert As(tc, "anil").post("/meetings", json={"date": FUT, "time": "9am"}).json()["detail"]["code"] == "bad_time"
     r = As(tc, "anil").put(f"/meetings/{mid}", json={"time": "09:30", "room": "Room 5", "video": False})
     assert r.json()["meeting"]["time"] == "09:30" and r.json()["meeting"]["room"] == "Room 5" and r.json()["meeting"]["video"] is False
     listed = As(tc, "anil").get("/meetings").json()

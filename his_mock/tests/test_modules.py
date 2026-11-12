@@ -87,7 +87,7 @@ def visit(app, users):
              {"department": "Breast Surgery", "unit": "Unit II", "consultant_id": doc["id"], "visit_type": "follow_up"})
     path, q = location(r)
     eid = path.rsplit("/", 1)[-1]
-    assert path == f"/his/encounters/{eid}" and "OP visit OP/26/" in q["flash"]
+    assert path == f"/his/encounters/{eid}" and re.search(r"OP visit OP/\d\d/", q["flash"])  # the number carries the current year
     return s.encounters[eid]
 
 
@@ -141,8 +141,8 @@ def placed(app, users, visit, data_dir):
 
 def test_order_entry_places_one_order_per_test_with_accessions(app, users, placed, data_dir):
     s = app.state.hospital.store
-    assert re.match(r"^RAD/26/\d{5}$", placed["mammogram"]["accession"])
-    assert re.match(r"^PATH/26/\d{5}$", placed["hpe_biopsy"]["accession"])
+    assert re.match(r"^RAD/\d\d/\d{5}$", placed["mammogram"]["accession"])
+    assert re.match(r"^PATH/\d\d/\d{5}$", placed["hpe_biopsy"]["accession"])
     assert placed["cbc"]["performing_department"] == "Pathology" and placed["lft"]["performing_department"] == "Biochemistry"
     for o in (placed[k] for k in ("mammogram", "hpe_biopsy", "cbc", "lft")):
         assert o["status"] == "ordered" and o["ordering_department"] == "Breast Surgery"

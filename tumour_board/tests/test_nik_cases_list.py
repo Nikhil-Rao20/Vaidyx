@@ -1,6 +1,8 @@
 """GET /case-list (18 Oct 2026, new interface): one row per Case File the person may open, with the status word the home shows (archived,
 decided, scheduled, ready, waiting on a department, needs you, draft), the urgency tag, what is left before the board, imaging present,
 the last change; newest first; the same visibility as GET /cases. Synthetic Case Files in the conftest temporary data root; no model."""
+from datetime import datetime, timedelta
+
 import pytest
 
 from tumour_board import access, board, steps, store, team
@@ -17,6 +19,9 @@ def _gate(case_id, passed, open_ids=(), confirm_ids=()):
     store.save_state(case_id, st)
 
 
+# a record made after the Case File was listed (listed now, in the fixture): a fixed date stops being "after" once it passes
+AFTER_LISTING = (datetime.now() + timedelta(days=1)).isoformat(timespec="seconds")
+
 @pytest.fixture
 def cases(people):
     """Nine synthetic Case Files of Breast Surgery (Dr Rao), one per status, created a minute apart (TB-L1 oldest)."""
@@ -29,7 +34,7 @@ def cases(people):
     # archived
     team.archive(out["archived"], RAO, "duplicate (synthetic)")
     # decided: a board record after the listing
-    st = store.get_state(out["decided"]); st["board_records"] = [{"id": "BR1", "recorded_at": "2026-12-01T10:00:00"}]; store.save_state(out["decided"], st)
+    st = store.get_state(out["decided"]); st["board_records"] = [{"id": "BR1", "recorded_at": AFTER_LISTING}]; store.save_state(out["decided"], st)
     # scheduled: on the agenda of a planned session
     s = board.create(NEXT_YEAR, ANIL, case_ids=[out["scheduled"]])
     # ready: the owner's mark

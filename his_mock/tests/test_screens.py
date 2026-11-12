@@ -311,7 +311,8 @@ def test_new_visit_and_admission_numbers_above_fixtures(client, store, data_dir)
     assert "level" not in q
     op = store.encounters_for(pid)[-1]
     assert path == f"/his/encounters/{op['id']}"
-    assert op["kind"] == "OP" and op["number"].startswith("OP/") and int(op["number"].rsplit("/", 1)[1]) > 118724
+    seq = int(op["number"].rsplit("/", 1)[1])  # above the fixtures in their year (2026); the count starts again each year
+    assert op["kind"] == "OP" and op["number"].startswith("OP/") and (seq > 118724 if op["number"].startswith("OP/26/") else seq >= 1)
     assert (op["department"], op["unit"], op["consultant_id"], op["visit_type"]) == \
         ("Surgical Oncology", "Unit II", "prac-vxreg-20101", "follow_up")
     assert feed(data_dir)[-1].split("|", 9)[8] == "ADT^A04"
@@ -327,7 +328,8 @@ def test_new_visit_and_admission_numbers_above_fixtures(client, store, data_dir)
                              "ward": "Surgical Ward 2", "bed": "2-20"}))
     ip = store.encounters_for(pid)[-1]
     assert "level" not in q and path == f"/his/encounters/{ip['id']}"
-    assert ip["kind"] == "IP" and int(ip["number"].rsplit("/", 1)[1]) > 1879 and ip["status"] == "in-progress"
+    ip_seq = int(ip["number"].rsplit("/", 1)[1])  # as for the OP visit: above the 2026 fixtures only in 2026
+    assert ip["kind"] == "IP" and (ip_seq > 1879 if ip["number"].startswith("IP/26/") else ip_seq >= 1) and ip["status"] == "in-progress"
     assert feed(data_dir)[-1].split("|", 9)[8] == "ADT^A01"
     _, q = location(post(client, f"/his/patients/{pid}/admissions",
                          {"department": "Surgical Oncology", "ward": "W", "bed": "1"}))
