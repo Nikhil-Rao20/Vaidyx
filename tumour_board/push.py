@@ -6,8 +6,9 @@ subscribes with). Subscriptions: push_subs.json {user: [{endpoint, keys{p256dh, 
 storing a notification: the people addressed (a department: everyone placed in it; the coordinator role: the coordinators; a user)
 get a push with a GENERIC text per kind (never a UHID, a patient name or any clinical word). A subscription the push service refuses
 with 404 or 410 is removed. Sends run in a daemon thread so a route never waits for the push service; ASYNC = False makes them run
-inline (tests)."""
-import base64, json, logging, os, re, threading
+inline (tests). Hospitals (admin consoles, 16 Nov 2026): one key pair for every hospital (config.shared_root()); the subscriptions and
+preferences are each hospital's own; the send thread carries the hospital of the code that started it (contextvars.copy_context)."""
+import base64, contextvars, json, logging, os, re, threading
 from datetime import datetime
 
 from . import config, org, store
@@ -55,7 +56,7 @@ _TIME = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 
 
 def _path(name) -> "os.PathLike":
-    return config.DATA_ROOT / name
+    return (config.shared_root() if name == KEYS_FILE else config.DATA_ROOT) / name
 
 
 def _read(name, default):
@@ -326,7 +327,7 @@ def on_notification(rec: dict) -> dict | None:
         return None
     kind = str(rec.get("kind") or "")
     if ASYNC:
-        threading.Thread(target=send_to_users, args=(users, kind), daemon=True, name="tb-push").start()
+        threading.Thread(target=contextvars.copy_context().run, args=(send_to_users, users, kind), daemon=True, name="tb-push").start()
         return {"queued": len(users)}
     return send_to_users(users, kind)
 

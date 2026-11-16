@@ -11,7 +11,9 @@ if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 _SAFE_ROOT = tempfile.mkdtemp(prefix="tb-unit-")
 os.environ["TB_DATA_ROOT"] = _SAFE_ROOT  # before tumour_board.config is imported
+os.environ["TB_HOSPITALS_ROOT"] = _SAFE_ROOT + "-hospitals"  # never the real hospitals folder (a sibling, as in production)
 atexit.register(shutil.rmtree, _SAFE_ROOT, True)
+atexit.register(shutil.rmtree, _SAFE_ROOT + "-hospitals", True)
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
@@ -19,14 +21,56 @@ from tumour_board import config, protocol, store  # noqa: E402
 from tumour_board.tests import util  # noqa: E402
 
 
+def _strict_test_threads():
+    """Strict mode: a thread a TEST starts (a test is not production code) carries the test's hospital, as production threads must do
+    themselves (contextvars.copy_context; test_hospitals_isolation checks the source). Threads started by tumour_board code are left
+    alone, so a missed one still fails."""
+    import contextvars, sys, threading
+    real_init = threading.Thread.__init__
+    if getattr(real_init, "_tb_strict", False):
+        return
+
+    def init(self, *a, **kw):
+        caller = sys._getframe(1).f_globals.get("__name__", "")
+        if caller.startswith("tumour_board.tests") or caller.startswith("his_mock.tests"):
+            target = kw.pop("target", None) if "target" in kw else (a[1] if len(a) > 1 else None)
+            if len(a) > 1:
+                a = (a[0], None) + tuple(a[2:])
+            if target is not None:
+                ctx = contextvars.copy_context()
+                kw["target"] = lambda *ta, **tk: ctx.run(target, *ta, **tk)
+        real_init(self, *a, **kw)
+    init._tb_strict = True
+    threading.Thread.__init__ = init
+
+
+if config.strict():
+    _strict_test_threads()
+
+
 @pytest.fixture(autouse=True)
-def data_root(tmp_path, monkeypatch):
-    """Point storage at an empty temporary data root for every test."""
-    monkeypatch.setattr(config, "DATA_ROOT", tmp_path)
-    monkeypatch.setattr(config, "CASES_DIR", tmp_path / "cases")
+def data_root(tmp_path, monkeypatch, request):
+    """Point storage at an empty temporary data root for every test: the default hospital's folder (config.BASE_ROOT; config.DATA_ROOT
+    and CASES_DIR resolve to it) and an empty hospitals folder beside it. The test runs inside the default hospital.
+
+    TB_HOSPITAL_STRICT=1 (admin consoles D12): a second hospital is registered for every test (except the hospital tests, which make
+    their own), so code that reaches the data folder without a current hospital (a thread started without contextvars.copy_context)
+    raises instead of quietly using the default hospital."""
+    hospitals_root = tmp_path.with_name(tmp_path.name + "-hospitals")
+    monkeypatch.setattr(config, "BASE_ROOT", tmp_path)
+    monkeypatch.setattr(config, "HOSPITALS_ROOT", hospitals_root)
+    tok = config._HOSPITAL.set(config.DEFAULT_HOSPITAL)
+    if config.strict() and not request.node.module.__name__.rsplit(".", 1)[-1].startswith("test_hospitals"):
+        hospitals_root.mkdir(parents=True, exist_ok=True)
+        (hospitals_root / "registry.json").write_text('{"version": 1, "hospitals": {"strict-probe": {"name": "Strict probe", "status": "active"}}, "users": {}}')
     store._docs_cache.clear()
     yield tmp_path
     store._docs_cache.clear()
+    try:
+        config._HOSPITAL.reset(tok)
+    except ValueError:  # set in another context (an async fixture): the next test sets it again
+        pass
+    shutil.rmtree(hospitals_root, ignore_errors=True)
 
 
 class _NoGuidelines:

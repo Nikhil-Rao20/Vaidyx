@@ -32,8 +32,8 @@ RETRY_STATUS = {429, 500, 502, 503, 504}
 MAX_IDS = 200
 BATCH = 50
 CACHE_DAYS = 7  # a retraction reaches a cached record within a week; the proof tools fetch fresh
-CACHE_DIR = config.DATA_ROOT / "pubmed_cache"
-SETTINGS = config.DATA_ROOT / "pubmed.json"
+CACHE_DIR = config.shared_root() / "pubmed_cache"  # public records and the NCBI settings: shared by every hospital
+SETTINGS = config.shared_root() / "pubmed.json"
 
 
 class PubMedError(Exception):

@@ -7,6 +7,9 @@ cases/<case_id>/audit.jsonl      append-only log of every AI call and user actio
 
 intake/<doc_id>/                 department uploads before they are matched to a patient (V1 item 2.3): original file + doc.json
 intake/audit.jsonl               append-only log of intake events (uploads, matching, filing)
+
+Hospitals (admin consoles, 16 Nov 2026): the folder is the current hospital's (config.CASES_DIR); the locks and the documents cache are per hospital
+(config.ScopedDict), since every hospital numbers its Case Files from TB-2026-0001.
 """
 import asyncio, hashlib, json, os, re, shutil, time, uuid
 import threading
@@ -15,7 +18,7 @@ from pathlib import Path
 
 from . import config
 
-_locks: dict[str, asyncio.Lock] = {}
+_locks: dict[str, asyncio.Lock] = config.ScopedDict()  # per hospital: two hospitals may both have TB-2026-0001
 _deleted: set = set()  # Case File directories deleted by this process (until a Case File is created there again): see gone()
 log = __import__("logging").getLogger("tumour_board")
 
@@ -181,7 +184,7 @@ def save_doc(case_id, doc):
     _write_json(case_dir(case_id) / "docs" / doc["doc_id"] / "doc.json", doc)
 
 
-_docs_cache: dict[str, tuple] = {}
+_docs_cache: dict[str, tuple] = config.ScopedDict()  # case_id -> (signature, docs), per hospital
 
 
 def list_docs(case_id):

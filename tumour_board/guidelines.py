@@ -285,7 +285,7 @@ class GuidelineIndex:
         if self.chunking not in CHUNKERS:
             raise ValueError(f"unknown guideline chunking {self.chunking!r}")
         root = config.GUIDELINE_DIR
-        cdir = config.DATA_ROOT / "embed_cache"; cdir.mkdir(parents=True, exist_ok=True)
+        cdir = config.shared_root() / "embed_cache"; cdir.mkdir(parents=True, exist_ok=True)  # one guideline index for every hospital
         stem = "guidelines" if self.chunking == "fixed" else f"guidelines_{self.chunking}"
         self._npz = cdir / f"{stem}.npz"
         fsig = _files_sig(root) if root.exists() else "none"

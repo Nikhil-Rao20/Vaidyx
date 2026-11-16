@@ -6,13 +6,13 @@ every client message and every minute. One room per login ("u:<login>") in live.
 At import this module registers its sender in messages.LISTENERS and its presence in messages.PRESENCE. Presence: online = a socket and
 activity (connect, "active", "typing") in the last 10 minutes; away = a socket but no activity; offline = no socket. A change is sent
 only to the people who share a conversation with the person. Typing: at most one event per 3 seconds per login, only to the other
-readers of a conversation the person reads."""
+readers of a conversation the person reads. The socket enters the login's hospital first (api/live.enter_hospital)."""
 import asyncio, logging, threading, time
 
 from fastapi import WebSocket, WebSocketDisconnect
 
 from . import common
-from .live import _must_change, _roles, _send
+from .live import _must_change, _roles, _send, enter_hospital, still_in_hospital
 from .. import live, messages
 
 log = logging.getLogger(__name__)
@@ -122,7 +122,8 @@ def _still_allowed(websocket: WebSocket, user: str):
     """The roles when the socket may stay open: the same session names the same login, the first password was changed, the session is
     not idle and the login may still use Messages. None when the socket must close."""
     try:
-        if live.authenticate(websocket) != user or _must_change(websocket, user) or common.idle_expired(websocket.cookies.get(live.COOKIE), touch=False):
+        if (live.authenticate(websocket) != user or not still_in_hospital(websocket, user) or _must_change(websocket, user)
+                or common.idle_expired(websocket.cookies.get(live.COOKIE), touch=False)):
             return None
         rl = _roles(websocket, user)
         return rl if messages.may_use(rl) else None
@@ -134,7 +135,7 @@ def _still_allowed(websocket: WebSocket, user: str):
 @router.websocket("/messages/ws")
 async def messages_socket(websocket: WebSocket):
     user = live.authenticate(websocket)
-    if not user or not live.origin_ok(websocket) or _must_change(websocket, user) or common.idle_expired(websocket.cookies.get(live.COOKIE), touch=False):
+    if not user or not enter_hospital(websocket, user) or not live.origin_ok(websocket) or _must_change(websocket, user) or common.idle_expired(websocket.cookies.get(live.COOKIE), touch=False):
         await websocket.close(code=POLICY)
         return
     try:

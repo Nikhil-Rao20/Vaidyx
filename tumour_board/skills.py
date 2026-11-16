@@ -7,6 +7,9 @@ after the skill text on every call. Roles are an allow-list in code (agents.ROLE
 Two layers: the repo defaults in tumour_board/skills/<role>/SKILL.md and a hospital edit in <data root>/skills/<role>/SKILL.md
 (written from the UI by an admin, audited in org_audit.jsonl, previous versions kept as .bak). The hospital file wins when it
 validates; a broken one is ignored with an audit entry and the default is used.
+
+Hospitals (admin consoles, 16 Nov 2026): the hospital's skills folder is the current hospital's; the cache holds one entry per
+folder, read as one pair.
 """
 import hashlib, json, re, shutil
 from pathlib import Path
@@ -21,7 +24,7 @@ SKILL_FILE = "SKILL.md"
 MAX_DESCRIPTION, MAX_BODY, MAX_NAME = 1024, 20000, 64
 _FRONT = re.compile(r"\A---\s*\n(.*?)\n---\s*\n?(.*)\Z", re.S)
 _HEADING = re.compile(r"^#\s+(.+?)\s*$", re.M)
-_cache = {"key": None, "data": None}
+_cache: dict = {}  # the hospital's skills folder -> (files key, skills): one entry read as one pair, so threads never mix hospitals
 
 
 def hospital_dir() -> Path:
@@ -149,8 +152,10 @@ def load() -> dict:
     """{role: skill} for every role, the hospital file first when it validates, else the repo default, else None. Cached on the
     files' modification times."""
     key = _key()
-    if _cache["key"] == key:
-        return _cache["data"]
+    slot = str(hospital_dir())
+    hit = _cache.get(slot)
+    if hit is not None and hit[0] == key:
+        return hit[1]
     out = {}
     for role in _roles():
         skill, origin, problem = None, None, ""
@@ -171,7 +176,9 @@ def load() -> dict:
         if skill:
             skill = {**skill, "origin": origin, "path": str(_file(hospital_dir() if origin == "hospital" else REPO_DIR, role)), "problem": problem}
         out[role] = skill
-    _cache.update(key=key, data=out)
+    if len(_cache) > 64:
+        _cache.clear()
+    _cache[slot] = (key, out)
     return out
 
 
@@ -228,7 +235,7 @@ def save(role: str, new_text: str, by: str = "") -> dict:
     tmp.write_text(new_text, encoding="utf-8")
     tmp.replace(p)
     _audit({"kind": "skill_saved", "role": role, "by": by or "", "sha": s["sha"], "label": s["label"], "department": s["department"]})
-    _cache["key"] = None
+    _cache.clear()
     return {**s, "origin": "hospital", "path": str(p)}
 
 
@@ -242,5 +249,5 @@ def reset(role: str, by: str = "") -> bool:
     from .store import now_iso
     shutil.move(str(p), str(p.with_name(f"{SKILL_FILE}.{now_iso().replace(':', '-')}.reset.bak")))
     _audit({"kind": "skill_reset", "role": role, "by": by or ""})
-    _cache["key"] = None
+    _cache.clear()
     return True

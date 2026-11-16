@@ -25,8 +25,11 @@ TITLE ("Summary after the board", owner decision D14) beside the pre-board summa
 written again when the discussion notes of one of its meetings are built or edited (on_notes_changed, called by meeting_notes).
 
 The consultant's edits are never overwritten: a rebuild carries an edited sentence forward with its edited text; a different model
-sentence for the same place is kept under edited.suggested. Never for a protected Case File (config.PROTECTED_CASES)."""
+sentence for the same place is kept under edited.suggested. Never for a protected Case File (config.PROTECTED_CASES).
+Hospitals (admin consoles, 16 Nov 2026): RUNNING / AGAIN are per hospital (config.ScopedDict); a run started without an event loop goes
+to a thread that carries the hospital (contextvars.copy_context)."""
 import asyncio
+import contextvars
 import copy
 import hashlib
 import json
@@ -1184,8 +1187,8 @@ def refresh_status(case_id=None, state=None):
 
 # ---- background build after a decision -------------------------------------------------------------------------------------------
 
-RUNNING: dict = {}  # case_id -> {"started", "trigger", "user"}
-AGAIN: dict = {}  # case_id -> (trigger, user): one more run after the current one, the latest request only
+RUNNING: dict = config.ScopedDict()  # case_id -> {"started", "trigger", "user"} (per hospital)
+AGAIN: dict = config.ScopedDict()  # case_id -> (trigger, user): one more run after the current one, the latest request only
 TASKS: set = set()
 _lock = threading.Lock()
 
@@ -1287,7 +1290,8 @@ def schedule(case_id, trigger, user="") -> dict:
         TASKS.add(task)
         task.add_done_callback(TASKS.discard)
         return {"scheduled": True, "how": "loop"}
-    threading.Thread(target=lambda: asyncio.run(_run(case_id, trigger, user)), daemon=True, name=f"tb-case-summary-{case_id}").start()
+    threading.Thread(target=contextvars.copy_context().run, args=(lambda: asyncio.run(_run(case_id, trigger, user)),), daemon=True,
+                     name=f"tb-case-summary-{case_id}").start()
     return {"scheduled": True, "how": "thread"}
 
 

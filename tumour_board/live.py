@@ -7,8 +7,12 @@ each socket its own copy (or None: not for this socket), so a viewer who is not 
 anywhere: inside the app's event loop it schedules the sends, from a thread it hands them to the loop the sockets live on, and with no
 loop or no clients it does nothing (unit tests). Presence: a user with an open socket is online. Dead sockets are dropped on the first
 failed send.
+Hospitals (admin consoles, 16 Nov 2026): a room is keyed by (hospital, meeting id), the hospital being the current one of the code that
+calls (the socket's, the route's), so two hospitals' meetings never share a room even with the same id.
 """
 import asyncio, logging, threading
+
+from . import config
 
 log = logging.getLogger(__name__)
 
@@ -19,9 +23,14 @@ RECHECK_SECONDS = 60       # the session and roles are checked again this often 
 SEND_TIMEOUT = 2.0         # a client that does not take a message within this is dropped
 
 
+def _key(mid):
+    """The room key: (hospital, meeting id); a key already made is kept as it is."""
+    return mid if isinstance(mid, tuple) else config.scoped(mid)
+
+
 class Hub:
     def __init__(self):
-        self._rooms: dict[str, dict] = {}  # mid -> {websocket: user}
+        self._rooms: dict[tuple, dict] = {}  # (hospital, mid) -> {websocket: user}
         self._info: dict = {}               # websocket -> what the route knows of the user (its Tumour Board roles)
         self._lock = threading.Lock()
         self.loop = None  # the loop the sockets were accepted on (for broadcasts from threads)
@@ -33,7 +42,7 @@ class Hub:
         except RuntimeError:
             pass
         with self._lock:
-            self._rooms.setdefault(mid, {})[ws] = user
+            self._rooms.setdefault(_key(mid), {})[ws] = user
             self._info[ws] = info
 
     def update(self, ws, info) -> None:
@@ -44,43 +53,46 @@ class Hub:
 
     def user_count(self, mid: str, user: str) -> int:
         with self._lock:
-            return sum(1 for u in (self._rooms.get(mid) or {}).values() if u == user)
+            return sum(1 for u in (self._rooms.get(_key(mid)) or {}).values() if u == user)
 
     def disconnect(self, mid: str, ws) -> None:
+        k = _key(mid)
         with self._lock:
-            room = self._rooms.get(mid)
+            room = self._rooms.get(k)
             if room is not None:
                 room.pop(ws, None)
                 if not room:
-                    self._rooms.pop(mid, None)
+                    self._rooms.pop(k, None)
             self._info.pop(ws, None)
 
     def entries(self, mid: str) -> list[tuple]:
         """(websocket, user, info) for every socket of the meeting."""
         with self._lock:
-            return [(ws, u, self._info.get(ws)) for ws, u in (self._rooms.get(mid) or {}).items()]
+            return [(ws, u, self._info.get(ws)) for ws, u in (self._rooms.get(_key(mid)) or {}).items()]
 
     def clients(self, mid: str) -> list:
         with self._lock:
-            return list((self._rooms.get(mid) or {}).keys())
+            return list((self._rooms.get(_key(mid)) or {}).keys())
 
     def online(self, mid: str) -> list[str]:
         with self._lock:
-            return sorted({u for u in (self._rooms.get(mid) or {}).values() if u})
+            return sorted({u for u in (self._rooms.get(_key(mid)) or {}).values() if u})
 
     def online_users(self) -> list[str]:
-        """Every login with a socket in any room (presence over the whole hub, Phase 8)."""
+        """Every login with a socket in any room of the current hospital (presence over the whole hub, Phase 8)."""
+        h = config.hospital_id()
         with self._lock:
-            return sorted({u for room in self._rooms.values() for u in room.values() if u})
+            return sorted({u for (hh, _m), room in self._rooms.items() if hh == h for u in room.values() if u})
 
     def count(self, mid: str) -> int:
         with self._lock:
-            return len(self._rooms.get(mid) or {})
+            return len(self._rooms.get(_key(mid)) or {})
 
     async def send_all(self, mid: str, event: dict, targets=None) -> int:
         """Send one event to every socket of the meeting (or each of `targets`: [(websocket, its own event)]), all at once, each with
         SEND_TIMEOUT: a socket that fails or does not take the message in time is dropped and closed, so a slow client never holds
         the others up (security review #16). Returns how many received it."""
+        mid = _key(mid)
         pairs = list(targets if targets is not None else [(w, event) for w in self.clients(mid)])
 
         async def one(ws, ev):
@@ -136,6 +148,7 @@ def broadcast(mid: str, event: dict, shape=None, hub_=None) -> bool:
         loop = asyncio.get_running_loop()
     except RuntimeError:
         loop = None
+    mid = _key(mid)  # the room of the caller's hospital, fixed now (the send may run on another thread's loop)
     if loop is not None:
         t = loop.create_task(h.send_all(mid, event, targets))
         h._tasks.add(t)

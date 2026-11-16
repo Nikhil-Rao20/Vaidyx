@@ -20,7 +20,7 @@ HEADS = ("radiology", "pathology", "medical_oncology", "surgical_oncology", "rad
 FILE = "helper_chats.json"
 MAX_QUESTION = 1000
 MAX_MESSAGES = 200
-PREPARING: dict = {}  # (case_id, role) -> job id while a preparation runs
+PREPARING: dict = config.ScopedDict()  # per hospital: (case_id, role) -> job id while a preparation runs
 TASKS: set = set()
 _lock = threading.Lock()
 

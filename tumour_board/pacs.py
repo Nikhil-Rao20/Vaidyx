@@ -22,6 +22,9 @@ hands an image to any agent; the app only forwards the viewer's own requests to 
 
 Grants live in memory (a restart asks the user to open the images from the report again). A Vaidyx admin needs a grant like
 everyone, so every study viewed has an "opened from this report" entry behind it.
+
+Hospitals (admin consoles, 16 Nov 2026): grants and cached access answers are per hospital (config.ScopedDict), so a grant
+opened from a Case File of one hospital is never checked against another hospital's Case File of the same id.
 """
 import base64
 import hashlib
@@ -76,7 +79,7 @@ def viewer_url(study_uid: str) -> str:
 
 
 # ---------------------------------------------------------------------------------------------------- grants
-_grants: dict[tuple, dict] = {}
+_grants: dict[tuple, dict] = config.ScopedDict()  # (user, study) -> grant, per hospital
 
 
 def grant(user: str, study_uid: str, case_id: str, doc_id: str, ttl_hours: float = 12, now: float | None = None, session: str = "") -> dict:
@@ -200,7 +203,7 @@ def forward_query(path: str, query: str) -> str:
     return urlencode(pairs)
 
 
-_access_cache: dict[tuple, tuple] = {}
+_access_cache: dict[tuple, tuple] = config.ScopedDict()  # (user, case_id) -> (until, ok), per hospital
 
 
 def _still_allowed(roles: dict, g: dict, now: float) -> bool:

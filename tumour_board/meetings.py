@@ -22,6 +22,9 @@ status, mode, joined_at}}, live {slide, opened, timer}, view (the follow state t
 outcomes {case_id: {...}}, ended {case_id: {...}}, agenda_sent_at, agenda_sent_cases[]. The live decision and the agent state live in
 memory only. All functions are synchronous read-modify-write (except the two that await the PACS lookup and the decision record):
 call them from the app's event loop, never from threads (the scheduler calls expire_codes / notify_starting, which touch no case).
+
+Hospitals (admin consoles, 16 Nov 2026): the live maps (decisions typed, agent states, locks, tasks, reactions) are per hospital
+(config.ScopedDict / ScopedSet): two hospitals' meetings never share an entry.
 """
 import asyncio, logging, secrets, threading, time, uuid
 from datetime import date, datetime, timedelta
@@ -41,10 +44,10 @@ MAX_QUESTION, MAX_NOTE, MAX_TEXT, MAX_ROOM = 1000, 2000, 4000, 80
 SPOTLIGHT_MAX = 3                                   # people the coordinator may spotlight for everyone (night-v3 5.1)
 REACTIONS = ("agree", "thanks", "applause", "question")  # the four plain reactions; shown for a moment, never stored
 REACTION_GAP = 2.0                                  # seconds between two reactions of one person
-_REACTED: dict[tuple, float] = {}                    # (mid, user) -> time of the last reaction
+_REACTED: dict[tuple, float] = config.ScopedDict()                    # (mid, user) -> time of the last reaction
 MAX_CHAT, CHAT_VIEW = 1000, 200                     # a chat line's length; lines sent with the state (the file keeps every line) (night-v3 5.3)
 CHAT_PER_MINUTE = 20
-_CHATTED: dict[tuple, list] = {}                     # (mid, user) -> times of the last lines
+_CHATTED: dict[tuple, list] = config.ScopedDict()                     # (mid, user) -> times of the last lines
 PMJAY_DEPARTMENTS = ("surgical_oncology", "radiation_oncology", "medical_oncology")  # NHA HBP 2.2 manual 2021, 3.9: "advised" (night-v3 5.4)
 AGENT_STATES = ("ready", "preparing", "listening", "thinking", "answering", "speaking", "error")  # true states per agent (night-v3 6.1)
 LISTEN_TTL, AUDIO_TTL, ERROR_TTL = 65.0, 30.0, 60.0  # seconds: a listening device, a playback report, an error word
@@ -52,14 +55,14 @@ IMAGING_TYPES = ("ct", "mri", "xray", "ultrasound", "mammogram", "pet_ct", "bone
 PATHOLOGY_TYPES = ("histopathology", "cytology", "ihc", "molecular")
 AUTOMATIC = "Vaidyx (automatic)"
 
-LIVE_DECISION: dict[str, dict] = {}  # mid -> {text, by, at, case_id}: what the coordinator types, shown "not saved" on the room screen
-AGENT_STATE: dict[str, dict] = {}    # mid -> {role: {state, by, by_name, question, at, since, expires}}: each agent's live entry (memory only)
-AGENT_AUDIO: dict[str, dict] = {}    # mid -> {question id: {role, devices: {user: expires}}}: the devices that report playing an answer
-AGENT_LISTEN: dict[str, dict] = {}   # mid -> {role: {user: {by, by_name, at, since, expires}}}: each member's device recording for an agent
-AGENT_LOCKS: dict[tuple, asyncio.Lock] = {}  # (mid, role) -> one answer at a time per agent
+LIVE_DECISION: dict[str, dict] = config.ScopedDict()  # per hospital: mid -> {text, by, at, case_id}: what the coordinator types, shown "not saved" on the room screen
+AGENT_STATE: dict[str, dict] = config.ScopedDict()    # per hospital: mid -> {role: {state, by, by_name, question, at, since, expires}}: each agent's live entry (memory only)
+AGENT_AUDIO: dict[str, dict] = config.ScopedDict()    # per hospital: mid -> {question id: {role, devices: {user: expires}}}: the devices that report playing an answer
+AGENT_LISTEN: dict[str, dict] = config.ScopedDict()   # per hospital: mid -> {role: {user: {by, by_name, at, since, expires}}}: each member's device recording for an agent
+AGENT_LOCKS: dict[tuple, asyncio.Lock] = config.ScopedDict()  # per hospital: (mid, role) -> one answer at a time per agent
 _TASKS: set = set()                  # background answers (kept referenced until done)
-_TASKS_BY_MID: dict[str, set] = {}   # mid -> its background tasks, cancelled when the meeting ends (review 9 D, I3)
-_ANSWERING: set = set()              # (mid, question id) being answered now
+_TASKS_BY_MID: dict[str, set] = config.ScopedDict()   # per hospital: mid -> its background tasks, cancelled when the meeting ends (review 9 D, I3)
+_ANSWERING: set = config.ScopedSet()  # per hospital: (mid, question id) being answered now
 
 
 class MeetingError(Exception):
@@ -3220,7 +3223,7 @@ async def record_decision(mid: str, cid: str, body: dict, user: str) -> dict:
 
 ALREADY_RECORDED = ("The outcome of this Case File is recorded for this meeting. To change the fields, correct the record from the Case File's "
                     "Board decisions panel. A different outcome is recorded at the next meeting.")
-_RECORDING: set = set()  # (meeting, Case File) whose outcome is being saved now: a second save waits for nothing and is refused
+_RECORDING: set = config.ScopedSet()  # per hospital: (meeting, Case File) whose outcome is being saved now: a second save waits for nothing and is refused
 
 
 async def _record_decision(s, mid, cid, c, body, user) -> dict:

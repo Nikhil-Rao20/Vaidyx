@@ -13,8 +13,11 @@ doctor's check, "waiting on Dr X"); the owner is not told. A record that arrives
 A record that arrives during the last allowed pass (MAX_PASSES) is never dropped: it is audited (step "again_deferred") and the Case File's
 state keeps `ready_hook_needs_again`; the next on_ready call for that Case File honours it (audited "again_honoured"): its run reads every
 record, so it covers the deferred one, and a run that is still going then goes once more. The scheduler has no hook for a one-off job,
-so nothing runs before that next call."""
+so nothing runs before that next call.
+Hospitals (admin consoles, 16 Nov 2026): RUNNING / AGAIN are per hospital (config.ScopedDict / ScopedSet); a run started without an event
+loop goes to a thread that carries the hospital (contextvars.copy_context)."""
 import asyncio
+import contextvars
 import logging
 import os
 import threading
@@ -27,8 +30,8 @@ log = logging.getLogger("tumour_board")
 HEADS = ("radiology", "pathology", "medical_oncology", "surgical_oncology", "radiation_oncology")
 MEETING_DELAY = 300  # seconds between looks while a meeting is in session
 MAX_WAITS = 48  # four hours of waiting at most
-RUNNING: dict = {}  # case_id -> {"started", "user", "step"}
-AGAIN: set = set()  # case_ids whose records changed while a run was going: the run goes once more at its end (item 1.5)
+RUNNING: dict = config.ScopedDict()  # case_id -> {"started", "user", "step"} (per hospital)
+AGAIN: set = config.ScopedSet()  # case_ids whose records changed while a run was going: the run goes once more at its end (item 1.5)
 MAX_PASSES = 3  # one run and at most two more passes for records that kept arriving
 TASKS: set = set()
 _lock = threading.Lock()
@@ -245,6 +248,6 @@ def on_ready(case_id, user, again=False) -> dict:
         TASKS.add(task)
         task.add_done_callback(TASKS.discard)
         return {"scheduled": True, "how": "loop"}
-    t = threading.Thread(target=lambda: asyncio.run(run(case_id, user, again)), daemon=True, name=f"tb-ready-{case_id}")
+    t = threading.Thread(target=contextvars.copy_context().run, args=(lambda: asyncio.run(run(case_id, user, again)),), daemon=True, name=f"tb-ready-{case_id}")
     t.start()
     return {"scheduled": True, "how": "thread"}

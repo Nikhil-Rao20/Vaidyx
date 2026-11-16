@@ -43,6 +43,10 @@ actions, sessions and notifications stored with a V1 id ("radio_diagnosis") stil
 Permissions: every route asks one question, can(roles(user), action, department), and require() turns a "no" into
 PermissionError (the route answers 403 and the UI hides the control). Unknown actions are refused (fail closed); a disabled user
 can do nothing. Every change to the organisation and to accounts is appended to org_audit.jsonl.
+
+Hospitals (admin consoles, 16 Nov 2026): org.json is the current hospital's (config.DATA_ROOT); the cache holds one entry per file, read
+as one pair, so threads of two hospitals never get each other's organisation; save() refuses a newly placed login that belongs to
+another hospital (tumour_board/hospitals.py).
 """
 import copy, json, logging, re, threading
 from datetime import date
@@ -248,13 +252,19 @@ _SLUG = re.compile(r"^[a-z0-9_]+$")
 _EMAIL = re.compile(r"^[^@\s?&%,;]+@[^@\s?&%,;]+\.[^@\s?&%,;]+$")  # no ? & % , ; or spaces: the address goes into mailto: links (review #18)
 _PHONE = re.compile(r"^[0-9+()\-/ ]{3,30}$")
 _UNKNOWN = object()  # a department name that does not resolve: matches no membership
-_cache: dict = {}
+_cache: dict = {}  # org.json path (one per hospital) -> (stat key, org); one entry read as one pair, so threads never mix hospitals
 _setup_lock = threading.Lock()  # the first set-up: load, check, save as one step (review Phase 7)
 HOSPITAL_AUDITED = ("name", "level", "type", "pmjay_empanelled", "fetch_window_months", "board_heads", "board_attendance", "surgical_departments", "pmjay_surgical_oncology", "first_setup", "meeting_defaults", "message_retention_days")
 
 
 def path() -> Path:
     return Path(config.DATA_ROOT) / "org.json"
+
+
+def _remember(p: Path, key, org: dict) -> None:
+    if len(_cache) > 64:  # a few hospitals in production; many temporary folders in the tests
+        _cache.clear()
+    _cache[str(p)] = (key, org)
 
 
 def _audit_path() -> Path:
@@ -522,8 +532,9 @@ def load() -> dict:
         key = _stat_key(p)
     except FileNotFoundError:
         return _filled(DEFAULT_ORG)
-    if _cache.get("key") == key:
-        return _cache["org"]
+    hit = _cache.get(str(p))
+    if hit is not None and hit[0] == key:
+        return hit[1]
     try:
         raw = _read_json(p, {})
     except (ValueError, OSError) as e:
@@ -539,21 +550,33 @@ def load() -> dict:
                 return _filled(DEFAULT_ORG)
             log.warning("org.json (V%s) does not validate (%s); using it as read, not migrated", was, e)  # roles() honours known departments only
             org = _filled(raw)
-            _cache.update(key=key, org=org)
+            _remember(p, key, org)
             return org
         _write_json(p, org)
         audit("org_migrated", "system", from_version=was, to_version=VERSION, departments=report["departments"], users=report["users"],
               kept=report["kept"], dropped_aliases=report["dropped_aliases"], added=report.get("added", []))
         log.info("org.json migrated from V%s to V%s", was, VERSION)
-        _cache.update(key=_stat_key(p), org=org)
+        _remember(p, _stat_key(p), org)
         return org
     org = _filled(raw)
     try:
         org = validate(org)
     except ValueError as e:
         log.warning("org.json does not validate (%s); using it as read", e)
-    _cache.update(key=key, org=org)
+    _remember(p, key, org)
     return org
+
+
+def _same_hospital(added) -> None:
+    """A login newly placed here must belong to this hospital (admin consoles D3): registered to it, or unregistered while this is the
+    "default" hospital. ValueError otherwise (the whole save is refused)."""
+    if not added:
+        return
+    from . import hospitals
+    cur = config.hospital_id()
+    for u in added:
+        if (hospitals.registered(u) or config.DEFAULT_HOSPITAL) != cur:
+            raise ValueError("This login belongs to another hospital.")
 
 
 def save(org: dict, by: str, clear_setup: bool = False) -> dict:
@@ -568,13 +591,14 @@ def save(org: dict, by: str, clear_setup: bool = False) -> dict:
         before = _filled(_read_json(p, {})) if p.exists() else _filled(DEFAULT_ORG)
     except (ValueError, OSError):
         before = load() if p.exists() else _filled(DEFAULT_ORG)
+    _same_hospital(set(clean["users"]) - set(before.get("users") or {}))
     stored = (before.get("hospital") or {}).get("first_setup")
     if clear_setup:
         clean["hospital"].pop("first_setup", None)
     elif isinstance(stored, dict):
         clean["hospital"]["first_setup"] = dict(stored)
     _write_json(p, clean)
-    _cache.update(key=_stat_key(p), org=clean)
+    _remember(p, _stat_key(p), clean)
     audit("org_saved", by, departments=len(clean["departments"]), users=len(clean["users"]))
     hb, ha = before.get("hospital") or {}, clean["hospital"]
     changed = {k: {"before": hb.get(k), "after": ha.get(k)} for k in HOSPITAL_AUDITED if hb.get(k) != ha.get(k)}

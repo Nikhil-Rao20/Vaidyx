@@ -155,13 +155,53 @@ async def _json_too_big(request):
     return None
 
 
+HOSPITAL_HEADER = "x-tb-hospital"  # the hospital a Vaidyx admin acts in (admin consoles D4); ignored from anyone else
+_HOSPITAL_REFUSALS = {
+    "hospital_suspended": "Your hospital's access to Vaidyx is paused. Ask the Vaidyx admin.",
+    "hospital_unknown": "Your hospital is not set up in Vaidyx. Ask the Vaidyx admin.",
+}
+
+
+def _vaidyx_admin(request, u) -> bool:
+    mgr = getattr(request.app.state, "auth_manager", None)
+    try:
+        return bool(u and mgr is not None and callable(getattr(mgr, "is_admin", None)) and mgr.is_admin(u))
+    except Exception:
+        return False
+
+
+def _enter_hospital(request):
+    """Make the hospital of this request the current one (config.set_hospital, never reset: a streamed answer runs after the handler
+    returns). The login's hospital from the registry; a Vaidyx admin may name another existing one in X-TB-Hospital. No login (single-user
+    mode, public routes): "default" only, so a second hospital always needs sign-in. A login of a suspended hospital: a 403 response."""
+    from tumour_board import hospitals
+    u = get_current_user(request)
+    hid, code = hospitals.resolve(u, vaidyx_admin=_vaidyx_admin(request, u), requested=request.headers.get(HOSPITAL_HEADER))
+    if code:
+        config.set_hospital(config.DEFAULT_HOSPITAL)
+        return JSONResponse({"detail": {"message": _HOSPITAL_REFUSALS[code], "code": code}}, status_code=403)
+    config.set_hospital(hid)
+    request.state.tb_hospital = hid
+    return None
+
+
 class _ModelErrorRoute(APIRoute):
     """Model-server problems become a clear 502 for the UI instead of a 500 stack trace. A login whose Tumour Board access is disabled
-    (org.json `disabled`, V2 item 2.2) is refused on every Tumour Board route, whatever the route checks itself."""
+    (org.json `disabled`, V2 item 2.2) is refused on every Tumour Board route, whatever the route checks itself. Every route first sets
+    the hospital of the request (_enter_hospital, admin consoles 16 Nov 2026); when that cannot be worked out the request is refused
+    (503), never answered from another hospital's folder."""
     def get_route_handler(self):
         h = super().get_route_handler()
 
         async def handler(request):
+            try:
+                refused = _enter_hospital(request)
+            except Exception as e:
+                log.warning("tumour board: the hospital of a request could not be worked out (%s)", e.__class__.__name__)
+                return JSONResponse({"detail": {"message": "The hospital list could not be read; try again or ask the Vaidyx admin.", "code": "hospital_unavailable"}},
+                                    status_code=503)
+            if refused is not None:
+                return refused
             # Cross-site request forgery: a browser always sends Origin on a cross-site POST; when it is present it must be this
             # app's own origin (host and port). Non-browser clients (tests, scripts) send no Origin and are not affected.
             if request.method in ("POST", "PUT", "PATCH", "DELETE"):
@@ -2287,7 +2327,7 @@ def setup_tumour_board_routes():
     @r.get("/models")
     async def model_cards(request: Request):
         _user(request)
-        f = config.DATA_ROOT / "model_cards.json"
+        f = config.shared_root() / "model_cards.json"  # one set of models for every hospital
         cards = json.loads(f.read_text()) if f.exists() else []
         return {"health": await llm.health(), "cards": cards, "embedder": search.EMBED_MODEL}
 

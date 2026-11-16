@@ -8,7 +8,7 @@ preliminary, even with no earlier value: discord.after_send_items), the differen
 """
 from . import config, store
 
-_CHECKS: dict = {}  # case_id -> (steps._files_key, count): the count is kept until one of the Case File's files changes
+_CHECKS: dict = config.ScopedDict()  # per hospital: case_id -> (steps._files_key, count): the count is kept until one of the Case File's files changes
 
 
 def is_sent(case: dict | None) -> bool:

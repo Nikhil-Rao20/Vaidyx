@@ -16,10 +16,15 @@ root admin for anyone. Every change is audited in org_audit.jsonl (never a passw
 
 The AuthManager is passed in (duck-typed: users, is_admin, create_user, get_privileges, reset_password) so this module is unit-tested
 with a fake.
+
+Hospitals (admin consoles, 16 Nov 2026, D3): one login belongs to one hospital (tumour_board/hospitals.py). ensure_account, place_doctor,
+reset_password and update_account refuse (403, "This login belongs to another hospital.") a login registered to another hospital than
+the current one, and in a hospital other than "default" also an existing login that is not registered (it belongs to "default"). A login
+created in a hospital other than "default" is registered to it at once; in "default" nothing is written (unregistered means "default").
 """
 import copy, re, secrets, string, urllib.parse
 
-from . import org
+from . import config, hospitals, org
 
 PASSWORD_MIN = 8  # src.constants.PASSWORD_MIN_LENGTH; the route passes the live value
 PASSWORD_CHARS = 14  # the generated first password
@@ -95,6 +100,18 @@ def must_change(mgr, username: str) -> bool:
         return False
 
 
+OTHER_HOSPITAL = "This login belongs to another hospital."
+
+
+def check_hospital(username: str, exists: bool = True) -> None:
+    """AccountError 403 unless the login may be handled in the current hospital: registered to it, or unregistered and either in
+    "default" or not yet an account (`exists` False: a new login, registered when it is created)."""
+    cur = config.hospital_id()
+    reg = hospitals.registered(username)
+    if (reg is not None and reg != cur) or (reg is None and exists and cur != config.DEFAULT_HOSPITAL):
+        raise AccountError(403, OTHER_HOSPITAL)
+
+
 def ensure_account(mgr, username: str, password: str | None, by: str, reserved=(), min_length: int = PASSWORD_MIN) -> dict:
     """The Vaidyx account `username` exists as a plain user when this returns: created now (a password is then required) or found.
     Refused: a reserved name, a Vaidyx admin, a short password, an account that came back with admin or shell privileges."""
@@ -106,7 +123,9 @@ def ensure_account(mgr, username: str, password: str | None, by: str, reserved=(
     if account_exists(mgr, u):
         if is_vaidyx_admin(mgr, u):
             raise AccountError(409, f"'{u}' is a Vaidyx admin (server administrator) and is not placed through the Tumour Board screens.")
+        check_hospital(u)
         return {"username": u, "created": False}
+    check_hospital(u, exists=False)
     pw = str(password or "")
     if len(pw) < min_length:
         raise AccountError(400, f"A new login needs a password of at least {min_length} characters.")
@@ -116,6 +135,8 @@ def ensure_account(mgr, username: str, password: str | None, by: str, reserved=(
         org.audit("account_refused", by, username=u, reason="the new login came back with admin or shell privileges")
         raise AccountError(500, f"The login '{u}' was created with privileges it must not have; ask the Vaidyx admin.")
     org.audit("account_created", by, username=u, vaidyx_admin=False, shell=False)
+    if config.hospital_id() != config.DEFAULT_HOSPITAL:
+        hospitals.assign(u, config.hospital_id(), by)
     return {"username": u, "created": True}
 
 
@@ -221,6 +242,7 @@ def place_doctor(by: str, dept, username: str, role: str = "member", display_nam
     end of the rotation) is set when given."""
     did, role = check_placement(dept, role)
     u = clean_username(username)
+    check_hospital(u)
     ed = _check_end_date(end_date) if end_date is not None else None
     o = copy.deepcopy(org.load())
     if not created and caller is not None:
@@ -383,6 +405,7 @@ def reset_password(mgr, by: str, caller: dict, username: str, email: str = "", h
         raise AccountError(404, f"'{u}' has no Vaidyx login yet; create it first.")
     if is_vaidyx_admin(mgr, u):
         raise AccountError(409, f"'{u}' is a Vaidyx admin (server administrator); its password is managed in the main app.")
+    check_hospital(u)
     if not ((caller or {}).get("admin") or (caller or {}).get("root_admin")):
         mine = set((caller or {}).get("admin_of") or [])
         placed = set(user.get("departments") or {}) | set(user.get("admin_of") or [])
@@ -418,6 +441,7 @@ def update_account(mgr, by: str, caller: dict, username: str, fields: dict) -> d
     u = clean_username(username)
     if mgr is not None and is_vaidyx_admin(mgr, u):
         raise AccountError(409, f"'{u}' is a Vaidyx admin (server administrator) and is not managed through the Tumour Board screens.")
+    check_hospital(u)
     if not isinstance(fields, dict):
         raise AccountError(400, "Send the fields to change as an object.")
     unknown = sorted(k for k in fields if k not in UPDATABLE)

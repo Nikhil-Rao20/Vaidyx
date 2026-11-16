@@ -921,7 +921,7 @@ async def ask(case_id, role, question, history=None, user="", on_statement=None)
 
 
 # night-v3 item 6.4: the context pre-loaded when a Case File comes on the floor
-_WARM: dict = {}  # (case_id, role) -> the Case File signature hash the reasoner's cache holds the documents for
+_WARM: dict = config.ScopedDict()  # per hospital: (case_id, role) -> the Case File signature hash the reasoner's cache holds the documents for
 WARM_PURPOSE = "agent warm"
 
 

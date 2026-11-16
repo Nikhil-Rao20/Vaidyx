@@ -12,7 +12,7 @@ from . import config, dates, rules, store
 EMBED_MODEL = "snowflake/snowflake-arctic-embed-m-long"  # US (Snowflake), Apache-2.0, non-medical, fp32 ONNX on CPU
 _embedder = None
 _emb_lock = threading.Lock()
-_index_cache = {}
+_index_cache = config.ScopedDict()  # case_id -> (signature, CaseIndex), per hospital
 
 SYNONYMS = {
     "pd-l1": ["pd-l1", "pdl1", "pd l1", "tps", "22c3", "sp263", "cps"], "ki-67": ["ki-67", "ki67", "mib-1", "mib1"],
@@ -115,7 +115,7 @@ def _embed(texts, prefix=""):
     with _emb_lock:
         if _embedder is None:
             from fastembed import TextEmbedding
-            _embedder = TextEmbedding(EMBED_MODEL, cache_dir=str(config.DATA_ROOT / "embed_cache"), threads=16)
+            _embedder = TextEmbedding(EMBED_MODEL, cache_dir=str(config.shared_root() / "embed_cache"), threads=16)  # the model weights: shared
         return np.array(list(_embedder.embed([prefix + t for t in texts], batch_size=32)), dtype=np.float32)
 
 
@@ -133,7 +133,7 @@ class CaseIndex:
         self.avgdl = sum(map(len, self.tok)) / max(len(self.tok), 1)
         self.emb = None
         if self.chunks:
-            cache = config.DATA_ROOT / "embed_cache" / "chunks"; cache.mkdir(parents=True, exist_ok=True)
+            cache = config.DATA_ROOT / "embed_cache" / "chunks"  # vectors of this hospital's Case File text: its own folder; cache.mkdir(parents=True, exist_ok=True)
             vecs, todo = [None] * len(self.chunks), []
             for i, ch in enumerate(self.chunks):
                 h = hashlib.sha1((EMBED_MODEL + ch["text"]).encode()).hexdigest()

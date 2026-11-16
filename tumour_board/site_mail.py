@@ -26,7 +26,7 @@ TIMEOUT = 20
 
 
 def config_path() -> Path:
-    return Path(config.DATA_ROOT) / "site_mail.json"
+    return config.shared_root() / "site_mail.json"  # the website's, not a hospital's
 
 
 def settings() -> dict | None:

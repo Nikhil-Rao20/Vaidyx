@@ -732,7 +732,7 @@ def _glance(prot, by_fact) -> list[dict]:
     return out
 
 
-_COUNTS: dict = {}
+_COUNTS: dict = config.ScopedDict()  # case_id -> (files key, count), per hospital
 
 
 def _files_key(case_id) -> tuple:

@@ -12,7 +12,12 @@ Where the work runs: the stores are JSON files changed by read-modify-write on t
 that loop, so the thread only keeps time. When the app's loop is known (attach_loop(), called by the meeting routes, the bell and the
 meeting sockets) every job runs ON that loop: the quick ones are awaited by the thread, the re-fetch is started there and collected
 on a later tick. Before the app has served a request the quick jobs run in the thread (they touch small files) and the re-fetch waits.
-TB_SCHEDULER=0 disables start(); under pytest it only starts with TB_SCHEDULER=1."""
+TB_SCHEDULER=0 disables start(); under pytest it only starts with TB_SCHEDULER=1.
+
+Hospitals (admin consoles, 16 Nov 2026): each tick runs the jobs once per active hospital (tick_all), each inside
+config.use_hospital(hid), so every job reads and writes that hospital's folder; a suspended hospital is skipped. The state (_state,
+_refetch) is per hospital (config.ScopedDict) and so is scheduler.json (in the hospital's folder). A job handed to the app's loop
+carries the hospital (run_coroutine_threadsafe copies the thread's context). tick() runs the current hospital only."""
 import asyncio, logging, os, threading
 from datetime import datetime
 
@@ -32,9 +37,10 @@ _thread: threading.Thread | None = None
 _stop = threading.Event()
 _lock = threading.Lock()   # one tick at a time
 _start_lock = threading.Lock()
-_state: dict = {"last_tick": None, "last_jobs": {}, "started": None, "ticks": 0}
+_state: dict = config.ScopedDict()  # per hospital: {"last_tick", "last_jobs": {name: {at, result}}, "ticks"}
+_started: list = [None]  # when the thread started (one thread for every hospital)
 _LOOP = None               # the app's event loop (attach_loop)
-_refetch: dict = {"future": None, "started": None, "collected": True}
+_refetch: dict = config.ScopedDict()  # per hospital: {"future", "started", "collected"}
 
 
 # ---- the app's event loop ---------------------------------------------------------------------------------------------------------
@@ -101,7 +107,7 @@ def _load() -> dict:
 
 def _save() -> None:
     try:
-        store._write_json(_path(), {k: v for k, v in _state.items()})
+        store._write_json(_path(), {"last_tick": None, "last_jobs": {}, "started": _started[0], "ticks": 0, **{k: v for k, v in _state.items()}})
     except Exception as e:
         log.warning("scheduler state not saved (%s)", e)
 
@@ -343,12 +349,31 @@ def tick(now: datetime | None = None, force: bool = False, only=None, refetch: b
     return out
 
 
+def tick_all(now: datetime | None = None, force: bool = False, only=None, refetch: bool = True) -> dict:
+    """tick() once for each active hospital, inside that hospital: {hospital id: {job: result}}. A hospital whose tick fails is logged
+    and the others still run. Never raises."""
+    from . import hospitals
+    out = {}
+    try:
+        hids = hospitals.active_ids()
+    except Exception:
+        log.exception("scheduler: the hospital list could not be read; only the default hospital runs")
+        hids = [config.DEFAULT_HOSPITAL]
+    for hid in hids:
+        try:
+            with config.use_hospital(hid):
+                out[hid] = tick(now, force=force, only=only, refetch=refetch)
+        except Exception:
+            log.exception("scheduler tick failed for a hospital")
+    return out
+
+
 def _loop() -> None:
     """Wait one interval first (the app finishes starting and serves its first requests, so the jobs find its loop), then tick."""
     log.info("tumour board scheduler started (every %.0f s)", interval())
     while not _stop.wait(interval()):
         try:
-            tick()
+            tick_all()
         except Exception:
             log.exception("scheduler tick failed")
 
@@ -364,7 +389,7 @@ def start() -> bool:
         if _thread is not None and _thread.is_alive():
             return True
         _stop.clear()
-        _state["started"] = store.now_iso()
+        _started[0] = store.now_iso()
         _thread = threading.Thread(target=_loop, daemon=True, name="tb-scheduler")
         _thread.start()
     return True
@@ -386,7 +411,7 @@ def running() -> bool:
 def status() -> dict:
     saved = _load()
     fut = _refetch.get("future")
-    return {"running": running(), "interval_seconds": interval(), "enabled": os.getenv("TB_SCHEDULER", "1") != "0", "started": _state.get("started"),
+    return {"running": running(), "interval_seconds": interval(), "enabled": os.getenv("TB_SCHEDULER", "1") != "0", "started": _started[0],
             "last_tick": _state.get("last_tick") or saved.get("last_tick"), "last_jobs": _state.get("last_jobs") or saved.get("last_jobs") or {},
             "ticks": _state.get("ticks", 0), "jobs": [{"name": n, "every_seconds": e} for n, _, e in JOBS], "by": AUTOMATIC, "now": store.now_iso(),
             "app_loop": app_loop() is not None, "refetch_running": bool(fut is not None and not fut.done())}

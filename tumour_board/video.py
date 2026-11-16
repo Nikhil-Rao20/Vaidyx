@@ -4,7 +4,8 @@ Keys: data/tumour_board/livekit.json {"api_key", "api_secret", "url"} written by
 without the file video is off. A member of a meeting gets an access token (a LiveKit JWT, HS256: iss = api key, sub = identity, nbf,
 exp 2 hours, name, "video" grant for the room "tb-<meeting id>") signed with PyJWT when it is installed, else with the small
 base64url HMAC-SHA256 encoder here (no padding). Identity = the Vaidyx username. Text questions stay in the app; the video carries
-people only."""
+people only. Hospitals (admin consoles, 16 Nov 2026): the keys are shared by every hospital (BASE_ROOT); the room of a meeting of a
+hospital other than "default" is "tb-<hospital>-<meeting id>", so two hospitals never share a video room ("default" keeps "tb-<mid>")."""
 import base64, hashlib, hmac, json, logging, time
 
 from . import config, store
@@ -17,7 +18,7 @@ TOKEN_TTL = 2 * 3600
 
 
 def keys_path():
-    return config.DATA_ROOT / KEYS_FILE
+    return config.shared_root() / KEYS_FILE
 
 
 def keys() -> dict | None:
@@ -48,7 +49,8 @@ def status() -> dict:
 
 
 def room_name(mid: str) -> str:
-    return "tb-" + store.safe_id(str(mid))
+    hid = config.hospital_id()
+    return "tb-" + ("" if hid == config.DEFAULT_HOSPITAL else hid + "-") + store.safe_id(str(mid))
 
 
 def _b64url(data: bytes) -> str:

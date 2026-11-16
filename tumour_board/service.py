@@ -7,7 +7,7 @@ from . import confirm, config, extract, followup, ingest, intake, org, protocol,
 
 log = logging.getLogger("tumour_board")
 
-JOBS: dict[str, dict] = {}  # in-memory fast path; every job is also saved to data/tumour_board/jobs/<id>.json (V1 item 1.8)
+JOBS: dict[str, dict] = config.ScopedDict()  # per hospital; in-memory fast path; every job is also saved to data/tumour_board/jobs/<id>.json (V1 item 1.8)
 JOB_MAX_AGE = 24 * 3600  # seconds; older jobs are dropped from memory and from disk
 STUCK_STATES = ("queued", "reading", "classifying", "extracting")  # a document in one of these after a restart was cut off mid-processing
 RESTART_USER = "system:restart"
@@ -407,7 +407,32 @@ def resume_after_restart():
     """Start-up hook (V1 item 1.8), called once from the app's async start-up while the event loop runs. Jobs that were running
     when the server stopped are marked interrupted; documents left mid-processing (queued / reading / classifying / extracting)
     are queued again, one job per case. Documents that are ready or in error are never touched. Never raises: a broken case
-    folder is logged and skipped so the app still starts."""
+    folder is logged and skipped so the app still starts.
+    Hospitals (admin consoles, 16 Nov 2026): every hospital is resumed in turn, each inside config.use_hospital (the jobs it queues keep
+    that hospital); the answer is the default hospital's, plus {"hospitals": {id: answer}} for the other hospitals where something was
+    resumed (absent when nothing was, so the answer keeps its shape)."""
+    try:
+        from . import hospitals
+        hids = hospitals.ids()
+    except Exception:
+        log.exception("resume_after_restart: the hospital list could not be read; only the default hospital is resumed")
+        hids = [config.DEFAULT_HOSPITAL]
+    each = {}
+    for hid in hids:
+        try:
+            with config.use_hospital(hid):
+                each[hid] = _resume_one()
+        except Exception:
+            log.exception("resume_after_restart: a hospital could not be resumed")
+    out = dict(each.get(config.DEFAULT_HOSPITAL) or {"requeued": {}, "interrupted_jobs": [], "pruned": 0})
+    others = {h: r for h, r in each.items() if h != config.DEFAULT_HOSPITAL and (r.get("requeued") or r.get("interrupted_jobs") or r.get("pruned"))}
+    if others:
+        out["hospitals"] = others
+    return out
+
+
+def _resume_one():
+    """resume_after_restart for the current hospital."""
     out = {"requeued": {}, "interrupted_jobs": [], "pruned": 0}
     try:
         out["pruned"] = _prune()
@@ -566,7 +591,7 @@ def review(case_id, artefact, status, comment, user):
 
 
 # ---- board sessions (V1 items 6.1 to 6.3) -------------------------------------------------------------------------------
-SESSION_TASKS: dict[str, set] = {}  # running brief preparations per session (kept referenced; a restart leaves "queued" / "running" behind)
+SESSION_TASKS: dict[str, set] = config.ScopedDict()  # per hospital: running brief preparations per session (kept referenced; a restart leaves "queued" / "running" behind)
 AGENT_WAITING = ("queued", "running")
 
 

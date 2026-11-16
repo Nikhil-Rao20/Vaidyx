@@ -9,7 +9,7 @@ is audited (per Case File audit.jsonl, plus mcp_audit.jsonl) with the client nam
 Transports: stdio (for a local agent that starts this process) or Streamable HTTP on 127.0.0.1 (port 7110) protected by a
 bearer token (data/tumour_board/mcp_token, created on first start; admins see and regenerate it in the app). A static token
 on a loopback-bound server is a custom scheme the protocol allows; exposing the server beyond this machine needs the
-OAuth 2.1 resource-server path of the specification. Built on the mcp 1.x SDK the app pins (protocol revision 2025-11-25).
+OAuth 2.1 resource-server path of the specification. With several hospitals (admin consoles, 16 Nov 2026) this process serves the "default" hospital only. Built on the mcp 1.x SDK the app pins (protocol revision 2025-11-25).
 
 Run:  /data/vaidyx/venv/app/bin/python -m tumour_board.mcp_server --transport http [--port 7110]
       /data/vaidyx/venv/app/bin/python -m tumour_board.mcp_server --transport stdio
@@ -307,6 +307,7 @@ def main(argv=None):
     ap.add_argument("--transport", choices=["stdio", "http"], default="http")
     ap.add_argument("--port", type=int, default=DEFAULT_PORT)
     a = ap.parse_args(argv)
+    config.set_hospital(config.DEFAULT_HOSPITAL)  # a separate process, bound to the default hospital (admin consoles D13)
     if a.transport == "stdio":
         mcp.run(transport="stdio")
         return

@@ -26,7 +26,7 @@ _lock = threading.Lock()
 
 
 def enquiries_dir() -> Path:
-    return Path(config.DATA_ROOT) / "enquiries"
+    return config.shared_root() / "enquiries"  # the website's, not a hospital's
 
 
 def _ip(request: Request) -> str:

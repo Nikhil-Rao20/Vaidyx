@@ -656,8 +656,8 @@ def case_view(case_id: str) -> dict:
 # ---- background builds (one at a time per meeting) and the hooks ----------------------------------------------------------------------
 
 _bg_lock = threading.Lock()
-_PENDING: dict[str, list] = {}   # mid -> [(case_id, by, trigger)] waiting
-_RUNNING: dict[str, str] = {}    # mid -> the case being built now ("" between two)
+_PENDING: dict[str, list] = config.ScopedDict()   # per hospital: mid -> [(case_id, by, trigger)] waiting
+_RUNNING: dict[str, str] = config.ScopedDict()    # per hospital: mid -> the case being built now ("" between two)
 _BG_TASKS: set = set()
 
 

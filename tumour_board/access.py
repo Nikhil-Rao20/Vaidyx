@@ -32,7 +32,8 @@ requests, refer, manage the participants and the team, set the urgency, approve 
 the owning department's consultants; a resident of the team may upload and propose, never sign; a department still confirms or deletes
 its own upload through its membership (the V1 rule), the coordinator keeps the board and session actions. An archived Case File keeps
 its readers but refuses every change except taking it out of the archive ("This Case File is archived"). Every change here is audited in
-the Case File. No model calls."""
+the Case File. No model calls. Hospitals (admin consoles, 16 Nov 2026): the meeting-window cache is kept per data folder (one
+per hospital)."""
 import json, os, re, threading, time
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -473,25 +474,23 @@ def _admin_open(r: dict, case: dict) -> bool:
 
 # ---- the meeting window (meetings-v2 item 2.2, owner decision 2 Nov 2026) -----------------------------------------------------
 
-_meeting_cache: tuple = ("", 0.0, {})  # (data root, monotonic time, {case_id: {user: meeting id}})
+_meeting_cache: dict = {}  # data root (one per hospital) -> (monotonic time, {case_id: {user: meeting id}})
 _meeting_gen = [0]  # bumped by meeting_window_reset, so an answer computed before a reset is not kept after it
 
 
 def meeting_window_reset() -> None:
     """Forget the cached running meetings: meetings._save calls it, so a Next, an admission or the end of a meeting counts at once."""
-    global _meeting_cache
     _meeting_gen[0] += 1
-    _meeting_cache = ("", 0.0, {})
+    _meeting_cache.clear()
 
 
 def _meeting_floors() -> dict:
     """{case_id: {user: meeting id}}: the Case File on the floor of each meeting running now (board.running_now) with the logins admitted
     to it (meetings.ADMITTED); an outside expert's entry and a protected Case File are left out. Kept MEETING_WINDOW_TTL seconds per data
     root; unreadable sessions give no window (the safe side)."""
-    global _meeting_cache
     key, now = str(config.DATA_ROOT), time.monotonic()
-    k, at, floors = _meeting_cache
-    if k == key and 0 <= now - at < MEETING_WINDOW_TTL:
+    at, floors = _meeting_cache.get(key) or (0.0, None)
+    if floors is not None and 0 <= now - at < MEETING_WINDOW_TTL:
         return floors
     gen = _meeting_gen[0]
     out: dict = {}
@@ -507,7 +506,9 @@ def _meeting_floors() -> dict:
     except Exception:
         out = {}
     if gen == _meeting_gen[0]:
-        _meeting_cache = (key, now, out)
+        if len(_meeting_cache) > 64:
+            _meeting_cache.clear()
+        _meeting_cache[key] = (now, out)
     return out
 
 

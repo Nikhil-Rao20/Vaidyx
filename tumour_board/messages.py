@@ -8,10 +8,11 @@ line or a log.
 
 Every public function takes the login `by` (never a request) and an optional roles dict `r` (the router passes the one it computed, so
 a Vaidyx admin flag is honoured); it raises Refused(status, code, message) for the router to turn into a plain refusal.
+Hospitals (admin consoles, 16 Nov 2026): the folder is the current hospital's; the push thread carries it (contextvars.copy_context).
 """
 from __future__ import annotations
 
-import json, logging, os, re, threading, time, uuid
+import contextvars, json, logging, os, re, threading, time, uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Callable
@@ -716,7 +717,7 @@ def _push(users: list, cid: str, sender_name: str) -> None:
         return
     text = f"Vaidyx-TB: New message from {sender_name}"
     if push.ASYNC:
-        threading.Thread(target=push.send_to_users, args=(due, "message", text), daemon=True, name="tb-message-push").start()
+        threading.Thread(target=contextvars.copy_context().run, args=(push.send_to_users, due, "message", text), daemon=True, name="tb-message-push").start()
     else:
         push.send_to_users(due, "message", text)
 

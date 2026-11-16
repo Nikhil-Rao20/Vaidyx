@@ -3,7 +3,10 @@ authenticates itself from the vaidyx_session cookie, checks the Origin against t
 sends {"type": "state", ...GET /meetings/{mid}} and keeps the socket in the hub; {"type": "ping"} is answered with pong.
 Security review #16: the session and the roles are checked again on every client message and every minute (a signed-out, disabled,
 idle or removed user loses the socket), at most MAX_SOCKETS_PER_USER sockets per user per meeting, a client asks for the state at most
-once per STATE_EVERY seconds, and every send has a timeout (a client that does not read is dropped)."""
+once per STATE_EVERY seconds, and every send has a timeout (a client that does not read is dropped).
+Hospitals (admin consoles, 16 Nov 2026): right after the login is known the socket enters the login's hospital (enter_hospital, the rule
+of the HTTP routes: a Vaidyx admin may name another hospital in the X-TB-Hospital header or the `hospital` query parameter; a login of a
+suspended hospital is refused), so the meeting, the roles and the hub room are that hospital's."""
 import asyncio, logging, time
 
 from fastapi import WebSocket, WebSocketDisconnect
@@ -14,6 +17,40 @@ from .. import live, meetings, org
 log = logging.getLogger(__name__)
 router = common.make_router(["tumour-board-live"])
 POLICY = 1008  # the close code for a refused socket (policy violation)
+
+
+def _socket_hospital(websocket: WebSocket, user: str):
+    """(hospital id, refusal code or None) for this socket's login (hospitals.resolve)."""
+    from .. import hospitals
+    mgr = getattr(websocket.app.state, "auth_manager", None)
+    admin = bool(mgr is not None and callable(getattr(mgr, "is_admin", None)) and mgr.is_admin(user))
+    want = websocket.headers.get("x-tb-hospital") or websocket.query_params.get("hospital")
+    return hospitals.resolve(user, vaidyx_admin=admin, requested=want)
+
+
+def enter_hospital(websocket: WebSocket, user: str) -> bool:
+    """Make the login's hospital the current one for this socket; False when the socket must be refused (a suspended or unknown hospital,
+    an unreadable registry)."""
+    try:
+        from .. import config
+        hid, code = _socket_hospital(websocket, user)
+        if code:
+            return False
+        config.set_hospital(hid)
+        return True
+    except Exception as e:
+        log.warning("socket refused: hospital not worked out (%s)", e.__class__.__name__)
+        return False
+
+
+def still_in_hospital(websocket: WebSocket, user: str) -> bool:
+    """The periodic re-check: the login's hospital is still the socket's and not suspended (else the socket closes)."""
+    try:
+        from .. import config
+        hid, code = _socket_hospital(websocket, user)
+        return not code and hid == config.hospital_id()
+    except Exception:
+        return False
 
 
 def _roles(websocket: WebSocket, user: str) -> dict:
@@ -43,7 +80,8 @@ def _still_allowed(websocket: WebSocket, mid: str, user: str):
     the first password was changed, the session is not idle past the Tumour Board limit, the Tumour Board access is not disabled and
     the user may still open the meeting. None when the socket must close."""
     try:
-        if live.authenticate(websocket) != user or _must_change(websocket, user) or common.idle_expired(websocket.cookies.get(live.COOKIE), touch=False):
+        if (live.authenticate(websocket) != user or not still_in_hospital(websocket, user) or _must_change(websocket, user)
+                or common.idle_expired(websocket.cookies.get(live.COOKIE), touch=False)):
             return None
         rl = _roles(websocket, user)
         s = meetings.get(mid)
@@ -67,7 +105,7 @@ async def _send(websocket: WebSocket, data: dict) -> bool:
 @router.websocket("/meetings/{mid}/ws")
 async def meeting_socket(websocket: WebSocket, mid: str):
     user = live.authenticate(websocket)
-    if not user or not live.origin_ok(websocket) or _must_change(websocket, user) or common.idle_expired(websocket.cookies.get(live.COOKIE), touch=False):
+    if not user or not enter_hospital(websocket, user) or not live.origin_ok(websocket) or _must_change(websocket, user) or common.idle_expired(websocket.cookies.get(live.COOKIE), touch=False):
         await websocket.close(code=POLICY)
         return
     try:
