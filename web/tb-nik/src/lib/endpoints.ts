@@ -74,6 +74,30 @@ export const EP = {
   deptDoctors: (d: string) => `${TB}/org/departments/${id(d)}/doctors`,
   deptDoctor: (d: string, u: string) => `${TB}/org/departments/${id(d)}/doctors/${id(u)}`,
 
+  // Admin consoles (docs/admin-console/DESIGN.md 5.3). Vaidyx admin only:
+  /** GET {tiles, hospitals[], attention[]}: counts only, never patient data. */
+  platformOverview: `${TB}/platform/overview`,
+  /** GET {hospitals[]}; POST {name, city?, state?, type?, level?, pmjay_empanelled?, demo_his?, admin{display_name, email}}. */
+  platformHospitals: `${TB}/platform/hospitals`,
+  /** GET the detail; PUT {name?, city?, state?}. */
+  platformHospital: (h: string) => `${TB}/platform/hospitals/${id(h)}`,
+  /** POST {status: active | suspended, reason}. */
+  platformHospitalStatus: (h: string) => `${TB}/platform/hospitals/${id(h)}/status`,
+  /** POST {display_name, email} or {username}. */
+  platformHospitalAdmins: (h: string) => `${TB}/platform/hospitals/${id(h)}/admins`,
+  /** DELETE: removes the hospital-admin role (never the last admin of an active hospital). */
+  platformHospitalAdmin: (h: string, u: string) => `${TB}/platform/hospitals/${id(h)}/admins/${id(u)}`,
+  /** GET ?hospital=&role=&q= */
+  platformLogins: `${TB}/platform/logins`,
+  platformLoginReset: (u: string) => `${TB}/platform/logins/${id(u)}/reset-password`,
+  platformLoginDisable: (u: string) => `${TB}/platform/logins/${id(u)}/disable`,
+  platformLoginEnable: (u: string) => `${TB}/platform/logins/${id(u)}/enable`,
+  /** GET ?hospital=&kind=&limit= */
+  platformActivity: `${TB}/platform/activity`,
+  // Hospital admin (and a Vaidyx admin acting in the hospital):
+  hospitalOverview: `${TB}/hospital/overview`,
+  hospitalDepartments: `${TB}/hospital/departments`,
+
   totpStatus: `${AUTH}/2fa/status`,
   totpSetup: `${AUTH}/2fa/setup`,
   totpConfirm: `${AUTH}/2fa/confirm`,

@@ -128,7 +128,7 @@ export default function SignIn() {
             {needTotp ? "Your account asks for a 6-digit code from your authenticator app." : "Use the email address or login name your department admin set up."}
           </p>
           {sessionError ? (
-            <p role="status" className="mt-4 rounded-md status-warn px-3 py-2 text-sm">The server part for the new interface answered {sessionError.status}. Signing in may still work; if not, tell the root admin.</p>
+            <p role="status" className="mt-4 rounded-md status-warn px-3 py-2 text-sm">The server part for the new interface answered {sessionError.status}. Signing in may still work; if not, tell the hospital admin.</p>
           ) : null}
           <form className="mt-6 grid gap-4" onSubmit={submit} noValidate>
             {!needTotp ? (

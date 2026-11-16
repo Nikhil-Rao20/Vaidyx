@@ -515,6 +515,9 @@ export interface AccountRow {
   account?: boolean | null;
   must_change_password?: boolean;
   expired?: boolean;
+  vaidyx_admin?: boolean;
+  outside_expert?: boolean;
+  is_email?: boolean;
 }
 
 export interface AccountsResponse {
@@ -580,4 +583,222 @@ export interface TotpSetup {
   secret: string;
   uri: string;
   qr_code: string;
+}
+
+// ---- Admin consoles (docs/admin-console/DESIGN.md section 5.3) -------------------------------------------------------------
+// Counts and names of people only: never a patient name, UHID or report text (D5).
+
+export type HospitalStatus = "active" | "suspended";
+/** The hospital system's state as the consoles show it. */
+export type HisState = "connected" | "failing" | "not_tested" | "not_set";
+
+export interface HospitalHis {
+  state: HisState;
+  url_set?: boolean;
+  tested_at?: string | null;
+  ok?: boolean | null;
+  /** Demo hospital system (synthetic) chosen at creation. */
+  demo?: boolean;
+}
+
+/** One row of GET /platform/overview hospitals[] and GET /platform/hospitals. */
+export interface HospitalRow {
+  id: string;
+  name: string;
+  city?: string;
+  state?: string;
+  status: HospitalStatus;
+  /** How many hospital admins. */
+  admins: number;
+  /** How many logins (people) in the hospital. */
+  people: number;
+  case_files: { open: number; decided: number; total: number };
+  setup: { done: number; total: number };
+  his: HospitalHis;
+  last_activity?: string | null;
+  type?: "public" | "private" | "";
+  level?: string;
+  pmjay_empanelled?: boolean;
+  created?: string;
+  /** Why it was suspended (shown on the detail page). */
+  status_reason?: string;
+}
+
+/** The overview tiles (all optional: the page shows the ones the server sends). */
+export interface PlatformTiles {
+  hospitals_active?: number;
+  hospitals_suspended?: number;
+  logins?: number;
+  hospital_admins?: number;
+  case_files?: number;
+  meetings_next_7_days?: number;
+  setup_complete?: number;
+  his_connected?: number;
+}
+
+export interface PlatformAttention {
+  /** Hospital id. */
+  hospital: string;
+  hospital_name?: string;
+  kind: "no_admin" | "setup_unfinished" | "his_failing" | "admin_never_signed_in" | string;
+  text: string;
+}
+
+export interface PlatformOverview {
+  tiles: PlatformTiles;
+  hospitals: HospitalRow[];
+  attention: PlatformAttention[];
+}
+
+export interface PlatformHospitalsResponse {
+  hospitals: HospitalRow[];
+}
+
+export interface NewHospital {
+  name: string;
+  city?: string;
+  state?: string;
+  type?: "public" | "private" | "";
+  level?: string;
+  pmjay_empanelled?: boolean;
+  demo_his?: boolean;
+  admin: { display_name: string; email: string };
+}
+
+/** A first password, shown once with Copy and the mail draft (D10). */
+export interface OneTimeLogin {
+  username: string;
+  password_once: string;
+  mailto?: string;
+}
+
+export interface NewHospitalResult {
+  hospital: HospitalRow;
+  admin: OneTimeLogin;
+}
+
+export interface HospitalAdminRow {
+  username: string;
+  display_name?: string;
+  disabled?: boolean;
+  must_change_password?: boolean;
+  last_sign_in?: string | null;
+}
+
+export interface SetupStepRow {
+  id: string;
+  label: string;
+  done: boolean;
+  summary?: string;
+}
+
+export interface PlatformEvent {
+  ts: string;
+  by?: string;
+  by_name?: string;
+  /** Hospital id (platform activity); absent inside one hospital. */
+  hospital?: string;
+  hospital_name?: string;
+  kind: string;
+  text: string;
+}
+
+export interface PlatformHospitalDetail {
+  hospital: HospitalRow;
+  /** Named counts, e.g. people, case_files_open, case_files_decided, meetings_next_7_days, open_requests. */
+  counts: Record<string, number>;
+  admins: HospitalAdminRow[];
+  /** doctors, heads, residents, coordinators, dept_admins, hospital_admins, auditors, guests, disabled. */
+  people_by_role: Record<string, number>;
+  setup: { steps: SetupStepRow[] };
+  his: HospitalHis;
+  recent: PlatformEvent[];
+}
+
+export interface AddAdminResult {
+  username: string;
+  created: boolean;
+  password_once?: string;
+  mailto?: string;
+}
+
+export type PlatformRole = "hospital_admin" | "doctor" | "head" | "resident" | "coordinator" | "dept_admin" | "auditor" | "guest" | "vaidyx_admin";
+
+export interface PlatformLogin {
+  username: string;
+  display_name?: string;
+  /** Hospital id. */
+  hospital: string;
+  hospital_name?: string;
+  roles: PlatformRole[] | string[];
+  disabled: boolean;
+  must_change_password: boolean;
+  vaidyx_admin: boolean;
+}
+
+export interface PlatformLoginsResponse {
+  logins: PlatformLogin[];
+}
+
+export interface PlatformResetResult {
+  password_once: string;
+  mailto?: string;
+}
+
+export interface PlatformActivityResponse {
+  events: PlatformEvent[];
+}
+
+export interface HospitalPeopleCounts {
+  doctors: number;
+  heads: number;
+  residents: number;
+  coordinators: number;
+  dept_admins: number;
+  hospital_admins: number;
+  auditors: number;
+  guests: number;
+  disabled: number;
+  never_signed_in: number;
+}
+
+export interface HospitalOverview {
+  hospital: { id?: string; name: string; city?: string; state?: string; status?: HospitalStatus; level?: string };
+  people: HospitalPeopleCounts;
+  /** by_status keys: draft, needs_team, waiting_department, ready, scheduled, decided. */
+  case_files: { by_status: Record<string, number>; total: number };
+  meetings: { next_7_days: number; upcoming: Array<{ id: string; title: string; date: string }> };
+  requests: { open: number };
+  setup: { steps: SetupStepRow[]; done: number; total: number };
+  his: HospitalHis;
+  /** link: an in-app path (/hospital/people?role=coordinator) */
+  attention: Array<{ kind: string; text: string; link?: string }>;
+  recent: Array<{ ts: string; by?: string; by_name?: string; kind: string; text: string }>;
+}
+
+export interface HospitalDepartment {
+  id: string;
+  name: string;
+  group: "treating" | "supporting" | string;
+  enabled: boolean;
+  heads: Array<{ username: string; display_name?: string }> | string[];
+  people: number;
+  residents: number;
+  email?: string;
+  phone?: string;
+  receives_requests?: boolean;
+}
+
+export interface HospitalDepartmentsResponse {
+  departments: HospitalDepartment[];
+}
+
+/** POST /accounts: the existing route (tumour_board/api/setup.py), the first password inside the mailto only. */
+export interface AccountCreated {
+  ok?: boolean;
+  email?: string;
+  username: string;
+  created: boolean;
+  mailto?: string;
+  must_change_password?: boolean;
 }

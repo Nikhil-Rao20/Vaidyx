@@ -1,4 +1,4 @@
-// /admin: the root admin's guided set-up (GET /setup), five steps saved as you go: Hospital, Departments, People and
+// /admin: the hospital admin's guided set-up (GET /setup; also the Hospital console's Set-up tab), five steps saved as you go: Hospital, Departments, People and
 // roles, Hospital system (must pass its test), Board. Continue saves the step; the list on the right shows what is done.
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
@@ -29,9 +29,9 @@ const STEP_ICON = { hospital: Hospital, departments: Building2, people: Users, h
 
 /** "13 login(s), 1 coordinator(s)" from the server reads "13 logins, 1 coordinator". */
 function plainCounts(text?: string): string {
-  return (text ?? "").replace(/\b(\d+) ([\w ]*?\w)\(s\)/g, (_m, n, w) => `${n} ${w}${n === "1" ? "" : "s"}`);
+  return (text ?? "").replace(/\b(\d+) ([\w ]*?\w)\(s\)/g, (_m, n, w) => `${n} ${w}${n === "1" ? "" : "s"}`).replace(/\broot admin/g, "hospital admin");
 }
-export default function AdminSetup() {
+export default function AdminSetup({ embedded = false }: { embedded?: boolean } = {}) {
   const { me } = useSession();
   const setup = useSetup({ enabled: Boolean(me?.roles.root_admin || me?.roles.admin) });
   const accounts = useAccounts({ enabled: Boolean(setup.data) });
@@ -160,20 +160,24 @@ export default function AdminSetup() {
     return (
       <div className="mx-auto max-w-2xl">
         <PageHeader title="Hospital set-up" />
-        <div className="surface"><EmptyState kind="lock" title="Only the root admin sets up the hospital" text={(me.roles.admin_of || []).length ? "You manage your department's people on the People page." : "Ask the root admin of the hospital."} action={(me.roles.admin_of || []).length ? <Button type="button" asChild><Link to="/people">Open People</Link></Button> : undefined} /></div>
+        <div className="surface"><EmptyState kind="lock" title="Only a hospital admin sets up the hospital" text={(me.roles.admin_of || []).length ? "You manage your department's people on the People page." : "Ask the hospital admin of your hospital."} action={(me.roles.admin_of || []).length ? <Button type="button" asChild><Link to={embedded ? "/hospital/people" : "/people"}>Open People</Link></Button> : undefined} /></div>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-6xl">
-      <PageHeader
-        title="Hospital set-up"
-        subtitle={setup.data?.complete ? "Everything is set. Change any step at any time; each saves at once." : "Five steps, each saved as you go. You can stop and come back."}
-        actions={<Button type="button" variant="outline" asChild><Link to="/people"><Users className="size-4" aria-hidden /> People</Link></Button>}
-      >
-        {setup.data ? <div className="max-w-md"><Progress value={pct} className="h-1.5" aria-label={`${done} of 5 steps done`} /><p className="mt-1 text-xs text-muted-foreground">{done} of 5 steps done</p></div> : null}
-      </PageHeader>
+    <div className={embedded ? "" : "mx-auto max-w-6xl"}>
+      {embedded ? (
+        setup.data ? <div className="mb-4 max-w-md"><Progress value={pct} className="h-1.5" aria-label={`${done} of 5 steps done`} /><p className="mt-1 text-xs text-muted-foreground">{done} of 5 steps done. {setup.data.complete ? "Change any step at any time; each saves at once." : "You can stop and come back."}</p></div> : null
+      ) : (
+        <PageHeader
+          title="Hospital set-up"
+          subtitle={setup.data?.complete ? "Everything is set. Change any step at any time; each saves at once." : "Five steps, each saved as you go. You can stop and come back."}
+          actions={<Button type="button" variant="outline" asChild><Link to="/people"><Users className="size-4" aria-hidden /> People</Link></Button>}
+        >
+          {setup.data ? <div className="max-w-md"><Progress value={pct} className="h-1.5" aria-label={`${done} of 5 steps done`} /><p className="mt-1 text-xs text-muted-foreground">{done} of 5 steps done</p></div> : null}
+        </PageHeader>
+      )}
       {setup.isLoading ? (
         <div className="surface space-y-3 p-6" aria-busy="true"><div className="skeleton-line h-8 w-1/2" /><div className="skeleton-line h-40" /></div>
       ) : setup.error && !setup.data ? (
@@ -195,7 +199,7 @@ export default function AdminSetup() {
                   <p className="max-w-md text-sm text-muted-foreground">{setup.data.complete ? "Here is everything you chose. Edit any part; each step saves again on its own." : "Here is what is saved so far; open the steps marked not done to finish them."}</p>
                   <SetupReview setup={setup.data} accounts={accounts.data?.accounts ?? []} onEdit={(n) => { setStepError(null); setStep(n); }} />
                   <div className="flex flex-wrap justify-center gap-2 pt-2">
-                    <Button type="button" asChild><Link to="/people">Open People</Link></Button>
+                    <Button type="button" asChild><Link to={embedded ? "/hospital/people" : "/people"}>Open People</Link></Button>
                   </div>
                 </div>
               }

@@ -1,4 +1,4 @@
-// The root admin's guided set-up (five steps) and the department admin's People page.
+// The hospital admin's guided set-up (five steps) and the department admin's People page.
 import { expect, test } from "@playwright/test";
 import { SIZES, runsFor, shoot, visit } from "../support/helpers";
 
@@ -28,7 +28,7 @@ test.describe("admin", () => {
   test("no permission", async ({ page }) => {
     test.skip(!runsFor("treating"));
     await visit(page, "/admin");
-    await expect(page.getByText(/Only the root admin/)).toBeVisible();
+    await expect(page.getByText(/Only a hospital admin/)).toBeVisible();  // 16 Nov 2026: "Root admin" is "Hospital admin" on screen
     await shoot(page, "admin", "no-permission", { sizes: [SIZES[0]] });
   });
 });

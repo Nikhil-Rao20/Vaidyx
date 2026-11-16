@@ -20,6 +20,8 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Splash } from "@/components/Splash";
 import { useMessagesLive, useMessagesUnread } from "@/features/messages";
 import { ErrorPage } from "@/app/ErrorPage";
+import { ActingBar } from "@/features/consoles/ActingBar";
+import { useActingHospital } from "@/lib/acting";
 import { useSession } from "@/lib/session";
 import { navItems } from "@/lib/nav";
 import { pageVariants, spring } from "@/lib/motion";
@@ -51,9 +53,14 @@ export function AppShell() {
   useMessagesLive(mayMessage);  // the messages socket, once for the whole app (Phase 8)
   const unreadMessages = useMessagesUnread(mayMessage);
   const messagesUnread = unreadMessages.data?.unread_total ?? me?.counts?.messages_unread ?? 0;
-  const items = useMemo(() => (me ? navItems(me, messagesUnread) : []), [me, messagesUnread]);
-  // A move between two conversations keeps the Messages page mounted (no fade, no lost scroll).
-  const pageKey = location.pathname.startsWith("/messages") ? "/messages" : location.pathname;
+  const acting = useActingHospital();
+  const items = useMemo(() => (me ? navItems(me, messagesUnread, acting) : []), [me, messagesUnread, acting]);
+  // A move between two conversations keeps the Messages page mounted (no fade, no lost scroll); so does a move between the tabs of
+  // a console (its header and tabs stay, only the tab changes).
+  const pageKey = location.pathname.startsWith("/messages") ? "/messages"
+    : /^\/platform(\/(hospitals|logins|activity))?\/?$/.test(location.pathname) ? "/platform"
+    : location.pathname.startsWith("/hospital/") || location.pathname === "/hospital" ? "/hospital"
+    : location.pathname;
   useEffect(() => { setSearchOpen(false); }, [location.pathname]);
   useEffect(() => {
     if (location.pathname.startsWith("/cases/") && location.pathname !== "/cases/new") {
@@ -129,6 +136,7 @@ export function AppShell() {
               </motion.div>
             ) : null}
           </AnimatePresence>
+          {!bare ? <ActingBar /> : null}
           <OfflineBanner />
         </header>
         <main id="main" className={cn("mx-auto w-full max-w-[1440px] px-4 py-4 md:py-6", !bare && !full && "pb-28 lg:pb-10")} tabIndex={-1}>

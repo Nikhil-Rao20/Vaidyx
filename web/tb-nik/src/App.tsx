@@ -13,6 +13,7 @@ import { requestRoutes } from "@/features/requests/routes";
 import { settingsRoutes } from "@/features/settings/routes";
 import { adminRoutes } from "@/features/admin/routes";
 import { messageRoutes } from "@/features/messages/routes";
+import { consoleRoutes } from "@/features/consoles/routes";
 import { NotFound } from "@/app/NotFound";
 import { BASE } from "@/lib/base";
 
@@ -34,6 +35,7 @@ const routes: RouteObject[] = [
           ...settingsRoutes,
           ...adminRoutes,
           ...messageRoutes,
+          ...consoleRoutes,
         ],
       },
     ],

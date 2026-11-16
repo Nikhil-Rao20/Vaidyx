@@ -1,4 +1,4 @@
-// /activity: everyone's own audited actions (GET /me/activity); the MDT Coordinator, the auditor and the root admin also
+// /activity: everyone's own audited actions (GET /me/activity); the MDT Coordinator, the auditor and the hospital admin also
 // read the full log (GET /activity, filtered by Case File and person; reading it is itself recorded).
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
@@ -153,13 +153,14 @@ function FullLog() {
   );
 }
 
-export default function ActivityPage() {
+/** embedded: the Activity tab of the Hospital console (no page title; the full log first, also for the Vaidyx admin working there). */
+export default function ActivityPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { me } = useSession();
-  const full = Boolean(me && (me.roles.auditor || me.roles.coordinator || me.roles.root_admin));
-  const [tab, setTab] = useState(full && me?.primary_role === "auditor" ? "all" : "mine");
+  const full = Boolean(me && (me.roles.auditor || me.roles.coordinator || me.roles.root_admin || (embedded && me.roles.admin)));
+  const [tab, setTab] = useState(full && (embedded || me?.primary_role === "auditor") ? "all" : "mine");
   return (
-    <div className="mx-auto max-w-4xl">
-      <PageHeader title="Activity" subtitle={full ? "Your own actions, and the full log of every action in the Tumour Board." : "Everything you did, newest first. Every action is recorded."} />
+    <div className={embedded ? "max-w-4xl" : "mx-auto max-w-4xl"}>
+      {embedded ? null : <PageHeader title="Activity" subtitle={full ? "Your own actions, and the full log of every action in the Tumour Board." : "Everything you did, newest first. Every action is recorded."} />}
       {full ? (
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList aria-label="Whose actions">

@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-export type Role = "treating" | "resident" | "supporting" | "coordinator" | "root_admin" | "dept_admin" | "auditor";
+export type Role = "treating" | "resident" | "supporting" | "coordinator" | "root_admin" | "dept_admin" | "auditor" | "vaidyx_admin";
 
 const DEPTS: Array<[string, string, "treating" | "supporting"]> = [
   ["general_surgery", "General Surgery", "treating"], ["surgical_oncology", "Surgical Oncology", "treating"], ["medical_oncology", "Medical Oncology", "treating"],
@@ -43,6 +43,8 @@ export function me(role: Role) {
     case "root_admin": return { ...base, user: "root@vxh.example", display_name: "Hospital IT", primary_role: "root_admin", profile: { ...base.profile, title: "Mr", registration_no: "" }, roles: { ...roles, root_admin: true } };
     case "dept_admin": return { ...base, user: "radadmin@vxh.example", display_name: "Suresh Babu", primary_role: "dept_admin", profile: { ...base.profile, title: "Mr", registration_no: "" }, roles: { ...roles, admin_of: ["radiology"] } };
     case "auditor": return { ...base, user: "audit@vxh.example", display_name: "Meera Iyer", primary_role: "auditor", profile: { ...base.profile, title: "Ms", registration_no: "" }, roles: { ...roles, auditor: true } };
+    // docs/admin-console: the Vaidyx admin (server administrator): no clinical role, the platform flag of DESIGN 5.3.
+    case "vaidyx_admin": return { ...base, user: "vaidyx-admin", display_name: "Vaidyx Admin", primary_role: "root_admin", platform_admin: true, acting_hospital: null, profile: { ...base.profile, title: "", registration_no: "" }, roles: { ...roles, admin: true, vaidyx_admin: true } };
   }
 }
 
@@ -158,6 +160,10 @@ export const setup = {
 
 export const accounts = {
   accounts: [
+    { username: "root@vxh.example", display_name: "Hospital IT", root_admin: true },
+    { username: "radadmin@vxh.example", display_name: "Suresh Babu", admin_of: ["radiology"] },
+    { username: "audit@vxh.example", display_name: "Meera Iyer", auditor: true, must_change_password: true },
+    { username: "anil@vxh.example", display_name: "Anil Varma", departments: { radiology: "member" }, disabled: true },
     { username: "mdt@vxh.example", display_name: "Priya Nair", coordinator: true },
     { username: "rao@vxh.example", display_name: "Lakshmi Rao", departments: { breast_surgery: "head" } },
     { username: "asha@vxh.example", display_name: "Asha Menon", departments: { breast_surgery: "resident" }, end_date: day(90) },
@@ -190,3 +196,114 @@ export const activity = {
 };
 
 export const notificationPrefs = { digest_time: "08:00", kinds: { reminder_automatic: false }, push: true, kinds_available: ["request", "request_done", "sign_off", "join_request", "record_arrived", "summary_stale", "agenda", "outcome", "reminder_automatic"], push_enabled: true, subscriptions: 0 };
+
+// ---- Admin consoles (docs/admin-console/DESIGN.md 5.3), SYNTHETIC: fictitious hospitals and people, counts only -----------------
+
+const hospitalRow = (id: string, name: string, city: string, state: string, status: "active" | "suspended", admins: number, people: number, cf: [number, number], setupDone: number, his: string, lastDays: number | null, extra: Record<string, unknown> = {}) => ({
+  id, name, city, state, status, admins, people, case_files: { open: cf[0], decided: cf[1], total: cf[0] + cf[1] }, setup: { done: setupDone, total: 5 },
+  his: { state: his, url_set: his !== "not_set", tested_at: his === "not_set" ? null : iso(1), ok: his === "connected" ? true : his === "failing" ? false : null },
+  last_activity: lastDays === null ? null : iso(lastDays, 11), created: iso(120), type: "private", level: "optimal", pmjay_empanelled: true, ...extra,
+});
+
+export const platformHospitals = {
+  hospitals: [
+    hospitalRow("default", "Vaidyx Demo Hospital", "Hyderabad", "Telangana", "active", 1, 26, [12, 7], 5, "connected", 0, { his: { state: "connected", url_set: true, tested_at: iso(1), ok: true, demo: true } }),
+    hospitalRow("svch", "Sri Venkateswara Cancer Hospital", "Tirupati", "Andhra Pradesh", "active", 1, 4, [0, 0], 2, "not_set", 2, { type: "public", level: "essential" }),
+    hospitalRow("kmc", "Kaveri Medical College Hospital", "Mysuru", "Karnataka", "active", 0, 0, [0, 0], 0, "not_set", null, { created: iso(3) }),
+    hospitalRow("nrh", "Narmada Regional Hospital", "Jabalpur", "Madhya Pradesh", "suspended", 1, 9, [3, 11], 5, "failing", 40, { type: "public", status_reason: "Contract paused by the hospital (test)" }),
+  ],
+};
+
+export const platformOverview = {
+  tiles: { hospitals_active: 3, hospitals_suspended: 1, logins: 40, hospital_admins: 3, case_files: 33, meetings_next_7_days: 2, setup_complete: 2, his_connected: 1 },
+  hospitals: platformHospitals.hospitals,
+  attention: [
+    { hospital: "kmc", hospital_name: "Kaveri Medical College Hospital", kind: "no_admin", text: "No hospital admin yet" },
+    { hospital: "svch", hospital_name: "Sri Venkateswara Cancer Hospital", kind: "setup_unfinished", text: "Set-up 2 of 5 steps done" },
+    { hospital: "nrh", hospital_name: "Narmada Regional Hospital", kind: "his_failing", text: "Hospital system not answering" },
+    { hospital: "svch", hospital_name: "Sri Venkateswara Cancer Hospital", kind: "admin_never_signed_in", text: "Ravi Teja has not signed in yet" },
+  ],
+};
+
+export function platformHospitalDetail(id: string) {
+  const h = platformHospitals.hospitals.find((x) => x.id === id) ?? platformHospitals.hospitals[0];
+  const big = h.id === "default";
+  return {
+    hospital: h,
+    counts: { people: h.people, case_files_open: h.case_files.open, case_files_decided: h.case_files.decided, meetings_next_7_days: big ? 2 : 0 },
+    admins: h.admins ? [{ username: big ? "root@vxh.example" : `it.admin@${h.id}.example`, display_name: big ? "Hospital IT" : "Ravi Teja", must_change_password: !big, last_sign_in: big ? iso(0, 9) : null }] : [],
+    people_by_role: big ? { doctors: 14, heads: 5, residents: 3, coordinators: 2, dept_admins: 3, hospital_admins: 1, auditors: 1, guests: 2, disabled: 1, never_signed_in: 2 } : { doctors: 2, heads: 1, residents: 0, coordinators: 0, dept_admins: 0, hospital_admins: 1, auditors: 0, guests: 0, disabled: 0, never_signed_in: 1 },
+    setup: { steps: setup.steps.map((s, i) => ({ ...s, done: i < h.setup.done })) },
+    his: h.his,
+    recent: [
+      { ts: iso(0, 9), by: "root@vxh.example", by_name: "Hospital IT", kind: "account_created", text: "Login created for Kiran Shetty (Resident, Radiology)" },
+      { ts: iso(1, 15), by: "root@vxh.example", by_name: "Hospital IT", kind: "setup_saved", text: "Set-up saved: Board" },
+      { ts: iso(2, 12), by: "vaidyx-admin", by_name: "Vaidyx Admin", kind: "password_reset", text: "Password reset for Asha Menon" },
+    ],
+  };
+}
+
+export const platformLogins = {
+  logins: [
+    { username: "vaidyx-admin", display_name: "Vaidyx Admin", hospital: "default", roles: ["vaidyx_admin"], disabled: false, must_change_password: false, vaidyx_admin: true },
+    { username: "root@vxh.example", display_name: "Hospital IT", hospital: "default", roles: ["hospital_admin"], disabled: false, must_change_password: false, vaidyx_admin: false },
+    { username: "rao@vxh.example", display_name: "Lakshmi Rao", hospital: "default", roles: ["head"], disabled: false, must_change_password: false, vaidyx_admin: false },
+    { username: "mdt@vxh.example", display_name: "Priya Nair", hospital: "default", roles: ["coordinator"], disabled: false, must_change_password: false, vaidyx_admin: false },
+    { username: "anil@vxh.example", display_name: "Anil Varma", hospital: "default", roles: ["doctor"], disabled: true, must_change_password: false, vaidyx_admin: false },
+    { username: "it.admin@svch.example", display_name: "Ravi Teja", hospital: "svch", roles: ["hospital_admin"], disabled: false, must_change_password: true, vaidyx_admin: false },
+    { username: "onco@svch.example", display_name: "Dr Kavitha Reddy", hospital: "svch", roles: ["doctor", "dept_admin"], disabled: false, must_change_password: true, vaidyx_admin: false },
+    { username: "it.admin@nrh.example", display_name: "Mohan Verma", hospital: "nrh", roles: ["hospital_admin"], disabled: false, must_change_password: false, vaidyx_admin: false },
+  ],
+};
+
+export const platformActivity = {
+  events: [
+    { ts: iso(0, 10), by: "vaidyx-admin", by_name: "Vaidyx Admin", hospital: "kmc", hospital_name: "Kaveri Medical College Hospital", kind: "hospital_created", text: "Hospital added: Kaveri Medical College Hospital" },
+    { ts: iso(1, 16), by: "vaidyx-admin", by_name: "Vaidyx Admin", hospital: "svch", hospital_name: "Sri Venkateswara Cancer Hospital", kind: "admin_added", text: "Hospital admin added: Ravi Teja" },
+    { ts: iso(2, 12), by: "vaidyx-admin", by_name: "Vaidyx Admin", hospital: "default", hospital_name: "Vaidyx Demo Hospital", kind: "password_reset", text: "Password reset for Asha Menon" },
+    { ts: iso(5, 9), by: "vaidyx-admin", by_name: "Vaidyx Admin", hospital: "nrh", hospital_name: "Narmada Regional Hospital", kind: "hospital_suspended", text: "Hospital suspended: contract paused (test)" },
+    { ts: iso(6, 14), by: "vaidyx-admin", by_name: "Vaidyx Admin", hospital: "default", hospital_name: "Vaidyx Demo Hospital", kind: "acting_in", text: "Worked inside Vaidyx Demo Hospital" },
+  ],
+};
+
+/** POST /platform/hospitals: a synthetic first password (fake, for the mock run only). */
+export const newHospitalResult = (name: string) => ({
+  hospital: { ...platformHospitals.hospitals[2], id: "new-hospital", name, admins: 1, people: 1 },
+  admin: { username: "first.admin@newhospital.example", password_once: "Mock-First-Pass-7Q2", mailto: "mailto:first.admin@newhospital.example?subject=Your%20Vaidyx%20login&body=Login%20name%3A%20first.admin%40newhospital.example%0AFirst%20password%3A%20Mock-First-Pass-7Q2" },
+});
+
+export const platformReset = { password_once: "Mock-Reset-Pass-4K9", mailto: "mailto:someone@vxh.example?subject=Your%20Vaidyx%20login&body=Login%20name%3A%20someone%40vxh.example%0AFirst%20password%3A%20Mock-Reset-Pass-4K9" };
+
+/** POST /accounts and POST /accounts/{u}/reset-password: the first password only inside the mail draft (fake, mock run only). */
+export const accountMailto = (login: string) => `mailto:${encodeURIComponent(login)}?subject=Your%20Vaidyx%20login&body=${encodeURIComponent(`Login name: ${login}\nFirst password: Mock-Acct-Pass-8T3\nChange it at the first sign-in.`)}`;
+
+export function hospitalOverview(name = "Vaidyx Demo Hospital") {
+  return {
+    hospital: { id: "default", name, city: "Hyderabad", state: "Telangana", status: "active", level: "optimal" },
+    people: { doctors: 14, heads: 5, residents: 3, coordinators: 1, dept_admins: 3, hospital_admins: 1, auditors: 1, guests: 2, disabled: 1, never_signed_in: 2 },
+    case_files: { by_status: { draft: 2, needs_team: 3, waiting_department: 4, ready: 2, scheduled: 1, decided: 7 }, total: 19 },
+    meetings: { next_7_days: 2, upcoming: [{ id: "M-2026-0042", title: "Tumour Board (weekly)", date: day(3) }, { id: "M-2026-0043", title: "Head and neck board", date: day(6) }] },
+    requests: { open: 4 },
+    setup: { steps: setup.steps, done: 3, total: 5 },
+    his: { state: "not_tested", url_set: true, tested_at: null, ok: null },
+    attention: [
+      { kind: "department_no_head", text: "Microbiology has no head yet", link: "/hospital/departments" },
+      { kind: "resident_ending", text: "Asha Menon's rotation ends within 30 days", link: "/hospital/people?role=resident" },
+      { kind: "never_signed_in", text: "2 people have not signed in yet", link: "/hospital/people?role=not_signed_in" },
+      { kind: "disabled_logins", text: "1 login is disabled", link: "/hospital/people?role=disabled" },
+    ],
+    recent: [
+      { ts: iso(0, 9), by: "root@vxh.example", by_name: "Hospital IT", kind: "account_created", text: "Login created for Kiran Shetty (Resident, Radiology)" },
+      { ts: iso(1, 15), by: "root@vxh.example", by_name: "Hospital IT", kind: "setup_saved", text: "Set-up saved: Board" },
+      { ts: iso(2, 11), by: "radadmin@vxh.example", by_name: "Suresh Babu", kind: "person_placed", text: "Iqbal Khan placed in Radiology" },
+    ],
+  };
+}
+
+export const hospitalDepartments = {
+  departments: setup.departments.map((d, i) => ({
+    id: d.id, name: d.name, group: d.group, enabled: d.enabled,
+    heads: d.id === "microbiology" ? [] : d.id === "breast_surgery" ? [{ username: "rao@vxh.example", display_name: "Lakshmi Rao" }] : d.id === "radiology" ? [{ username: "shanthi@vxh.example", display_name: "Shanthi Raman" }] : i % 3 ? [] : [{ username: `head.${d.id}@vxh.example`, display_name: `Dr ${d.name.split(" ")[0]} Head` }],
+    people: (i * 7) % 6, residents: i % 4 === 1 ? 1 : 0, email: d.email, phone: d.phone, receives_requests: d.group === "supporting",
+  })),
+};

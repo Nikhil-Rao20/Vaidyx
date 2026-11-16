@@ -189,7 +189,7 @@ export function PeopleStep({ rows, onChange, departments, accounts, onCreate }: 
                   </Select>
                 </div>
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-                  {[["coordinator", "MDT Coordinator"], ["deptAdmin", "Department admin"], ["rootAdmin", "Root admin"]].map(([k, label]) => (
+                  {[["coordinator", "MDT Coordinator"], ["deptAdmin", "Department admin"], ["rootAdmin", "Hospital admin"]].map(([k, label]) => (
                     <label key={k} className="inline-flex items-center gap-2">
                       <Checkbox checked={Boolean(r[k as keyof PersonRow])} onCheckedChange={(v) => set(r.key, { [k]: v === true } as Partial<PersonRow>)} disabled={r.created || (k === "deptAdmin" && !r.dept)} />
                       {label}
@@ -212,7 +212,7 @@ export function PeopleStep({ rows, onChange, departments, accounts, onCreate }: 
                   </span>
                 </div>
                 {r.error ? <p role="alert" className="flex items-center gap-1.5 text-xs font-medium text-bad"><XCircle className="size-3.5" aria-hidden /> {r.error}</p> : null}
-                {!r.created && r.email.trim() && !r.dept && !r.coordinator && !r.rootAdmin ? <p className="text-xs text-muted-foreground">Pick a department, or tick MDT Coordinator or Root admin.</p> : null}
+                {!r.created && r.email.trim() && !r.dept && !r.coordinator && !r.rootAdmin ? <p className="text-xs text-muted-foreground">Pick a department, or tick MDT Coordinator or Hospital admin.</p> : null}
               </motion.li>
             );
           })}
@@ -230,7 +230,7 @@ export function PeopleStep({ rows, onChange, departments, accounts, onCreate }: 
           <summary className="cursor-pointer font-medium">{existing.length} login{existing.length > 1 ? "s" : ""} already in the Tumour Board</summary>
           <ul className="mt-2 grid gap-1 sm:grid-cols-2">
             {existing.slice(0, 60).map((a) => (
-              <li key={a.username} className="truncate text-muted-foreground"><span className="text-foreground">{a.display_name || a.username}</span> <span className="mono text-xs">{a.username}</span>{a.coordinator ? ", coordinator" : ""}{a.root_admin ? ", root admin" : ""}</li>
+              <li key={a.username} className="truncate text-muted-foreground"><span className="text-foreground">{a.display_name || a.username}</span> <span className="mono text-xs">{a.username}</span>{a.coordinator ? ", coordinator" : ""}{a.root_admin ? ", hospital admin" : ""}</li>
             ))}
           </ul>
         </details>

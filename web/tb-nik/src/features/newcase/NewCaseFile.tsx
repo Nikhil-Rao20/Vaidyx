@@ -40,10 +40,10 @@ interface Created {
 function createError(e: unknown, form: NewCaseForm): string {
   if (e instanceof ApiError) {
     if (e.status === 400 && /unknown protocol/i.test(e.message) && (!form.protocol || isGeneric(form.protocol))) {
-      return `This server cannot start a Case File for a cancer with no checklist yet (${form.cancerName || "this cancer"}). Ask the root admin to update Vaidyx, or pick the closest built checklist.`;
+      return `This server cannot start a Case File for a cancer with no checklist yet (${form.cancerName || "this cancer"}). Ask the hospital admin to update Vaidyx, or pick the closest built checklist.`;
     }
     if (e.status === 400 && /cancer's name/i.test(e.message)) return `${e.message}. Go back to the Cancer step to correct it.`;
-    if (e.status === 409 && /hospital information system/i.test(e.message)) return "No hospital system is connected yet. The root admin connects it in Admin, Hospital system.";
+    if (e.status === 409 && /hospital information system/i.test(e.message)) return "No hospital system is connected yet. The hospital admin connects it in Hospital, Hospital system.";
     if (e.status === 502) return "The hospital system did not answer. Nothing was created; try again in a minute.";
     if (e.status === 403) return e.message || "You may not start a Case File for this department.";
   }

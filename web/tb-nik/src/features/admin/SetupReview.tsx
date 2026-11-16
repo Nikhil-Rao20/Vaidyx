@@ -70,7 +70,7 @@ export function SetupReview({ setup, accounts, onEdit }: { setup: SetupResponse;
                 ...Object.entries(a.departments ?? {}).map(([d, r]) => `${ROLE[r] || r}, ${deptName(d)}`),
                 ...(a.admin_of ?? []).map((d) => `Department admin, ${deptName(d)}`),
                 a.coordinator ? "MDT Coordinator" : "",
-                a.root_admin ? "Root admin" : "",
+                a.root_admin ? "Hospital admin" : "",
                 a.auditor ? "Auditor" : "",
               ].filter(Boolean);
               return (

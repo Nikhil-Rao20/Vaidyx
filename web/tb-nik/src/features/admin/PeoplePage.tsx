@@ -239,7 +239,7 @@ export default function PeoplePage() {
         <div className="grid gap-4">
           <AddPerson dept={dept} onSaved={(mailto, who) => { setMail({ mailto, who }); refresh(); }} />
           {people.data?.department && (people.data.department.email || people.data.department.phone) ? (
-            <p className="text-xs text-muted-foreground">Desk contact: {[people.data.department.email && !people.data.department.email.endsWith("@hospital.example") ? people.data.department.email : "", people.data.department.phone].filter(Boolean).join(", ") || "not given"} (the root admin changes it in the set-up).</p>
+            <p className="text-xs text-muted-foreground">Desk contact: {[people.data.department.email && !people.data.department.email.endsWith("@hospital.example") ? people.data.department.email : "", people.data.department.phone].filter(Boolean).join(", ") || "not given"} (the hospital admin changes it in the set-up).</p>
           ) : null}
           <SearchBox value={q} onChange={setQ} placeholder="Find a person" wrapperClassName="sm:max-w-sm" />
           <DataList
@@ -255,7 +255,7 @@ export default function PeoplePage() {
           />
         </div>
       ) : (
-        <div className="surface"><EmptyState kind="people" title="No department to manage" text="The root admin makes you the admin of a department." /></div>
+        <div className="surface"><EmptyState kind="people" title="No department to manage" text="The hospital admin makes you the admin of a department." /></div>
       )}
       <MailDraft mailto={mail?.mailto ?? null} who={mail?.who ?? ""} onClose={() => setMail(null)} />
     </div>
@@ -290,7 +290,7 @@ function EveryoneList({ accounts, loading, error, onRetry, deptName, onOpen }: {
             ...depts.map(([d, r]) => `${ROLE_WORD[r] || r}, ${deptName(d)}`),
             ...(a.admin_of ?? []).map((d) => `Department admin, ${deptName(d)}`),
             a.coordinator ? "MDT Coordinator" : "",
-            a.root_admin ? "Root admin" : "",
+            a.root_admin ? "Hospital admin" : "",
             a.auditor ? "Auditor" : "",
           ].filter(Boolean);
           const first = depts[0]?.[0] || (a.admin_of ?? [])[0];

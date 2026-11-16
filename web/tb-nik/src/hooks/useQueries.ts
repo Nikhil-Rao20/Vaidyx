@@ -9,6 +9,8 @@ import { toSearchParams } from "@/lib/filters";
 import type {
   AccountsResponse, ActivityResponse, CaseListResponse, DepartmentDoctor, DepartmentDoctorsResponse, InboxResponse, Job, MeetingsResponse,
   NotificationPrefs, NotificationsResponse, OrgDepartment, OrgResponse, ProtocolsResponse, SetupResponse, TotpStatus, WaitingResponse,
+  HospitalDepartmentsResponse, HospitalOverview, PlatformActivityResponse, PlatformHospitalDetail, PlatformHospitalsResponse, PlatformLoginsResponse,
+  PlatformOverview,
 } from "@/lib/types";
 
 export const keys = {
@@ -29,6 +31,16 @@ export const keys = {
   job: (id: string) => ["job", id] as const,
   deptDoctors: (dept: string) => ["dept-doctors", dept] as const,
   notificationPrefs: ["notification-prefs"] as const,
+  // Admin consoles: everything under "platform" or "hospital" is dropped together after a change.
+  platform: ["platform"] as const,
+  platformOverview: ["platform", "overview"] as const,
+  platformHospitals: ["platform", "hospitals"] as const,
+  platformHospital: (id: string) => ["platform", "hospital", id] as const,
+  platformLogins: (params: string) => ["platform", "logins", params] as const,
+  platformActivity: (params: string) => ["platform", "activity", params] as const,
+  hospital: ["hospital"] as const,
+  hospitalOverview: ["hospital", "overview"] as const,
+  hospitalDepartments: ["hospital", "departments"] as const,
 };
 
 /** True when the server answered 404 for the endpoint itself (not built yet). */
@@ -129,6 +141,52 @@ export function useAccounts(opts: Opts<AccountsResponse> = {}) {
 
 export function useTotpStatus(opts: Opts<TotpStatus> = {}) {
   return useQuery<TotpStatus, Error>({ queryKey: keys.totp, queryFn: () => api.get<TotpStatus>(EP.totpStatus), retry, ...opts });
+}
+
+// ---- Admin consoles (docs/admin-console/DESIGN.md 5.3) ---------------------------------------------------------------------
+
+const qs = (params: Record<string, string>) => new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString();
+
+export function usePlatformOverview(opts: Opts<PlatformOverview> = {}) {
+  return useQuery<PlatformOverview, Error>({ queryKey: keys.platformOverview, queryFn: () => api.get<PlatformOverview>(EP.platformOverview), retry, ...opts });
+}
+
+export function usePlatformHospitals(opts: Opts<PlatformHospitalsResponse> = {}) {
+  return useQuery<PlatformHospitalsResponse, Error>({ queryKey: keys.platformHospitals, queryFn: () => api.get<PlatformHospitalsResponse>(EP.platformHospitals), retry, ...opts });
+}
+
+export function usePlatformHospital(id: string, opts: Opts<PlatformHospitalDetail> = {}) {
+  return useQuery<PlatformHospitalDetail, Error>({ queryKey: keys.platformHospital(id), queryFn: () => api.get<PlatformHospitalDetail>(EP.platformHospital(id)), retry, enabled: Boolean(id), ...opts });
+}
+
+export function usePlatformLogins(params: { hospital?: string; role?: string; q?: string }, opts: Opts<PlatformLoginsResponse> = {}) {
+  const sp = qs({ hospital: params.hospital ?? "", role: params.role ?? "", q: params.q ?? "" });
+  return useQuery<PlatformLoginsResponse, Error>({
+    queryKey: keys.platformLogins(sp),
+    queryFn: () => api.get<PlatformLoginsResponse>(sp ? `${EP.platformLogins}?${sp}` : EP.platformLogins),
+    retry,
+    placeholderData: (prev) => prev,
+    ...opts,
+  });
+}
+
+export function usePlatformActivity(params: { hospital?: string; kind?: string; limit?: string }, opts: Opts<PlatformActivityResponse> = {}) {
+  const sp = qs({ hospital: params.hospital ?? "", kind: params.kind ?? "", limit: params.limit ?? "" });
+  return useQuery<PlatformActivityResponse, Error>({
+    queryKey: keys.platformActivity(sp),
+    queryFn: () => api.get<PlatformActivityResponse>(sp ? `${EP.platformActivity}?${sp}` : EP.platformActivity),
+    retry,
+    placeholderData: (prev) => prev,
+    ...opts,
+  });
+}
+
+export function useHospitalOverview(opts: Opts<HospitalOverview> = {}) {
+  return useQuery<HospitalOverview, Error>({ queryKey: keys.hospitalOverview, queryFn: () => api.get<HospitalOverview>(EP.hospitalOverview), retry, ...opts });
+}
+
+export function useHospitalDepartments(opts: Opts<HospitalDepartmentsResponse> = {}) {
+  return useQuery<HospitalDepartmentsResponse, Error>({ queryKey: keys.hospitalDepartments, queryFn: () => api.get<HospitalDepartmentsResponse>(EP.hospitalDepartments), retry, ...opts });
 }
 
 /** Polls a fetch job every 1.5 s until it finishes or fails. */

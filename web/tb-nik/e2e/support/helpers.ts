@@ -40,17 +40,38 @@ function serveFile(route: Route, file: string) {
   return route.fulfill({ status: 200, contentType: TYPES[path.extname(file)] ?? "application/octet-stream", body: fs.readFileSync(file) });
 }
 
-function mockAnswer(method: string, p: string, role: fx.Role): { status: number; body: unknown } {
+function mockAnswer(method: string, p: string, role: fx.Role, headers: Record<string, string> = {}, sent: unknown = null): { status: number; body: unknown } {
   const ok = (body: unknown) => ({ status: 200, body });
+  // docs/admin-console: a Vaidyx admin working inside a hospital names it in X-TB-Hospital (the mock answers as that hospital).
+  const actingId = role === "vaidyx_admin" ? headers["x-tb-hospital"] || "" : "";
+  const actingRow = actingId ? fx.platformHospitals.hospitals.find((h) => h.id === actingId) : undefined;
+  const body = (sent && typeof sent === "object" ? sent : {}) as Record<string, unknown>;
   if (method !== "GET") {
     if (p === "/api/auth/login") return ok({ ok: true });
+    // Admin consoles (docs/admin-console/DESIGN.md 5.3)
+    if (p === "/api/tb/platform/hospitals") return ok(fx.newHospitalResult(String(body.name || "New hospital")));
+    if (/^\/api\/tb\/platform\/hospitals\/[^/]+\/admins$/.test(p)) return ok({ username: String(body.email || "new.admin@example.in"), created: true, password_once: "Mock-Admin-Pass-2W5", mailto: fx.accountMailto(String(body.email || "new.admin@example.in")) });
+    if (/^\/api\/tb\/platform\/logins\/[^/]+\/reset-password$/.test(p)) return ok(fx.platformReset);
+    if (p === "/api/tb/accounts") { const login = String(body.email || "new.person@vxh.example"); return ok({ ok: true, email: login, username: login, created: true, mailto: fx.accountMailto(login), must_change_password: true }); }
+    if (/^\/api\/tb\/accounts\/[^/]+\/reset-password$/.test(p)) { const login = decodeURIComponent(p.split("/")[4]); return ok({ ok: true, username: login, mailto: fx.accountMailto(login), must_change_password: true }); }
+    if (p === "/api/tb/his/test") return ok({ ok: true, hospital_name: "Vaidyx Demo Hospital (synthetic)", patients: 42, reports: 310, latency_ms: 84 });
     if (p === "/api/tb/cases/from-his") return ok({ case: { case_id: "TB-2026-0032" }, job: "J1a2b3c4d", total: 9 });
     if (p.endsWith("/team/code")) return ok({ code: "482913", expires_at: new Date(Date.now() + 864e5).toISOString() });
     // Ask PubMed (docs/pubmed-ask section 8): a question starts a job; a spec that walks the steps routes PubMed itself (pubmed_mock.ts)
     if (p === "/api/tb/pubmed/ask") return { status: 202, body: { job_id: "PJ-mock" } };
     return ok({ ok: true });
   }
-  if (p === "/api/tb/me") return ok(fx.me(role));
+  if (p === "/api/tb/me") {
+    const m = fx.me(role);
+    return ok(actingRow ? { ...m, acting_hospital: { id: actingRow.id, name: actingRow.name, status: actingRow.status }, hospital: { id: actingRow.id, name: actingRow.name, level: actingRow.level } } : m);
+  }
+  if (p === "/api/tb/platform/overview") return ok(fx.platformOverview);
+  if (p === "/api/tb/platform/hospitals") return ok(fx.platformHospitals);
+  if (p.startsWith("/api/tb/platform/hospitals/")) return ok(fx.platformHospitalDetail(decodeURIComponent(p.split("/")[5])));
+  if (p === "/api/tb/platform/logins") return ok(fx.platformLogins);
+  if (p === "/api/tb/platform/activity") return ok(fx.platformActivity);
+  if (p === "/api/tb/hospital/overview") return ok(fx.hospitalOverview(actingRow?.name));
+  if (p === "/api/tb/hospital/departments") return ok(fx.hospitalDepartments);
   if (p === "/api/tb/case-list") return ok(fx.caseList);
   if (p === "/api/tb/waiting") return ok(fx.waiting);
   if (p === "/api/tb/notifications") return ok(fx.notifications);
@@ -100,7 +121,9 @@ export async function prepare(page: Page, { role = "treating", overrides = {}, s
     if (MOCK) {
       if (url.pathname.startsWith("/api/")) {
         if (signedOut && url.pathname === "/api/tb/me") return json(route, { detail: "Not authenticated" }, 401);
-        const a = mockAnswer(method, url.pathname, role);
+        let sent: unknown = null;
+        try { sent = route.request().postDataJSON(); } catch { /* not JSON */ }
+        const a = mockAnswer(method, url.pathname, role, route.request().headers(), sent);
         return json(route, a.body, a.status);
       }
       if (url.pathname.startsWith("/tb-nik/api/")) return json(route, { ok: true, sent: true, id: "mock" });

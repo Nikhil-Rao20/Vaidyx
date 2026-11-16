@@ -1,6 +1,7 @@
 // The one place the new interface talks to the backend. Same-origin cookies,
 // a custom header on every request (the server refuses state-changing calls
 // without it, which stops cross-site form posts), plain error objects.
+import { actingHeaders } from "@/lib/acting";
 
 export class ApiError extends Error {
   status: number;
@@ -83,6 +84,8 @@ export function whileLeaving(fn: () => void) {
 export async function request<T = unknown>(path: string, opts: RequestOptions = {}): Promise<T> {
   const method = opts.method ?? "GET";
   const headers: Record<string, string> = { "X-Requested-With": "tb-nik", Accept: "application/json", ...(opts.headers ?? {}) };
+  // A Vaidyx admin working inside a hospital (lib/acting.ts): every Tumour Board call names that hospital.
+  if (path.startsWith(`${TB}/`) || path === TB) Object.assign(headers, actingHeaders());
   if (Date.now() - lastInput > QUIET_MS) headers["X-TB-Background"] = "1";
   let body: BodyInit | undefined;
   if (opts.form) body = opts.form;
