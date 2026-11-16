@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-BIUEfZIL.js";import t from"./AdminSetup-CmrHuruL.js";var n=e();function r(){return(0,n.jsx)(t,{embedded:!0})}export{r as default};

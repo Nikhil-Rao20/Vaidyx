@@ -2,6 +2,7 @@
 // one hospital. Tabs as sub-routes: Overview, People, Departments, Set-up, Hospital system, Activity. "Add a person" is one dialog
 // for the whole console (the overview's quick actions open it preset to a role).
 import { Suspense, useState } from "react";
+import { plural } from "@/lib/format";
 import { Outlet, useLocation, useOutletContext } from "react-router-dom";
 import { Activity, Building2, LayoutDashboard, LogIn, PlugZap, Settings2, UserPlus, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -66,7 +67,7 @@ function ChooseHospital() {
             <span className="grid size-9 shrink-0 place-items-center rounded-md bg-secondary text-secondary-foreground"><Building2 className="size-4" aria-hidden /></span>
             <span className="min-w-0 flex-1">
               <span className="block font-medium text-foreground">{h.name}</span>
-              <span className="block text-xs text-muted-foreground">{[h.city, h.state].filter(Boolean).join(", ") || "Place not given"} · {h.people} people</span>
+              <span className="block text-xs text-muted-foreground">{[h.city, h.state].filter(Boolean).join(", ") || "Place not given"} · {plural(h.people, "person", "people")}</span>
             </span>
             <HospitalStatusPill status={h.status} />
             <HisPill his={h.his} />

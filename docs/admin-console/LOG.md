@@ -28,3 +28,4 @@
   Whole suite 5,116 passed + 2 failed (the known env-only test_his_client live test; test_hospitals_isolation websocket test, a fake
   socket without cookies, fixed after in api/live.py), 13 skipped, normal and TB_HOSPITAL_STRICT=1 alike; after the fix the hospital,
   console, socket, accounts and set-up modules pass in both modes (147 passed). Expected whole suite now: 5,117 + the known failure.
+- 16 Nov: Phase D: live API check 27/27 on :7400 (test hospital godavari-cancer-centre-test), role walk (no new problems), click flows pass after two fixes (profiles in the person's own hospital; plural words). Final gate: unit 5,118 passed + known env-only failure; tsc clean; build; mocked e2e 169 passed. HOW_TO_TRY.md written.

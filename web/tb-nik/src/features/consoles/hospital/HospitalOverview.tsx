@@ -2,6 +2,7 @@
 // "Needs attention" with links, quick actions (each opens "Add a person" preset to the role) and recent people and set-up events.
 // Counts only: no patient name, UHID or report text.
 import { Link } from "react-router-dom";
+import { plural } from "@/lib/format";
 import { useQueryClient } from "@tanstack/react-query";
 import type { LucideIcon } from "lucide-react";
 import { Activity, AlertTriangle, CalendarDays, CheckCircle2, ChevronRight, Circle, FolderOpen, Inbox, KeyRound, PlugZap, ShieldCheck, Stethoscope, UserCog, UserMinus, UserPlus, Users, UserRoundX, CalendarClock, Building2 } from "lucide-react";
@@ -58,7 +59,7 @@ export default function HospitalOverview() {
   return (
     <div className="grid grid-cols-1 gap-5">
       <TileGrid>
-        <StatTile loading={loading} value={people} label="People" icon={Users} to="/hospital/people" hint={p ? `${p.doctors + p.heads} doctors, ${p.residents} residents` : undefined} />
+        <StatTile loading={loading} value={people} label="People" icon={Users} to="/hospital/people" hint={p ? `${plural(p.doctors + p.heads, "doctor")}, ${plural(p.residents, "resident")}` : undefined} />
         <StatTile loading={loading} value={d?.case_files?.total} label="Case Files" icon={FolderOpen} hint={d ? `${d.case_files.by_status?.decided ?? 0} decided` : undefined} />
         <StatTile loading={loading} value={d?.meetings?.next_7_days} label="Meetings in the next 7 days" icon={CalendarDays} />
         <StatTile loading={loading} value={d?.requests?.open} label="Open requests" icon={Inbox} />

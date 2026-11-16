@@ -13,13 +13,13 @@ mention of Claude, never pushed. Agents: Opus 5.5 only. Servers for checks: app 
 | A | A4 | Background: scheduler per hospital, resume loop, the four threads, re-keyed maps, org / skills caches | backend agent 1 | done (0966e05) |
 | A | A5 | Accounts refuse other hospitals' logins; new logins registered | backend agent 1 | done (0966e05) |
 | A | A6 | Isolation tests (two roots, same case id, threads, WebSocket rooms, scheduler, strict mode run of the suite) | backend agent 1 | done (0966e05) |
-| B | B1 | `/platform/*` routes and service (`platform_admin.py`), create hospital with first admin, demo HIS option | backend agent 2 (after A) | running |
-| B | B2 | `/hospital/overview`, `/hospital/departments`, `/me` hospital fields | backend agent 2 | running |
-| B | B3 | API tests (who may, audit, no password in logs, last admin rule, suspended hospital) | backend agent 2 | running |
+| B | B1 | `/platform/*` routes and service (`platform_admin.py`), create hospital with first admin, demo HIS option | backend agent 2 (after A) | done |
+| B | B2 | `/hospital/overview`, `/hospital/departments`, `/me` hospital fields | backend agent 2 | done |
+| B | B3 | API tests (who may, audit, no password in logs, last admin rule, suspended hospital) | backend agent 2 | done |
 | C | C1 | Vaidyx console screens (overview, hospitals, add hospital, hospital detail, logins, activity), acting-in bar, switcher, nav | frontend agent (parallel with A, on the API contract) | done (180d86e) |
 | C | C2 | Hospital console screens (overview, people with add-person drawer, departments, set-up, hospital system, activity), nav | frontend agent | done (180d86e) |
 | C | C3 | Mock data for the mocked screen tests; specs for both consoles, laptop and phone | frontend agent | done (180d86e) |
-| D | D1 | Wire to the real API on :7400, restart :7400 only, live walk of every role, fix | orchestrator + agents | todo |
-| D | D2 | Review agent: security and isolation read of the whole diff; fixes | review agent | todo |
-| D | D3 | Full gate: unit suite, tsc, build, mocked e2e, live walk laptop + phone, light + dark | orchestrator | todo |
-| D | D4 | HOW_TO_TRY.md, memory, report to Bharath | orchestrator | todo |
+| D | D1 | Wire to the real API on :7400, restart :7400 only, live walk of every role, fix | orchestrator + agents | done |
+| D | D2 | Review agent: security and isolation read of the whole diff; fixes | review agent | done |
+| D | D3 | Full gate: unit suite, tsc, build, mocked e2e, live walk laptop + phone, light + dark | orchestrator | done |
+| D | D4 | HOW_TO_TRY.md, memory, report to Bharath | orchestrator | done |

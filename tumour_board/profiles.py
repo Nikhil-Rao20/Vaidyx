@@ -5,8 +5,10 @@ mobile number with the consent to show it to signed-in hospital members, a small
 start page and the saved filters of the home list. The roles stay in org.json (org.roles); the display name is mirrored there when the
 person is placed, so the old screens show the same name. A profile is "set up" once the display name is there (and, for a doctor, the
 registration number). Every change is recorded in org_audit.jsonl by field name, never by value (the phone and the photo are personal).
+A profile belongs to the person, so it is always read and written in the person's own hospital (admin consoles, 16 Nov 2026): a Vaidyx
+admin managing inside another hospital keeps its name, photo and finished set-up, and its profile never lands in that hospital's file.
 No model calls."""
-import base64, json, os, re, threading
+import base64, contextlib, json, os, re, threading
 from pathlib import Path
 
 from . import config, org
@@ -27,6 +29,16 @@ _lock = threading.Lock()
 
 def path() -> Path:
     return Path(config.DATA_ROOT) / "profiles.json"
+
+
+def _home(username: str):
+    """Run inside the person's own hospital (a no-op when that is the current one)."""
+    try:
+        from . import hospitals
+        hid = hospitals.hospital_of(str(username or ""))
+    except Exception:
+        return contextlib.nullcontext()
+    return contextlib.nullcontext() if hid == config.hospital_id() else config.use_hospital(hid)
 
 
 def _load() -> dict:
@@ -54,7 +66,7 @@ def blank() -> dict:
             "text_size": "normal", "start_page": "home", "saved_filters": [], "setup_complete": False, "updated": ""}
 
 
-def get(username: str) -> dict:
+def _get(username: str) -> dict:
     """The profile with every field present; the display name falls back to the one in org.json."""
     u = str(username or "")
     out = {**blank(), **{k: v for k, v in (_load().get(u) or {}).items() if k in FIELDS or k in ("setup_complete", "updated")}}
@@ -145,7 +157,7 @@ def clean(fields: dict) -> dict:
     return out
 
 
-def update(username: str, fields: dict, doctor: bool = False, by: str = "") -> dict:
+def _update(username: str, fields: dict, doctor: bool = False, by: str = "") -> dict:
     """Merge the checked fields into the profile, recompute setup_complete, mirror the display name into org.json when the person is
     placed there, and audit the field names. Returns the profile."""
     u = str(username or "").strip()
@@ -163,7 +175,7 @@ def update(username: str, fields: dict, doctor: bool = False, by: str = "") -> d
     if "display_name" in changes and changes["display_name"]:
         _mirror_name(u, changes["display_name"], by or u)
     org.audit("profile_updated", by or u, username=u, fields=sorted(changes), setup_complete=cur["setup_complete"])
-    return get(u)
+    return _get(u)
 
 
 def _mirror_name(username: str, name: str, by: str) -> None:
@@ -181,7 +193,7 @@ def _mirror_name(username: str, name: str, by: str) -> None:
         pass
 
 
-def display_name(username: str) -> str:
+def _display_name(username: str) -> str:
     """The name to show for a login: the profile's, else org.json's, else the login itself."""
     u = str(username or "")
     p = _load().get(u) or {}
@@ -189,7 +201,7 @@ def display_name(username: str) -> str:
     return name or org.display_name(u)
 
 
-def setup_complete(username: str, doctor: bool = False) -> bool:
+def _setup_complete(username: str, doctor: bool = False) -> bool:
     """Whether the person has done the first-login profile set-up: what they saved themselves (profiles.json), never the name an admin
     typed into org.json, so everyone sees the set-up once (SPEC 3.2)."""
     stored = _load().get(str(username or "")) or {}
@@ -201,3 +213,23 @@ def public(username: str, viewer_known: bool = False) -> dict:
     p = get(username)
     return {"user": username, "display_name": p["display_name"] or org.display_name(username), "title": p["title"], "photo": p["photo"],
             "phone": p["phone"] if (p["phone_visible"] and viewer_known) else ""}
+
+
+def get(username: str) -> dict:
+    with _home(username):
+        return _get(username)
+
+
+def update(username: str, fields: dict, doctor: bool = False, by: str = "") -> dict:
+    with _home(username):
+        return _update(username, fields, doctor=doctor, by=by)
+
+
+def display_name(username: str) -> str:
+    with _home(username):
+        return _display_name(username)
+
+
+def setup_complete(username: str, doctor: bool = False) -> bool:
+    with _home(username):
+        return _setup_complete(username, doctor)

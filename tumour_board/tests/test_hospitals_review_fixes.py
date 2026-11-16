@@ -46,3 +46,20 @@ def test_search_index_builds_in_a_new_hospital_without_a_cache_folder():
     line = next(l for l in text.splitlines() if 'embed_cache" / "chunks"' in l)
     assert "mkdir" not in line.split("#", 1)[-1] or "#" not in line  # the mkdir is code, not a comment
     assert 'cache.mkdir(parents=True, exist_ok=True)' in text
+
+
+def test_a_profile_lives_in_the_persons_own_hospital():
+    """A Vaidyx admin managing inside another hospital keeps its finished profile (it was sent to the welcome page, 16 Nov)."""
+    from tumour_board import profiles
+    with config.use_hospital("default"):
+        profiles.update("vx-admin", {"display_name": "Platform Admin"})
+        assert profiles.setup_complete("vx-admin")
+    h = hospitals.create("Narmada Hospital", "tester")
+    hid = h["id"] if isinstance(h, dict) else h
+    with config.use_hospital(hid):
+        assert profiles.setup_complete("vx-admin") and profiles.get("vx-admin")["display_name"] == "Platform Admin"
+        assert not profiles.path().exists() or "vx-admin" not in profiles.path().read_text()
+        profiles.update("vx-admin", {"title": "Dr"})
+        assert not profiles.path().exists() or "vx-admin" not in profiles.path().read_text()
+    with config.use_hospital("default"):
+        assert profiles.get("vx-admin")["title"] == "Dr"

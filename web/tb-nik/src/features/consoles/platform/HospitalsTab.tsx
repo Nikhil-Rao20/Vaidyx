@@ -1,5 +1,6 @@
 // /platform/hospitals: every hospital with search and a status filter; open one, manage inside it, or add a new one.
 import { useMemo, useState } from "react";
+import { plural } from "@/lib/format";
 import { Link } from "react-router-dom";
 import { Building2, LogIn, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -69,7 +70,7 @@ export default function HospitalsTab() {
                 {h.name}
               </Link>
               <p className="text-xs text-muted-foreground">
-                {[h.city, h.state].filter(Boolean).join(", ") || "Place not given"} · {h.admins} {h.admins === 1 ? "admin" : "admins"}, {h.people} people, {h.case_files.total} Case Files
+                {[h.city, h.state].filter(Boolean).join(", ") || "Place not given"} · {h.admins} {h.admins === 1 ? "admin" : "admins"}, {plural(h.people, "person", "people")}, {plural(h.case_files.total, "Case File")}
                 {h.created ? <> · Added <DateText value={h.created} /></> : null}
               </p>
             </div>
