@@ -303,7 +303,7 @@ def v2_phase2(c, base):
     check("2.2 department admin cannot read Case Files, sessions or the intake queue (403)", ra.get("/api/tb/cases").status_code == 403 and ra.get("/api/tb/cases/TB-001").status_code == 403
           and ra.get("/api/tb/sessions").status_code == 403 and ra.get("/api/tb/intake").status_code == 403)
     r0 = ra.post("/api/tb/org/departments/radiology/doctors", json={"username": "tb-e2e-mdt", "role": "head"})
-    check("2.2 department admin cannot place the coordinator in its department (409)", r0.status_code == 409 and "root admin" in r0.text, r0.text[:120])
+    check("2.2 department admin cannot place the coordinator in its department (409)", r0.status_code == 409 and "hospital admin" in r0.text, r0.text[:120])
     check("2.2 department admin: root-admin account creation forbidden (403)", ra.post("/api/tb/org/accounts", json={"username": "tb-e2e-x", "password": "X-e2e-2026!!", "coordinator": True}).status_code == 403)
     check("2.2 department admin: another department forbidden (403)", ra.post("/api/tb/org/departments/pathology/doctors", json={"username": "tb-e2e-x", "password": "X-e2e-2026!!"}).status_code == 403
           and ra.get("/api/tb/org/departments/pathology/doctors").status_code == 403)

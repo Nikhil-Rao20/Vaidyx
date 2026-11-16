@@ -49,6 +49,7 @@ function mockAnswer(method: string, p: string, role: fx.Role, headers: Record<st
   if (method !== "GET") {
     if (p === "/api/auth/login") return ok({ ok: true });
     // Admin consoles (docs/admin-console/DESIGN.md 5.3)
+    if (p === "/api/tb/platform/acting") { const h = fx.platformHospitals.hospitals.find((x) => x.id === body.hospital); return ok({ ok: true, acting_hospital: method === "DELETE" || !h ? null : { id: h.id, name: h.name, status: h.status } }); }
     if (p === "/api/tb/platform/hospitals") return ok(fx.newHospitalResult(String(body.name || "New hospital")));
     if (/^\/api\/tb\/platform\/hospitals\/[^/]+\/admins$/.test(p)) return ok({ username: String(body.email || "new.admin@example.in"), created: true, password_once: "Mock-Admin-Pass-2W5", mailto: fx.accountMailto(String(body.email || "new.admin@example.in")) });
     if (/^\/api\/tb\/platform\/logins\/[^/]+\/reset-password$/.test(p)) return ok(fx.platformReset);

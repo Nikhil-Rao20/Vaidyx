@@ -201,7 +201,7 @@ def send(case_id: str, action_id: str, user: str, roles: dict | None = None, mes
         raise RequestError("This request is closed.", 409)
     to = _to(a)
     if not to["department"] and not to["role"]:
-        raise RequestError(f"No department of the hospital matches \"{a.get('department')}\": ask the root admin to route this record.", 409)
+        raise RequestError(f"No department of the hospital matches \"{a.get('department')}\": ask the hospital admin to route this record.", 409)
     due = _check_due(due) or (a.get("due") if a.get("status") in OPEN and a.get("due") else "") or proposed_due(a)
     text = str(message or "").strip()[:MAX_MESSAGE] or body(case, a, due, to)
     sig = _signature(user, roles)  # the real sender's line is always the last line, whatever the text says (review M2)

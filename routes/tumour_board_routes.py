@@ -170,18 +170,43 @@ def _vaidyx_admin(request, u) -> bool:
         return False
 
 
+_ACTING_EXEMPT = _re.compile(r"^/api/tb/(platform(/.*)?|me)$")  # the Vaidyx console and the session still load with a stale X-TB-Hospital
+ACTING_UNKNOWN = "That hospital does not exist (any more). Choose another in the Vaidyx console."
+
+
 def _enter_hospital(request):
     """Make the hospital of this request the current one (config.set_hospital, never reset: a streamed answer runs after the handler
     returns). The login's hospital from the registry; a Vaidyx admin may name another existing one in X-TB-Hospital. No login (single-user
-    mode, public routes): "default" only, so a second hospital always needs sign-in. A login of a suspended hospital: a 403 response."""
+    mode, public routes): "default" only, so a second hospital always needs sign-in. A login of a suspended hospital: a 403 response.
+
+    A Vaidyx admin names the hospital it acts in with the X-TB-Hospital header (fetch) or, for what the browser loads without fetch
+    (links, images, the image viewer, event streams), the tb_acting_hospital cookie (POST /platform/acting); the header wins. One that
+    does not exist: 404 hospital_unknown (never a silent fall-back to another
+    hospital), except on /platform/* and /me, which then answer for the admin's own hospital so the console can choose again. The first
+    request of a session with a new acting hospital is recorded as `acting_in` in the platform audit (platform_admin.note_acting)."""
     from tumour_board import hospitals
     u = get_current_user(request)
-    hid, code = hospitals.resolve(u, vaidyx_admin=_vaidyx_admin(request, u), requested=request.headers.get(HOSPITAL_HEADER))
+    vx = _vaidyx_admin(request, u)
+    want = hospitals.acting_request(vx, request.headers.get(HOSPITAL_HEADER), request.cookies.get(hospitals.ACTING_COOKIE))
+    if want and not hospitals.known(want):
+        if not _ACTING_EXEMPT.match(request.url.path):
+            config.set_hospital(config.DEFAULT_HOSPITAL)
+            return JSONResponse({"detail": {"message": ACTING_UNKNOWN, "code": "hospital_unknown"}}, status_code=404)
+        want = ""
+    hid, code = hospitals.resolve(u, vaidyx_admin=vx, requested=want or None)
     if code:
         config.set_hospital(config.DEFAULT_HOSPITAL)
         return JSONResponse({"detail": {"message": _HOSPITAL_REFUSALS[code], "code": code}}, status_code=403)
     config.set_hospital(hid)
     request.state.tb_hospital = hid
+    request.state.tb_acting = hid if (vx and want) else None
+    if vx:
+        try:
+            from tumour_board import platform_admin
+            tok = request.cookies.get(_SESSION_COOKIE)
+            platform_admin.note_acting(_common._token_key(tok) if tok else u, u, want or None)
+        except Exception as e:  # the audit line must never block the request
+            log.warning("tumour board: acting_in not recorded (%s)", e.__class__.__name__)
     return None
 
 
@@ -221,7 +246,7 @@ class _ModelErrorRoute(APIRoute):
                 if u:
                     rl = _roles(request)
                     if rl.get("disabled"):
-                        return JSONResponse({"detail": "Your Tumour Board access is disabled. Ask your department admin or the root admin."}, status_code=403)
+                        return JSONResponse({"detail": "Your Tumour Board access is disabled. Ask your department admin or the hospital admin."}, status_code=403)
                     mgr = getattr(request.app.state, "auth_manager", None)
                     if (mgr is not None and callable(getattr(mgr, "must_change_password", None)) and mgr.must_change_password(u)
                             and not _PASSWORD_FIRST_OK.match(request.url.path)):  # a first or reset password works only to choose a new one
@@ -302,9 +327,29 @@ def _scope(request):
 def _need_known(r):
     """Model calls and re-checks are for users the hospital set-up knows (a department member, head, coordinator or admin)."""
     if r.get("disabled"):
-        raise HTTPException(403, "Your Tumour Board access is disabled. Ask your department admin or the root admin.")
+        raise HTTPException(403, "Your Tumour Board access is disabled. Ask your department admin or the hospital admin.")
     if not (r.get("admin") or r.get("known")):
         raise HTTPException(403, "Your account is not placed in any department yet. Ask a Tumour Board admin.")
+
+
+def _hospital_logins(mgr, rl) -> list:
+    """The login system's accounts that belong to the current hospital (admin consoles D3: hospitals.hospital_of), for the account lists
+    of /org and /org/accounts. Vaidyx admins (the server administrators) are listed only to a Vaidyx admin (or single-user mode)."""
+    from tumour_board import hospitals
+    if mgr is None:
+        return []
+    cur = config.hospital_id()
+    see_vx = bool(rl.get("vaidyx_admin")) or (bool(rl.get("admin")) and not rl.get("user"))
+    out = []
+    for x in mgr.list_users():
+        u = x.get("username")
+        if x.get("is_admin"):
+            if see_vx:
+                out.append(x)
+            continue
+        if hospitals.hospital_of(u) == cur:
+            out.append(x)
+    return out
 
 
 def _auth_manager(request):
@@ -533,7 +578,8 @@ def _include_nik_routers(r):
     and skipped so one broken area never takes the whole API down."""
     import importlib
     for name in ("me", "cases_list", "team", "patients", "setup", "slots", "steps", "staging", "chats", "helpers", "published", "meetings", "live", "video", "push", "deck", "meeting_pdf", "case_summary", "audio", "similar",
-                 "messages", "messages_ws", "directory", "meeting_notes", "pubmed"):  # Phase 8: messages, their socket, the people directory; meetings-v2 5.1 / 5.3: the recorder and the notes; Ask PubMed
+                 "messages", "messages_ws", "directory", "meeting_notes", "pubmed",  # Phase 8: messages, their socket, the people directory; meetings-v2 5.1 / 5.3: the recorder and the notes; Ask PubMed
+                 "platform", "hospital_admin"):  # admin consoles (16 Nov 2026): the Vaidyx console and the Hospital console
         try:
             mod = importlib.import_module(f"tumour_board.api.{name}")
         except ModuleNotFoundError as e:
@@ -741,7 +787,7 @@ def setup_tumour_board_routes():
         """The hospital, its departments and the caller's own roles. The user map and the Vaidyx account list are returned to admins only."""
         rl = _roles(request)
         if rl.get("disabled"):
-            raise HTTPException(403, "Your Tumour Board access is disabled. Ask your department admin or the root admin.")
+            raise HTTPException(403, "Your Tumour Board access is disabled. Ask your department admin or the hospital admin.")
         o = org.load()
         out = {"hospital": o["hospital"], "departments": o["departments"], "me": rl, "my_departments": org.my_departments(rl),
                "inbox_departments": org.visible_departments_for_inbox(rl),  # whose department inbox this user may open (V1 item 4.4)
@@ -752,7 +798,7 @@ def setup_tumour_board_routes():
             mgr = getattr(request.app.state, "auth_manager", None)
             out["users"], out["admins"], out["routes"] = o["users"], o["admins"], o["routes"]
             try:
-                out["vaidyx_users"] = [{"username": x["username"], "is_admin": bool(x.get("is_admin"))} for x in mgr.list_users()] if mgr else []
+                out["vaidyx_users"] = [{"username": x["username"], "is_admin": bool(x.get("is_admin"))} for x in _hospital_logins(mgr, rl)]
             except Exception:
                 out["vaidyx_users"] = []
         return out
@@ -763,7 +809,7 @@ def setup_tumour_board_routes():
         admin, root admin) with what each needs first; nothing a role may not open elsewhere."""
         rl = _roles(request)
         if rl.get("disabled"):
-            raise HTTPException(403, "Your Tumour Board access is disabled. Ask your department admin or the root admin.")
+            raise HTTPException(403, "Your Tumour Board access is disabled. Ask your department admin or the hospital admin.")
         return home.build(rl, mgr=getattr(request.app.state, "auth_manager", None))
 
     @r.post("/org/setup")
@@ -843,7 +889,7 @@ def setup_tumour_board_routes():
             rows.append({"username": u, **v, "root_admin": u in o["admins"], "account": accounts.account_exists(mgr, u) if mgr else None,
                          "vaidyx_admin": accounts.is_vaidyx_admin(mgr, u)})
         try:
-            vaidyx = [{"username": x["username"], "is_admin": bool(x.get("is_admin")), "placed": x["username"] in o["users"]} for x in mgr.list_users()] if mgr else []
+            vaidyx = [{"username": x["username"], "is_admin": bool(x.get("is_admin")), "placed": x["username"] in o["users"]} for x in _hospital_logins(mgr, rl)]
         except Exception:
             vaidyx = []
         return {"accounts": rows, "vaidyx_users": vaidyx, "admins": o["admins"], "reset_note": accounts.RESET_NOTE}

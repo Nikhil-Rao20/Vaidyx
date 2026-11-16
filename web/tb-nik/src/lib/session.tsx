@@ -5,7 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { api, AUTH, TB, onUnauthenticated, onMustChangePassword, onTwoFactorRequired, ApiError } from "@/lib/api";
 import { unsubscribePush } from "@/lib/push";
 import { applyTheme, applyTextSize, type Theme, type TextSize } from "@/lib/appearance";
-import { clearActing, setActing, setVaidyxAdmin, type ActingHospital } from "@/lib/acting";
+import { actingHospital, clearActing, setActing, setVaidyxAdmin, type ActingHospital } from "@/lib/acting";
 
 export type RoleKind = "member" | "head" | "resident";
 
@@ -138,15 +138,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(async () => {
     // Best effort: this device stops receiving the person's push notifications (needs the session, so before the logout).
     try { await unsubscribePush(); } catch { /* no subscription, or the browser refused */ }
+    // A Vaidyx admin: the acting-hospital cookie goes too (needs the session, so before the logout).
+    if (isVaidyxAdmin(me) || actingHospital()) { try { await api.del(`${TB}/platform/acting`); } catch { /* not a Vaidyx admin, or already gone */ } }
     try { await api.post(`${AUTH}/logout`); } catch { /* the cookie is gone either way */ }
     setMe(null);
     clearActing();  // the next person at this tab starts in no hospital
     queryClient.clear();  // no Case File, list or meeting of this person stays in memory for the next one
     forgetLocal();
     try { sessionStorage.setItem(OUT_FLAG, "1"); } catch { /* no storage */ }   // the sign-in page plays the entrance once
-  }, [queryClient]);
+  }, [queryClient, me]);
 
   const setActingHospital = useCallback(async (h: ActingHospital | null) => {
+    // The server keeps the choice in a cookie too (POST /platform/acting, audited; DELETE on leaving): links, image previews and the
+    // image viewer load without fetch and cannot carry the X-TB-Hospital header. Best effort: every fetch names the hospital anyway.
+    try { if (h) await api.post(`${TB}/platform/acting`, { hospital: h.id }); else await api.del(`${TB}/platform/acting`); } catch { /* the header still names it */ }
     setActing(h);
     // Nothing of the last hospital may stay on screen: drop every cached answer (active lists show their skeleton and reload).
     await queryClient.cancelQueries();

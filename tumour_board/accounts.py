@@ -32,7 +32,7 @@ USERNAME = re.compile(r"^[a-z0-9][a-z0-9._-]{1,62}$")
 EMAIL = re.compile(r"^[a-z0-9][a-z0-9._+\-]{0,63}@[a-z0-9][a-z0-9\-]*(\.[a-z0-9\-]+)+$")
 LOGIN_URL = "/tb-nik"
 MAIL_SUBJECT = "Your Vaidyx-TB login"
-RESET_NOTE = ("Password reset: a department admin (for the people of their departments) or the root admin (for anyone) resets a password "
+RESET_NOTE = ("Password reset: a department admin (for the people of their departments) or the hospital admin (for anyone) resets a password "
               "from the People screen; the person gets a mail draft with a new first password and must choose their own at the next sign-in. "
               "A Vaidyx admin account (the server administrator) is never reset here: the Vaidyx admin manages it in the main app.")
 _ALPHABET = "".join(c for c in string.ascii_letters + string.digits if c not in "0OIl1")
@@ -203,7 +203,7 @@ def department_doctors(dept, mgr=None) -> list[dict]:
     return out
 
 
-SEPARATE_LOGINS = "Clinical roles and the root admin role stay on separate logins"
+SEPARATE_LOGINS = "Clinical roles and the hospital admin role stay on separate logins"
 
 
 def _clinical(user: dict) -> bool:
@@ -248,7 +248,7 @@ def place_doctor(by: str, dept, username: str, role: str = "member", display_nam
     if not created and caller is not None:
         reasons = _outside_reach(o, caller, u, did)
         if reasons:
-            raise AccountError(409, f"'{u}' is already {', '.join(reasons)}: the root admin places this login.")
+            raise AccountError(409, f"'{u}' is already {', '.join(reasons)}: the hospital admin places this login.")
     user = o["users"].get(u) or _blank_user()
     user["departments"] = {**(user.get("departments") or {}), did: role}
     if display_name is not None and str(display_name).strip() and (created or not user.get("display_name")):
@@ -276,7 +276,7 @@ def _outside_reach(o: dict, caller: dict, u: str, did: str) -> list[str]:
     if user.get("admin_of"):
         reasons.append("department admin of " + ", ".join(org.department_name(d) for d in user["admin_of"]))
     if u in (o.get("admins") or []):
-        reasons.append("root admin")
+        reasons.append("hospital admin")
     return reasons
 
 
@@ -307,9 +307,9 @@ def update_doctor(by: str, caller: dict, dept, username: str, role: str | None =
             raise AccountError(400, "disabled must be true or false.")
         reasons = _outside_reach(o, caller, u, did)
         if reasons:
-            raise AccountError(409, f"'{u}' is also {', '.join(reasons)}: the root admin decides whether to {'disable' if disabled else 'enable'} this login.")
+            raise AccountError(409, f"'{u}' is also {', '.join(reasons)}: the hospital admin decides whether to {'disable' if disabled else 'enable'} this login.")
         if disabled and u in (o.get("admins") or []):
-            raise AccountError(409, f"'{u}' is a root admin; remove the root admin role first.")
+            raise AccountError(409, f"'{u}' is a hospital admin; remove the hospital admin role first.")
         user["disabled"] = disabled
     o["users"][u] = user
     saved = org.save(o, by)
@@ -354,7 +354,7 @@ def create_account(mgr, by: str, username: str, password: str | None = None, dis
     adm = [_dept(d) for d in (admin_of or [])]
     ed = _check_end_date(end_date)
     if not (coordinator or root_admin or depts or adm or auditor or outside_expert):
-        raise AccountError(400, "Give the login at least one role: coordinator, root admin, department admin, doctor, resident, auditor or outside expert.")
+        raise AccountError(400, "Give the login at least one role: coordinator, hospital admin, department admin, doctor, resident, auditor or outside expert.")
     o0 = org.load()  # checked before any login is created (no orphan account on a refusal)
     u0 = clean_username(username)
     cur = (o0.get("users") or {}).get(u0) or {}
@@ -389,11 +389,12 @@ def create_account(mgr, by: str, username: str, password: str | None = None, dis
     return out
 
 
-def reset_password(mgr, by: str, caller: dict, username: str, email: str = "", hospital: str = "", url: str = LOGIN_URL) -> dict:
+def reset_password(mgr, by: str, caller: dict, username: str, email: str = "", hospital: str = "", url: str = LOGIN_URL, reveal: bool = False) -> dict:
     """A new first password for an existing login (must_change set, every session of that login revoked by the login system): the
     department admin for the people placed in (or administering) their departments only, the root admin and the Vaidyx admin for anyone
     placed in the Tumour Board. Never for a Vaidyx admin account. Audited (password_reset) without the password, which travels in the
-    mailto: link only."""
+    mailto: link only. `reveal` (the Vaidyx console only, D10): the answer also carries the new password as `password_once`, for the
+    console to show once with Copy; it is still never logged or audited."""
     if mgr is None:
         raise AccountError(503, "The Vaidyx login system is not available; accounts cannot be managed right now.")
     u = clean_username(username)
@@ -413,7 +414,7 @@ def reset_password(mgr, by: str, caller: dict, username: str, email: str = "", h
             raise AccountError(403, "You reset the passwords of the people placed in the departments you administer.")
         reasons = _outside_reach(o, caller, u, next(iter(placed & mine)))
         if reasons:
-            raise AccountError(409, f"'{u}' is also {', '.join(reasons)}: the root admin resets this login.")
+            raise AccountError(409, f"'{u}' is also {', '.join(reasons)}: the hospital admin resets this login.")
     fn = getattr(mgr, "reset_password", None)
     if not callable(fn):
         raise AccountError(503, "The Vaidyx login system cannot reset passwords; ask the Vaidyx admin.")
@@ -426,7 +427,10 @@ def reset_password(mgr, by: str, caller: dict, username: str, email: str = "", h
         raise AccountError(500, f"The password of '{u}' could not be reset; ask the Vaidyx admin.")
     org.audit("password_reset", by, username=u, must_change=True)
     to = str(email or "").strip().lower() or (u if is_email(u) else "")
-    return {"username": u, "mailto": mailto_for(to, u, pw, url=url or LOGIN_URL, hospital=hospital), "must_change_password": True, "email": to}
+    out = {"username": u, "mailto": mailto_for(to, u, pw, url=url or LOGIN_URL, hospital=hospital), "must_change_password": True, "email": to}
+    if reveal:
+        out["password_once"] = pw
+    return out
 
 
 UPDATABLE = ("disabled", "end_date", "coordinator", "auditor", "outside_expert", "root_admin", "admin_of", "departments", "display_name")
@@ -437,7 +441,7 @@ def update_account(mgr, by: str, caller: dict, username: str, fields: dict) -> d
     outside_expert, root_admin, admin_of (replaces), departments (replaces: {dept: doctor | head | resident}), display_name. Never a
     Vaidyx admin account; a root admin cannot disable itself or drop the last root admin. Audited by org.save."""
     if not ((caller or {}).get("admin") or (caller or {}).get("root_admin")):
-        raise AccountError(403, "Only the root admin changes the roles of a login.")
+        raise AccountError(403, "Only the hospital admin changes the roles of a login.")
     u = clean_username(username)
     if mgr is not None and is_vaidyx_admin(mgr, u):
         raise AccountError(409, f"'{u}' is a Vaidyx admin (server administrator) and is not managed through the Tumour Board screens.")
@@ -477,10 +481,10 @@ def update_account(mgr, by: str, caller: dict, username: str, fields: dict) -> d
             o["admins"].append(u)
         elif not fields["root_admin"] and u in o["admins"]:
             if len(o["admins"]) == 1:
-                raise AccountError(409, "This is the last root admin; name another one first.")
+                raise AccountError(409, "This is the last hospital admin; name another one first.")
             o["admins"].remove(u)
     if user.get("disabled") and u in o["admins"]:
-        raise AccountError(409, f"'{u}' is a root admin; remove the root admin role before disabling the login.")
+        raise AccountError(409, f"'{u}' is a hospital admin; remove the hospital admin role before disabling the login.")
     o["users"][u] = user
     check_separate(o, u)
     saved = org.save(o, by)

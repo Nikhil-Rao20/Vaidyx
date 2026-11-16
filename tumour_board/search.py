@@ -133,7 +133,8 @@ class CaseIndex:
         self.avgdl = sum(map(len, self.tok)) / max(len(self.tok), 1)
         self.emb = None
         if self.chunks:
-            cache = config.DATA_ROOT / "embed_cache" / "chunks"  # vectors of this hospital's Case File text: its own folder; cache.mkdir(parents=True, exist_ok=True)
+            cache = config.DATA_ROOT / "embed_cache" / "chunks"  # vectors of this hospital's Case File text: its own folder
+            cache.mkdir(parents=True, exist_ok=True)
             vecs, todo = [None] * len(self.chunks), []
             for i, ch in enumerate(self.chunks):
                 h = hashlib.sha1((EMBED_MODEL + ch["text"]).encode()).hexdigest()

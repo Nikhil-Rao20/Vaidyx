@@ -127,7 +127,7 @@ def test_department_admin_cannot_disable_beyond_its_reach(setup):
     # the root admin may; a root admin itself is disabled only after losing that role
     assert accounts.update_doctor("tbroot", org.roles("tbroot"), "radiology", "meena", disabled=True)["disabled"] is True
     o = copy.deepcopy(org.load()); o["admins"].append("anil"); org.save(o, by="tbroot")
-    with pytest.raises(AccountError, match="root admin"):
+    with pytest.raises(AccountError, match="hospital admin"):
         accounts.update_doctor("tbroot", org.roles("tbroot"), "radiology", "anil", disabled=True)
 
 
@@ -191,7 +191,7 @@ def test_no_em_dashes_in_module():
 def test_department_admin_places_an_existing_account_only_within_reach(setup):
     """Review M4: an existing login placed elsewhere (the coordinator, another department's doctor, a root admin) is the root admin's to place."""
     me = org.roles("deepak")
-    with pytest.raises(AccountError, match="root admin") as e:
+    with pytest.raises(AccountError, match="hospital admin") as e:
         accounts.place_doctor("deepak", "radiology", "anil", role="head", caller=me, created=False)  # the coordinator
     assert e.value.status == 409
     with pytest.raises(AccountError, match="doctor of Pathology"):

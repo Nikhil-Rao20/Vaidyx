@@ -70,7 +70,7 @@ def _summaries(o: dict, mgr) -> dict:
     his = h.get("his_test") if isinstance(h.get("his_test"), dict) else {}
     return {"hospital": (f"{h.get('name')} ({h.get('level')}" + (", PM-JAY" if h.get("pmjay_empanelled") else "") + ")") if h.get("name") else "not named yet",
             "departments": f"{sum(1 for d in enabled if d.get('group') == 'treating')} treating, {sum(1 for d in enabled if d.get('group') == 'supporting')} supporting; contacts for {contacts}",
-            "people": f"{len(users)} login(s): {sum(1 for v in users.values() if v.get('departments'))} placed, {sum(1 for v in users.values() if v.get('coordinator'))} coordinator(s), {len(o.get('admins') or [])} root admin(s)",
+            "people": f"{len(users)} login(s): {sum(1 for v in users.values() if v.get('departments'))} placed, {sum(1 for v in users.values() if v.get('coordinator'))} coordinator(s), {len(o.get('admins') or [])} hospital admin(s)",
             "his": ("answers" if his.get("ok") else ("failed: " + str(his.get("error") or ""))[:120]) if his else "not tested",
             "board": f"{len(h.get('board_heads') or [])} head(s), {sum(1 for v in users.values() if v.get('coordinator'))} coordinator(s)"}
 
@@ -362,7 +362,7 @@ async def setup_board(request: Request):
             fail(400, f"Not placed in the Tumour Board yet: {', '.join(unknown)}. Create the login first (People).", "bad_value")
         mixed = sorted(u for u in want if u in (o.get("admins") or []))
         if mixed:  # security review #5
-            fail(409, f"{accounts.SEPARATE_LOGINS}: {', '.join(mixed)} is a root admin. Choose another login as MDT Coordinator.", "separate_logins")
+            fail(409, f"{accounts.SEPARATE_LOGINS}: {', '.join(mixed)} is a hospital admin. Choose another login as MDT Coordinator.", "separate_logins")
         for u, v in o["users"].items():
             if isinstance(v, dict):
                 v["coordinator"] = u in want
@@ -406,7 +406,7 @@ async def reset_password(username: str, request: Request):
     root admin for anyone."""
     r = roles(request)
     if not (org.can(r, "manage_org") or r.get("admin_of")):
-        fail(403, "Only a department admin or the root admin resets a password.", "forbidden")
+        fail(403, "Only a department admin or the hospital admin resets a password.", "forbidden")
     mgr = auth_manager(request)
     b = await body(request) if (await request.body()) else {}
     out = _call(accounts.reset_password, mgr, r["user"], r, username, email=str(b.get("email") or ""), hospital=org.hospital().get("name") or "", url=login_url(request))

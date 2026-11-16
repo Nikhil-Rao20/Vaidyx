@@ -5,7 +5,8 @@ Security review #16: the session and the roles are checked again on every client
 idle or removed user loses the socket), at most MAX_SOCKETS_PER_USER sockets per user per meeting, a client asks for the state at most
 once per STATE_EVERY seconds, and every send has a timeout (a client that does not read is dropped).
 Hospitals (admin consoles, 16 Nov 2026): right after the login is known the socket enters the login's hospital (enter_hospital, the rule
-of the HTTP routes: a Vaidyx admin may name another hospital in the X-TB-Hospital header or the `hospital` query parameter; a login of a
+of the HTTP routes: a Vaidyx admin may name another hospital in the X-TB-Hospital header, the `hospital` query parameter or the
+tb_acting_hospital cookie; a login of a
 suspended hospital is refused), so the meeting, the roles and the hub room are that hospital's."""
 import asyncio, logging, time
 
@@ -20,12 +21,16 @@ POLICY = 1008  # the close code for a refused socket (policy violation)
 
 
 def _socket_hospital(websocket: WebSocket, user: str):
-    """(hospital id, refusal code or None) for this socket's login (hospitals.resolve)."""
-    from .. import hospitals
+    """(hospital id, refusal code or None) for this socket's login (hospitals.resolve); a Vaidyx admin's acting hospital from the header,
+    the `hospital` query parameter or the tb_acting_hospital cookie (in that order); one that does not exist refuses the socket."""
+    from .. import config, hospitals
     mgr = getattr(websocket.app.state, "auth_manager", None)
     admin = bool(mgr is not None and callable(getattr(mgr, "is_admin", None)) and mgr.is_admin(user))
-    want = websocket.headers.get("x-tb-hospital") or websocket.query_params.get("hospital")
-    return hospitals.resolve(user, vaidyx_admin=admin, requested=want)
+    want = hospitals.acting_request(admin, websocket.headers.get("x-tb-hospital") or websocket.query_params.get("hospital"),
+                                    (getattr(websocket, "cookies", None) or {}).get(hospitals.ACTING_COOKIE))
+    if want and not hospitals.known(want):
+        return config.DEFAULT_HOSPITAL, "hospital_unknown"  # never a silent fall-back to another hospital
+    return hospitals.resolve(user, vaidyx_admin=admin, requested=want or None)
 
 
 def enter_hospital(websocket: WebSocket, user: str) -> bool:

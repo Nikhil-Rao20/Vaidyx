@@ -121,16 +121,34 @@ async def me(request: Request):
     prof = profiles.get(u)
     doctor = profiles.is_doctor(r)
     h = org.hospital()
+    cur = _current_hospital()
     return {"user": u, "display_name": prof.get("display_name") or org.display_name(u), "roles": public_roles(r), "primary_role": primary_role(r),
             "must_change_password": _must_change(mgr, u), "profile": {k: prof.get(k) for k in profiles.FIELDS},
             "setup_needed": not profiles.setup_complete(u, doctor), "counts": counts(r),
-            "hospital": {"name": h.get("name") or "", "level": h.get("level") or "", "pmjay_empanelled": bool(h.get("pmjay_empanelled", True))},
+            "hospital": {"id": cur["id"], "name": h.get("name") or "", "status": cur["status"], "level": h.get("level") or "",
+                         "pmjay_empanelled": bool(h.get("pmjay_empanelled", True))},
+            "platform_admin": bool(r.get("vaidyx_admin")), "acting_hospital": _acting(request, r, cur, h),
             "features": features(), "departments": [{"id": d["id"], "name": d["name"], "group": d.get("group"), "role": d.get("role")} for d in org.my_departments(r)]
             if not r.get("admin") else [],
             "break_glass": break_glass_mine(r), "messages": _may_message(r),
             # guest reviewers (5 Nov 2026): private Case Files, two-factor sign-in first; the site's upload rule
             "real_data": bool(r.get("real_data")), "two_factor_required": _two_factor_required(r, mgr, u),
             "upload_policy": "private_only" if os.getenv("TB_UPLOAD_POLICY", "all").strip().lower() == "private_only" else "all"}
+
+
+def _current_hospital() -> dict:
+    """{id, name, status} of the hospital of this request (admin consoles 5.3); the registry's name, the set-up's name wins in /me."""
+    from tumour_board import hospitals
+    hid = config.hospital_id()
+    row = hospitals.get(hid) or {}
+    return {"id": hid, "name": row.get("name") or "", "status": row.get("status") or "active"}
+
+
+def _acting(request: Request, r: dict, cur: dict, h: dict):
+    """For a Vaidyx admin whose request named an existing hospital in X-TB-Hospital (accepted by the request hook): {id, name, status}."""
+    if not r.get("vaidyx_admin") or not getattr(request.state, "tb_acting", None):
+        return None
+    return {"id": cur["id"], "name": h.get("name") or cur["name"], "status": cur["status"]}
 
 
 def _two_factor_required(r: dict, mgr, u: str) -> bool:

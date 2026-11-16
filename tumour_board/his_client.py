@@ -1103,14 +1103,18 @@ def settings_path() -> Path:
 
 
 def _default_settings() -> dict:
+    """The defaults: the demo's mock hospital for the hospital 'default' (as before). Any other hospital (admin consoles, 16 Nov 2026)
+    starts with NO hospital system and no PACS until its own his.json names one, so it can never reach another hospital's patients."""
+    if config.hospital_id() != config.DEFAULT_HOSPITAL:
+        return {"kind": "none", "label": "", "url": "", "token": "", "token_file": "", "connector": "", "enabled": False, "pacs_url": ""}
     return {"kind": "fhir", "label": DEFAULT_LABEL, "url": DEFAULT_URL, "token": "",
             "token_file": str(config.REPO / "data" / "his_mock" / "token"), "connector": "", "enabled": True,
             "pacs_url": DEFAULT_PACS_URL}
 
 
 def settings() -> dict:
-    """The HIS settings: <DATA_ROOT>/his.json over the defaults (the demo's mock hospital), then TB_HIS_URL / TB_HIS_TOKEN /
-    TB_HIS_TOKEN_FILE. Holds the token: never return this to the UI (public())."""
+    """The HIS settings: <DATA_ROOT>/his.json over the defaults (the demo's mock hospital for 'default'; nothing for any other hospital),
+    then, for 'default' only, TB_HIS_URL / TB_HIS_TOKEN / TB_HIS_TOKEN_FILE. Holds the token: never return this to the UI (public())."""
     d = _default_settings()
     p = settings_path()
     if p.exists():
@@ -1122,6 +1126,9 @@ def settings() -> dict:
                     d["adapter"] = saved["adapter"]
         except (OSError, ValueError):
             pass
+    if config.hospital_id() != config.DEFAULT_HOSPITAL:  # the TB_HIS_* environment names the default hospital's system only
+        d["enabled"] = bool(d.get("enabled"))
+        return d
     if os.getenv("TB_HIS_URL"):
         d["url"] = os.environ["TB_HIS_URL"].strip()
     if os.getenv("TB_HIS_TOKEN"):

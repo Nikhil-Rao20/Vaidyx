@@ -106,7 +106,9 @@ def test_the_header_counts_only_for_a_vaidyx_admin(tc, lotus):
     assert get(tc, "admin", "/org").json()["hospital"]["name"] == ""
     assert get(tc, "admin", "/org", **{"X-TB-Hospital": lotus}).json()["hospital"]["name"] == "Lotus Cancer Centre"
     assert set(get(tc, "admin", "/org", **{"X-TB-Hospital": lotus}).json()["users"]) == {"bina"}
-    assert get(tc, "admin", "/org", **{"X-TB-Hospital": "no-such"}).json()["hospital"]["name"] == ""  # unknown: its own hospital
+    r = get(tc, "admin", "/org", **{"X-TB-Hospital": "no-such"})  # unknown: refused, never a silent fall-back (Phase B)
+    assert r.status_code == 404 and r.json()["detail"] == {"message": "That hospital does not exist (any more). Choose another in the Vaidyx console.",
+                                                          "code": "hospital_unknown"}
 
 
 def test_a_suspended_hospital_is_refused(tc, lotus):

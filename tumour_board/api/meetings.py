@@ -512,5 +512,5 @@ async def meetings_slides(mid: str, cid: str, request: Request):
 async def scheduler_status(request: Request):
     rl = common.roles(request)
     if not (rl.get("admin") or rl.get("root_admin")):
-        common.fail(403, "The scheduler status is for the root admin and the Vaidyx admin.", "forbidden")
+        common.fail(403, "The scheduler status is for the hospital admin and the Vaidyx admin.", "forbidden")
     return scheduler.status()

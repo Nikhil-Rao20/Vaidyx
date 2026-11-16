@@ -188,6 +188,23 @@ def users_of(hid) -> list[str]:
     return sorted(u for u, x in _data()["users"].items() if x == h)
 
 
+ACTING_COOKIE = "tb_acting_hospital"  # set by POST /platform/acting for requests the browser makes without fetch (links, images, iframes)
+
+
+def acting_request(vaidyx_admin: bool, header=None, cookie=None) -> str:
+    """The hospital a Vaidyx admin's request names ("" when none): the X-TB-Hospital header wins, else the tb_acting_hospital cookie.
+    Never anyone else's (always "")."""
+    if not vaidyx_admin:
+        return ""
+    return str(header or "").strip().lower() or str(cookie or "").strip().lower()
+
+
+def known(hid) -> bool:
+    """A well-formed id of a hospital in the registry."""
+    h = str(hid or "")
+    return bool(config.HOSPITAL_ID.match(h)) and exists(h)
+
+
 def resolve(username, vaidyx_admin: bool = False, requested=None) -> tuple[str, str | None]:
     """(hospital id, refusal code or None) for a request of `username`. No login: "default". A Vaidyx admin works in its own hospital or,
     when `requested` names an existing hospital, in that one (any status); anyone else's `requested` is ignored. A login of a suspended

@@ -40,7 +40,10 @@ def is_aadhaar(kind: str, authority: str = "") -> bool:
 
 # ---------------------------------------------------------------------------------------------------- folders
 def folder_roots() -> list:
-    """The folders a hospital-system folder may live in: TB_HIS_FOLDER_ROOTS (comma separated), default <DATA_ROOT>/his_inbox."""
+    """The folders a hospital-system folder may live in: TB_HIS_FOLDER_ROOTS (comma separated), default <DATA_ROOT>/his_inbox. The
+    environment names the default hospital's folders only: any other hospital reads only its own <DATA_ROOT>/his_inbox (16 Nov 2026)."""
+    if config.hospital_id() != config.DEFAULT_HOSPITAL:
+        return [Path(config.DATA_ROOT) / "his_inbox"]
     raw = [x.strip() for x in os.getenv("TB_HIS_FOLDER_ROOTS", "").split(",") if x.strip()]
     return [Path(x) for x in raw if Path(x).is_absolute()] or [Path(config.DATA_ROOT) / "his_inbox"]
 

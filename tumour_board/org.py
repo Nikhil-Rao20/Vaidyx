@@ -1103,7 +1103,7 @@ def require(r: dict, action: str, department: str | None = None) -> None:
     if can(r, action, department):
         return
     if isinstance(r, dict) and r.get("disabled"):
-        raise PermissionError("Your Tumour Board access is disabled. Ask your department admin or the root admin.")
+        raise PermissionError("Your Tumour Board access is disabled. Ask your department admin or the hospital admin.")
     where = f" for {department_name(department_id(department) or department)}" if department else ""
     words = ACTION_WORDS.get(action, f"'{action}'")
     raise PermissionError(f"You do not have permission to {words}{where}. Ask a Tumour Board admin if you need it.")
