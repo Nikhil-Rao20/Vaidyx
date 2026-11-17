@@ -1,10 +1,15 @@
 // Step 1: find the patient in the hospital system (GET /his/lookup). Shows the registration, its encounters, how many
 // reports fall in the window, similar registrations ("link, never merge") and the patient's live Case Files (GET /patient-case-files, night-v3 item 1.1):
 // "Open it" or "Ask to join" for each; another cancer gets its own Case File, linked to these.
-import { useEffect, useState } from "react";
+// One box, two ways (docs/new-case N1): a number and Look up as before, or a name / words with a drop-down (PatientFinder) whose
+// pick runs the same lookup. "Not in the hospital system? Make it by hand" (N5) is always there, small, and the main next step
+// when the lookup finds nothing or the hospital system does not answer.
+// The latest pick wins: a pick (or Look up) while a lookup runs stops that lookup and drops its answer, so the box and the
+// registration shown are always the same patient. The Vaidyx admin does not search patients (admin consoles D5): a plain note instead.
+import { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
-import { AlertTriangle, CheckCircle2, Link2, Search, UserSearch } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { AlertTriangle, CheckCircle2, Link2, PenLine, Search, ShieldAlert, UserSearch } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Field } from "@/components/Field";
 import { ActionButton } from "@/components/ActionButton";
 import { ErrorState } from "@/components/ErrorState";
@@ -14,8 +19,12 @@ import { DateText } from "@/components/DateText";
 import { useAsyncAction } from "@/hooks/useAsyncAction";
 import { api } from "@/lib/api";
 import { EP } from "@/lib/endpoints";
+import { isVaidyxAdmin, useSession } from "@/lib/session";
 import type { HisLookup, HisPatient } from "@/lib/types";
 import { ageSex, formatDate, plural } from "@/lib/format";
+
+/** The server's words (GET /his/find and /his/lookup answer 403 with them): shown before anything is sent. */
+export const NO_ADMIN_SEARCH = "The Vaidyx admin does not search patients; open a Case File through break-glass.";
 
 const MATCH_WORDS: Record<string, string> = { uhid: "UHID", mrn: "UHID", ip: "IP No.", ip_no: "IP No.", op: "OP No.", op_no: "OP No.", abha: "ABHA", abha_address: "ABHA address", name: "Name, age and sex", demographics: "Name, age and sex", pmjay: "PM-JAY id", pmjay_id: "PM-JAY id" };
 
@@ -28,43 +37,93 @@ function matchedOn(m: HisPatient["matched_on"]): string {
 }
 import type { NewCaseForm } from "@/features/newcase/form";
 import { PatientCaseFilesCard, patientKey, usePatientCaseFiles } from "@/features/newcase/PatientCaseFiles";
+import { PatientFinder } from "@/features/newcase/PatientFinder";
 
-export function StepPatient({ form, onChange, autoLookup }: { form: NewCaseForm; onChange: (patch: Partial<NewCaseForm>) => void; autoLookup?: boolean }) {
+/** "Make it by hand": small under the box always; a full button as the next step when nothing is found or the system is down. */
+function ManualLink({ onManual, main }: { onManual?: () => void; main?: boolean }) {
+  if (!onManual) return null;
+  return main ? (
+    <Button type="button" variant="outline" onClick={onManual} data-testid="make-by-hand"><PenLine className="size-4" aria-hidden /> Make it by hand</Button>
+  ) : (
+    <button type="button" onClick={onManual} className="w-fit text-xs font-medium text-primary underline-offset-4 hover:underline">Not in the hospital system? Make it by hand</button>
+  );
+}
+
+export function StepPatient({ form, onChange, autoLookup, onManual }: { form: NewCaseForm; onChange: (patch: Partial<NewCaseForm>) => void; autoLookup?: boolean; onManual?: () => void }) {
   const [text, setText] = useState(form.identifier);
   const [error, setError] = useState<unknown>(null);
-  const lookup = useAsyncAction(async (identifier: string): Promise<HisLookup> => {
+  const { me } = useSession();
+  const vaidyxAdmin = isVaidyxAdmin(me);
+  const latest = useRef("");  // the identifier the person asked for last: an answer for any other is dropped
+  const pending = useRef<string | null>(null);  // asked for while a lookup ran: runs as soon as that one ends
+  const running = useRef<AbortController | null>(null);
+  const lookup = useAsyncAction(async (identifier: string): Promise<HisLookup | null> => {
     setError(null);
+    const ctl = new AbortController();
+    running.current = ctl;
+    const stale = () => ctl.signal.aborted || latest.current !== identifier;
     try {
-      const r = await api.get<HisLookup>(`${EP.hisLookup}?identifier=${encodeURIComponent(identifier)}&months=${form.windowMonths === "all" ? 12 : form.windowMonths}`);
+      const r = await api.get<HisLookup>(`${EP.hisLookup}?identifier=${encodeURIComponent(identifier)}&months=${form.windowMonths === "all" ? 12 : form.windowMonths}`, { signal: ctl.signal });
+      if (stale()) return null;
       onChange({ identifier, lookup: r });
       return r;
     } catch (e) {
+      if (stale()) return null;
       onChange({ identifier, lookup: null });
       setError(e);
       throw e;
     }
   });
-  useEffect(() => { if (autoLookup && form.identifier && !form.lookup) void lookup.run(form.identifier); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  /** Look up `identifier`; while another lookup runs, stop it and run this one next (the latest pick wins). */
+  const start = (identifier: string) => {
+    latest.current = identifier;
+    if (lookup.state === "loading") {
+      pending.current = identifier;
+      running.current?.abort();
+      return;
+    }
+    pending.current = null;
+    void lookup.run(identifier);
+  };
+  useEffect(() => {
+    if (lookup.state === "loading" || !pending.current) return;
+    const next = pending.current;
+    pending.current = null;
+    void lookup.run(next);
+  }, [lookup.state]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (autoLookup && form.identifier && !form.lookup && !vaidyxAdmin) start(form.identifier); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const files = usePatientCaseFiles(patientKey(form));
   const p = form.lookup?.patient;
 
   return (
     <div className="grid gap-5">
-      <form className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-start" onSubmit={(e) => { e.preventDefault(); if (text.trim()) void lookup.run(text.trim()); }}>
-        <Field id="identifier" label="UHID, IP No., OP No. or ABHA" hint="As printed on the hospital record. A name with age and sex also works when the hospital system allows it.">
-          <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="e.g. VXH/2026/000123" className="mono" autoFocus autoComplete="off" />
-        </Field>
-        <ActionButton type="submit" className="sm:mt-7" state={lookup.state} doneText="Found" loadingText="Looking up" disabled={!text.trim()} icon={<Search className="size-4" aria-hidden />}>Look up</ActionButton>
-      </form>
+      <div className="grid gap-2">
+        <form className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-start" onSubmit={(e) => { e.preventDefault(); if (text.trim() && !vaidyxAdmin) start(text.trim()); }}>
+          <Field id="identifier" label="UHID, IP No., OP No. or ABHA, or the patient's name" hint="A number as printed on the hospital record, then Look up. Or type the name or words from a report and pick the patient from the list.">
+            <PatientFinder value={text} onValueChange={setText} placeholder="e.g. VXH/2026/000123 or Lakshmi" onManual={onManual}
+                           off={vaidyxAdmin ? NO_ADMIN_SEARCH : undefined} onPick={(row) => { setText(row.uhid); start(row.uhid); }} />
+          </Field>
+          <ActionButton type="submit" className="sm:mt-7" state={lookup.state} doneText="Found" loadingText="Looking up" disabled={!text.trim() || vaidyxAdmin} icon={<Search className="size-4" aria-hidden />}>Look up</ActionButton>
+        </form>
+        <ManualLink onManual={onManual} />
+      </div>
 
-      {lookup.state === "loading" ? (
+      {vaidyxAdmin ? (
+        <div className="flex items-center gap-3 rounded-md status-warn p-4 text-sm" role="status" data-testid="no-admin-search">
+          <ShieldAlert className="size-5 shrink-0" aria-hidden /> {NO_ADMIN_SEARCH}
+        </div>
+      ) : lookup.state === "loading" ? (
         <div className="surface-inner space-y-2 p-4" aria-busy="true" aria-label="Looking up the patient">
           <div className="skeleton-line h-5 w-1/2" /><div className="skeleton-line h-4 w-2/3" /><div className="skeleton-line h-4 w-1/3" />
         </div>
       ) : error ? (
-        <ErrorState compact error={error} what="the hospital system lookup" onRetry={() => void lookup.run(text.trim() || form.identifier)} />
+        <div className="grid gap-3">
+          <ErrorState compact error={error} what="the hospital system lookup" onRetry={() => start(text.trim() || form.identifier)} />
+          {onManual ? <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground"><span>The hospital system cannot be reached now?</span><ManualLink onManual={onManual} main /></div> : null}
+        </div>
       ) : form.lookup && !form.lookup.found ? (
-        <EmptyState compact kind="search" title={`Nothing found for ${form.lookup.identifier}`} text="Check the number with the registration desk. A temporary registration may carry a different number." />
+        <EmptyState compact kind="search" title={`Nothing found for ${form.lookup.identifier}`} text="Check the number with the registration desk. A temporary registration may carry a different number. Not in the hospital system? Make the Case File by hand."
+                    action={onManual ? <ManualLink onManual={onManual} main /> : undefined} />
       ) : form.lookup && p ? (
         <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="grid gap-4">
           <section className="surface-inner p-4" aria-label="Registration found">
@@ -121,7 +180,7 @@ export function StepPatient({ form, onChange, autoLookup }: { form: NewCaseForm;
         </motion.div>
       ) : (
         <div className="flex items-center gap-3 rounded-md bg-muted p-4 text-sm text-muted-foreground">
-          <UserSearch className="size-5 shrink-0" aria-hidden /> Type the number and press Look up. Nothing is created until the last step.
+          <UserSearch className="size-5 shrink-0" aria-hidden /> Type the number and press Look up, or type the name and pick the patient from the list. Nothing is created until the last step.
         </div>
       )}
     </div>

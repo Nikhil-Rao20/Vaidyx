@@ -5,6 +5,8 @@
 // ?identifier=<UHID> (from the gift box or the search bar) looks the patient up at once.
 // One Case File per patient and cancer (night-v3 item 1.1): when the chosen cancer already has a live Case File of this patient
 // (GET /patient-case-files, or the server's 409 duplicate_case_file), the Cancer and Logistics steps say whose it is and Create stays off.
+// Not in the hospital system, or it cannot be reached (docs/new-case N5): a hospital doctor makes the Case File by hand (StepStaffManual,
+// POST /cases with the patient's name; the reports are added in Records). A guest reviewer keeps the Case label step exactly as before.
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { motion } from "motion/react";
@@ -22,13 +24,15 @@ import { useSession } from "@/lib/session";
 import { ageSex } from "@/lib/format";
 import type { CreateFromHisResponse, DuplicateCaseFileBody, PatientCaseFile } from "@/lib/types";
 import { isGeneric } from "@/lib/cancers";
-import { DEFAULT_FORM, createBody, manualBody, type NewCaseForm } from "@/features/newcase/form";
+import { DEFAULT_FORM, createBody, manualBody, staffManualBody, type NewCaseForm } from "@/features/newcase/form";
 import { StepManual, manualDone } from "@/features/newcase/StepManual";
+import { StepStaffManual, staffManualDone } from "@/features/newcase/StepStaffManual";
 import { StepPatient } from "@/features/newcase/StepPatient";
 import { NOT_RECORDED, StepCancer, cancerStepDone } from "@/features/newcase/StepCancer";
 import { StepLogistics, logisticsDone, useOwnerChoices } from "@/features/newcase/StepLogistics";
 import { FetchProgress, type FollowUp } from "@/features/newcase/FetchProgress";
 import { DuplicateNotice, duplicateFor, patientKey, sameCancer, usePatientCaseFiles } from "@/features/newcase/PatientCaseFiles";
+import { PrefillContext, usePrefill } from "@/features/newcase/usePrefill";
 
 interface Created {
   caseId: string;
@@ -66,7 +70,9 @@ export default function NewCaseFile() {
   const protocols = useProtocols();
   const owners = useOwnerChoices();
   const invalidate = useInvalidate();
-  const onChange = (patch: Partial<NewCaseForm>) => setForm((f) => ({ ...f, ...patch }));
+  // the AI pre-fill after the lookup (docs/new-case N6): fills only what the doctor has not touched, so every change is told to it first
+  const prefill = usePrefill(form, setForm, !guest);
+  const onChange = (patch: Partial<NewCaseForm>) => { prefill.touch(patch); setForm((f) => ({ ...f, ...patch })); };
 
   // the built checklist only: a cancer with no checklist yet is named by its own name, not the generic rule's label
   const protocol = useMemo(() => (isGeneric(form.protocol) ? undefined : (protocols.data?.protocols ?? []).find((p) => p.id === form.protocol)), [protocols.data, form.protocol]);
@@ -76,7 +82,9 @@ export default function NewCaseFile() {
   const files = usePatientCaseFiles(pkey);
   // the live Case File of this patient and the chosen cancer: listed by the server, or named by its 409 on Create
   const duplicate = duplicateFor(files.data?.cases, form) ?? (serverDup && serverDup.key === pkey && sameCancer(serverDup.file, form) ? serverDup.file : null);
-  const stepOk = step === 1 ? (guest ? manualDone(form) : Boolean(form.lookup?.found && form.lookup.patient)) : step === 2 ? cancerStepDone(form) && !duplicate : logisticsDone(form, owners.length > 1) && !duplicate;
+  // a hospital doctor's Case File made by hand (docs/new-case N5): not in the hospital system, or it cannot be reached; never for a guest
+  const handMade = !guest && form.staffManual;
+  const stepOk = step === 1 ? (guest ? manualDone(form) : handMade ? staffManualDone(form) : Boolean(form.lookup?.found && form.lookup.patient)) : step === 2 ? cancerStepDone(form) && !duplicate : logisticsDone(form, owners.length > 1) && !duplicate;
 
   const setFollow = (id: string, patch: Partial<FollowUp>) => setFollowUps((list) => list.map((f) => (f.id === id ? { ...f, ...patch } : f)));
 
@@ -90,6 +98,10 @@ export default function NewCaseFile() {
         const c = await api.post<{ case_id: string }>(EP.cases, manualBody(form, NOT_RECORDED));
         caseId = c.case_id;
         line = [form.manualLabel.trim(), ageSex(Number(form.manualAge), form.manualSex)].filter(Boolean).join(", ");
+      } else if (handMade) {  // POST /cases with the patient's name: the server makes the id; not linked to the hospital system
+        const c = await api.post<{ case_id: string }>(EP.cases, staffManualBody(form, NOT_RECORDED));
+        caseId = c.case_id;
+        line = [form.manualName.trim(), ageSex(Number(form.manualAge), form.manualSex), form.manualUhid.trim() ? `UHID ${form.manualUhid.trim()}` : ""].filter(Boolean).join(", ");
       } else {
         const r = await api.post<CreateFromHisResponse>(EP.fromHis, createBody(form, NOT_RECORDED));
         caseId = r.case.case_id; jobId = r.job || null; total = r.total ?? 0;
@@ -102,7 +114,7 @@ export default function NewCaseFile() {
       if (form.joinCode) steps.push({ id: "code", label: "Join code made for residents", state: "pending" });
       setFollowUps(steps);
       setCreated({ caseId, jobId, total, patientLine: line || caseId });
-      notify.success("Case File created", guest ? "Add the anonymized files in Records." : "Fetching the records now.");
+      notify.success("Case File created", guest ? "Add the anonymized files in Records." : handMade ? "Add the reports in Records." : "Fetching the records now.");
       void invalidate(keys.caseLists);
       // The follow-ups run one after another; a failure is shown on its line and never undoes the Case File.
       const run = async (id: string, fn: () => Promise<unknown>) => {
@@ -141,7 +153,7 @@ export default function NewCaseFile() {
     <div className="mx-auto max-w-4xl">
       <PageHeader
         title="New Case File"
-        subtitle={created ? (guest ? "Created. Add the anonymized files in Records." : "Created. The records come in from the hospital system now.") : "Three short steps. Nothing is created until you press Create."}
+        subtitle={created ? (guest ? "Created. Add the anonymized files in Records." : handMade ? "Created. Add the reports in Records." : "Created. The records come in from the hospital system now.") : "Three short steps. Nothing is created until you press Create."}
         back={{ to: "/cases", label: "Case Files" }}
       />
       {created ? (
@@ -150,6 +162,7 @@ export default function NewCaseFile() {
         </motion.div>
       ) : (
         <>
+          <PrefillContext.Provider value={prefill}>
           <Stepper
             step={step}
             onStepChange={(n) => { if (n < step || stepOk) setStep(n); }}
@@ -158,7 +171,7 @@ export default function NewCaseFile() {
             nextDisabled={!stepOk}
             nextLoading={creating}
             nextButtonText="Continue"
-            completeButtonText={creating ? "Creating" : guest ? "Create" : "Create and fetch records"}
+            completeButtonText={creating ? "Creating" : guest || handMade ? "Create" : "Create and fetch records"}
           >
             <Step title={guest ? "Case" : "Patient"}>
               {guest ? (
@@ -166,10 +179,15 @@ export default function NewCaseFile() {
                   <StepTitle title="Case label" text="No name and no hospital number: a label you recognise, with age and sex." />
                   <StepManual form={form} onChange={onChange} />
                 </>
+              ) : handMade ? (
+                <>
+                  <StepTitle title="Patient, by hand" text="Only when the patient is not in the hospital system, or it cannot be reached now." />
+                  <StepStaffManual form={form} onChange={onChange} onBack={() => setForm((f) => ({ ...f, staffManual: false }))} />
+                </>
               ) : (
                 <>
                   <StepTitle title="Find the patient" text="The hospital system is asked; you see the registration before anything is made." />
-                  <StepPatient form={form} onChange={onChange} autoLookup={Boolean(initialId)} />
+                  <StepPatient form={form} onChange={onChange} autoLookup={Boolean(initialId)} onManual={() => setForm((f) => ({ ...f, staffManual: true, lookup: null }))} />
                 </>
               )}
             </Step>
@@ -189,6 +207,7 @@ export default function NewCaseFile() {
               ) : null}
             </Step>
           </Stepper>
+          </PrefillContext.Provider>
           {!stepOk && step === 3 && !duplicate ? <p className="mt-2 text-center text-xs text-muted-foreground"><FolderPlus className="mr-1 inline size-3.5" aria-hidden />Pick an urgency tag{owners.length > 1 ? " and the Responsible Department" : ""} to create.</p> : null}
         </>
       )}

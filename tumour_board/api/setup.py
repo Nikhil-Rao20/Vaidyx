@@ -6,12 +6,12 @@ must pass), board (coordinators, the heads, the meeting defaults). The step stam
 The first step also answers the old first set-up question (org.first_setup) so the V2 home stops asking it. Accounts: create, reset a
 password, change roles; the department admin's people list with residents and end dates. Passwords travel only inside mailto: links.
 No model calls."""
-import copy, time
+import asyncio, copy, hmac, time
 
 from fastapi import Request
 
 from tumour_board import accounts, his_client, org
-from tumour_board.api.common import auth_manager, body, fail, make_router, need, roles
+from tumour_board.api.common import RateLimit, auth_manager, body, fail, make_router, need, roles
 
 router = make_router()
 STEPS = ("hospital", "departments", "people", "his", "board")
@@ -297,12 +297,10 @@ async def his_kinds(request: Request):
             "remote_allowed": bool(r.get("admin")) or bool(his_client.allowed_hosts())}
 
 
-@router.post("/setup/his")
-async def setup_his(request: Request):
-    """{url, token?}: saves the connection (the token never comes back) and runs the test; the step is done only when the test passes.
-    With {"kind"} or {"preset"} (GET /his/kinds) the fields of that connection method are saved instead: a plain FHIR server, an HL7 v2
-    folder, a report folder or ABDM bundles. Secrets go to owner-only files and never come back."""
-    r = roles(request); need(r, "manage_org"); b = await body(request)
+def _his_payload(b: dict) -> tuple:
+    """The settings a POST /setup/his or POST /his/try body names, as save_settings takes them, and whether they are a his_adapters kind
+    (whose messages are capitalised). {kind} or {preset} (GET /his/kinds) picks the connection method; the old {url, token} body is a
+    "fhir" connection exactly as before. A bad choice fails 400 here, before anything is tested or saved."""
     if str(b.get("kind") or "").strip() or str(b.get("preset") or "").strip():
         from tumour_board.his_adapters import registry
         pre = registry.preset(str(b.get("preset") or "").strip()) if str(b.get("preset") or "").strip() else None
@@ -310,13 +308,7 @@ async def setup_his(request: Request):
             fail(400, "That hospital system is not in the list.", "bad_his")
         kind = str(b.get("kind") or "").strip().lower() or pre["kind"]
         if registry.is_adapter_kind(kind):
-            payload = {k: b[k] for k in HIS_FIELDS if k in b} | {"kind": kind, "enabled": True}
-            try:
-                his_client.save_settings(payload, by=r["user"], allow_remote=bool(r.get("admin")))
-            except ValueError as e:
-                fail(400, str(e)[:1].upper() + str(e)[1:], "bad_his")
-            test = await run_his_test(r["user"])
-            return {"ok": test["ok"], "step": "his", "test": test, **view()}
+            return {k: b[k] for k in HIS_FIELDS if k in b} | {"kind": kind, "enabled": True}, True
         if kind != "fhir":
             fail(400, "Choose a hospital system from the list.", "bad_his")
         if pre and not str(b.get("url") or "").strip():
@@ -329,12 +321,171 @@ async def setup_his(request: Request):
         payload["token"] = str(b["token"]).strip()
     if str(b.get("label") or "").strip():
         payload["label"] = str(b["label"]).strip()
+    return payload, False
+
+
+def _his_error(e: ValueError, adapter: bool) -> str:
+    return str(e)[:1].upper() + str(e)[1:] if adapter else str(e)
+
+
+@router.post("/setup/his")
+async def setup_his(request: Request):
+    """{url, token?}: saves the connection (the token never comes back) and runs the test; the step is done only when the test passes.
+    With {"kind"} or {"preset"} (GET /his/kinds) the fields of that connection method are saved instead: a plain FHIR server, an HL7 v2
+    folder, a report folder or ABDM bundles. Secrets go to owner-only files and never come back.
+    Optional `tested_fingerprint` (from POST /his/try, "Choose your hospital system"): the save is refused 409 unless these are exactly
+    the values that were tested; a body without it behaves as before."""
+    r = roles(request); need(r, "manage_org"); b = await body(request)
+    payload, adapter = _his_payload(b)
+    tested = str(b.get("tested_fingerprint") or "").strip()
+    if tested:
+        try:
+            clean = his_client.trial_settings(payload, allow_remote=bool(r.get("admin")))
+        except ValueError as e:
+            fail(400, _his_error(e, adapter), "bad_his")
+        if not hmac.compare_digest(tested.encode(), his_client.fingerprint(clean).encode()):
+            fail(409, "Test these settings again before using them.", "untested")
     try:
         his_client.save_settings(payload, by=r["user"], allow_remote=bool(r.get("admin")))
     except ValueError as e:
-        fail(400, str(e), "bad_his")
+        fail(400, _his_error(e, adapter), "bad_his")
     test = await run_his_test(r["user"])
     return {"ok": test["ok"], "step": "his", "test": test, **view()}
+
+
+# ---- "Choose your hospital system": try settings without saving them (docs/new-case/DESIGN.md N7) ---------------------------------
+TRY_SECONDS = 15          # the whole try (sign-in, counts, one patient) so the screen never hangs
+TRY_HTTP_SECONDS = 10     # one request to the hospital system
+_TRY_TRANSPORT = None     # tests put an httpx.MockTransport here
+TRY_LIMIT = RateLimit(20, 10 * 60)  # POST /his/try per login (review of 17 Nov 2026)
+
+
+def _plain(msg: str) -> str:
+    msg = " ".join(str(msg or "").split())[:300]
+    return msg[:1].upper() + msg[1:] if msg else ""
+
+
+def _what_to_check(error: str, kind: str) -> str:
+    """One line on what to check, from the plain error (never a secret: the messages of his_client and his_adapters carry none)."""
+    from tumour_board.his_adapters import registry
+    e = error.lower()
+    if "cannot reach" in e:
+        return "Check the server address and port, and that the hospital system is running and can be reached from this server."
+    if "refused the token" in e or "token endpoint" in e or "refused the client" in e:
+        return "Check the sign-in details: the token, user name and password, API key or client id and secret the hospital gave."
+    if "did not answer in time" in e or "longer than" in e:
+        return "The hospital system is slow or busy. Try again; if it stays slow, ask the hospital IT team to check it."
+    if "folder" in e:
+        return "Check that the folder exists on this server, inside the allowed folder root, and that Vaidyx-TB may read it."
+    if "not a capabilitystatement" in e or "not json" in e or "not a fhir" in e or "http 404" in e:
+        return "Check the server address and the FHIR base path: the address must lead to the FHIR R4 API."
+    if kind in registry.FOLDER_KINDS:
+        return "Check the folder and the files in it."
+    return "Check the address and the sign-in details, then test again."
+
+
+async def _sample(c, identifier: str, step) -> dict:
+    """One patient by an exact identifier (UHID, IP / OP No., ABHA): only whether it is found, how many visits and reports, and the
+    date of the newest report. No name, initials, age, sex, report title or identifier of the system's own: those who test a hospital
+    system are the Vaidyx admin and the hospital admin, and neither sees patient data (admin consoles D5; owner, 17 Nov 2026: the
+    hospital admin is IT, the MDT Coordinator handles patient data). The counts are enough to show the connection reads real records.
+    Answers {found: false} when nothing matches; a problem with this one patient never fails the whole try."""
+    out = {"found": False, "identifier": identifier}
+    try:
+        p = await step(c.find_patient(identifier))
+        if not p:
+            return out
+        encs = await step(c.encounters(p.get("id") or ""))
+        reps = await step(c.reports(p.get("id") or ""))
+    except asyncio.TimeoutError:
+        return out | {"error": f"The hospital system took longer than {TRY_SECONDS} seconds to answer for this patient."}
+    except his_client.HISError as e:
+        return out | {"error": _plain(str(e))}
+    except Exception as e:  # an adapter bug must not hide the connection result
+        return out | {"error": f"The patient could not be read ({type(e).__name__})."}
+    current = [x for x in reps if isinstance(x, dict) and x.get("current", True)] or [x for x in reps if isinstance(x, dict)]
+    when = lambda x: str(x.get("issued") or x.get("effective") or "")
+    newest = max(current, key=when, default=None)
+    return {"found": True, "identifier": identifier, "visits": len(encs or []), "reports": len({x.get("id") for x in reps if isinstance(x, dict)}),
+            "newest_report_date": when(newest)[:10] if newest else ""}
+
+
+async def run_his_try(clean: dict, identifier: str = "") -> dict:
+    """Test settings from his_client.trial_settings without saving anything: sign in, count patients and reports when the system can,
+    and read one patient when an identifier is given. Never raises; the error is in plain words with what to check."""
+    t0 = time.monotonic()
+    out = {"ok": False, "checked_at": org.now_iso(), "kind": clean.get("kind"), "label": clean.get("label") or "",
+           "preset": (clean.get("adapter") or {}).get("preset") or "", "ping": {}, "counts": None, "error": "", "hint": "",
+           "fingerprint": his_client.fingerprint(clean), "latency_ms": 0}
+    deadline = time.monotonic() + TRY_SECONDS
+
+    async def step(coro):
+        left = deadline - time.monotonic()
+        if left <= 0:
+            coro.close()
+            raise asyncio.TimeoutError
+        return await asyncio.wait_for(coro, left)
+
+    try:
+        c = his_client.trial_client(clean, transport=_TRY_TRANSPORT, timeout=TRY_HTTP_SECONDS)
+        if c is None:
+            out["error"] = "This kind of connection cannot be tested here. Choose a hospital system from the list."
+        else:
+            ping = await step(c.ping())
+            out["ping"] = {k: ping.get(k) for k in ("ok", "name", "fhir_version", "token_ok")} | {"latency_ms": round((time.monotonic() - t0) * 1000, 1)}
+            if not ping.get("ok"):
+                out["error"] = _plain(ping.get("error") or "The hospital system did not answer.")
+            else:
+                out["ok"] = True
+                try:
+                    pats, reps = await step(_counts(c))
+                except asyncio.TimeoutError:
+                    pats, reps = None, None
+                counts = ping.get("counts") if isinstance(ping.get("counts"), dict) else None
+                if counts and pats is None and reps is None:  # a folder method counts what it read
+                    pats, reps = counts.get("patients"), counts.get("reports")
+                if pats is not None or reps is not None:
+                    out["counts"] = {"patients": pats, "reports": reps} | ({"skipped": counts.get("skipped")} if counts and counts.get("skipped") else {})
+                if identifier:
+                    out["sample"] = await _sample(c, identifier, step)
+    except asyncio.TimeoutError:
+        out["ok"], out["error"] = False, f"The hospital system took longer than {TRY_SECONDS} seconds to answer."
+    except his_client.HISError as e:
+        out["ok"], out["error"] = False, _plain(str(e))
+    except Exception as e:
+        out["ok"], out["error"] = False, f"The test could not run ({type(e).__name__})."
+    if out["error"] and not out["ok"]:
+        out["hint"] = _what_to_check(out["error"], str(clean.get("kind") or ""))
+    if not out["ok"]:
+        out["fingerprint"] = ""  # only a passing test can be used to save
+    out["latency_ms"] = round((time.monotonic() - t0) * 1000, 1)
+    return out
+
+
+@router.post("/his/try")
+async def his_try(request: Request):
+    """{preset? | kind?, fields..., identifier?}: the same body as POST /setup/his, tested WITHOUT saving (nothing is written but the
+    audit line). -> {ok, checked_at, kind, label, ping{}, counts{patients, reports}?, sample{found, identifier (as typed), visits,
+    reports, newest_report_date}? (with an identifier), error?, hint?, fingerprint}. The fingerprint goes back in POST /setup/his as
+    tested_fingerprint so the save is exactly what passed. Same gate and rules as saving: manage_org, the host rule (another host only
+    for a Vaidyx admin), the folder roots, a secret left empty keeps the saved one only for the same kind and server. The sample shows
+    no patient data to anyone (see _sample). At most TRY_LIMIT tries per login: each try signs in to the hospital system and may read
+    a patient, so a loop must not hammer it or probe numbers (429)."""
+    r = roles(request); need(r, "manage_org")
+    TRY_LIMIT.check(r["user"], "Too many tests in a short time. Wait a few minutes and test again.")
+    b = await body(request)
+    identifier = " ".join(str(b.get("identifier") or "").split())[:80]
+    payload, adapter = _his_payload(b)
+    try:
+        clean = his_client.trial_settings(payload, allow_remote=bool(r.get("admin")))
+    except ValueError as e:
+        org.audit("his_try", r["user"], his_kind=payload.get("kind"), preset=str(b.get("preset") or "")[:40], ok=False, refused=_his_error(e, adapter)[:200])
+        fail(400, _his_error(e, adapter), "bad_his")
+    out = await run_his_try(clean, identifier)
+    sample = out.get("sample") or {}
+    org.audit("his_try", r["user"], his_kind=clean["kind"], preset=out["preset"], url=clean.get("url") or "", ok=out["ok"], error=out["error"][:200],
+              identifier=identifier[:60] or None, found=bool(sample.get("found")) if identifier else None)
+    return out
 
 
 @router.post("/setup/board")

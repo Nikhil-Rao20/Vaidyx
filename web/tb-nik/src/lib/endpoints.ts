@@ -46,8 +46,18 @@ export const EP = {
   documentImages: (c: string, d: string) => `${TB}/cases/${id(c)}/documents/${id(d)}/images`,
 
   hisLookup: `${TB}/his/lookup`,
+  /** GET ?q=<name, words or part of a number> -> HisFind: at most 8 patients for the New Case File drop-down (docs/new-case N1 to N4). */
+  hisFind: `${TB}/his/find`,
   fromHis: `${TB}/cases/from-his`,
   hisTest: `${TB}/his/test`,
+  /** GET "Choose your hospital system": the connection methods, the presets, what is saved now (never a secret), folder roots. */
+  hisKinds: `${TB}/his/kinds`,
+  /** POST {preset? | kind?, fields..., identifier?}: tests the settings WITHOUT saving -> HisTry (its fingerprint goes to setupHis). */
+  hisTry: `${TB}/his/try`,
+  /** POST {identifier, months? | all?}: starts the AI pre-fill of the New Case File after a lookup -> {job, state} (docs/new-case N6). */
+  hisPrefill: `${TB}/his/prefill`,
+  /** GET -> PrefillJob {state: running | done | failed, result?, error?}; only the user who started it reads it. */
+  hisPrefillJob: (j: string) => `${TB}/his/prefill/${id(j)}`,
   protocols: `${TB}/protocols`,
   protocol: (p: string) => `${TB}/protocols/${id(p)}`,
   job: (j: string) => `${TB}/jobs/${id(j)}`,

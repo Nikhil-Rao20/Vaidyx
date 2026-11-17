@@ -313,9 +313,12 @@ def make(d: dict | None = None, transport=None):
     a = d.get("adapter") if isinstance(d.get("adapter"), dict) else {}
     label = d.get("label") or ""
     if kind == "fhir_generic":
-        auth = {"type": a.get("auth") or "bearer", "token": his_client.token(d), "username": a.get("username") or "", "password": _secret(a, "password"),
-                "header": a.get("api_key_header") or "X-API-Key", "key": _secret(a, "api_key"), "token_url": a.get("token_url") or "",
-                "client_id": a.get("client_id") or "", "client_secret": _secret(a, "client_secret"), "scope": a.get("scope") or ""}
+        # settings tried before they are saved (his_client.trial_settings, POST /his/try) carry a newly typed secret in memory only
+        typed = d.get("_secrets") if isinstance(d.get("_secrets"), dict) else {}
+        sec = lambda name: str(typed.get(name) or "") or _secret(a, name)
+        auth = {"type": a.get("auth") or "bearer", "token": his_client.token(d), "username": a.get("username") or "", "password": sec("password"),
+                "header": a.get("api_key_header") or "X-API-Key", "key": sec("api_key"), "token_url": a.get("token_url") or "",
+                "client_id": a.get("client_id") or "", "client_secret": sec("client_secret"), "scope": a.get("scope") or ""}
         return fhir_generic.GenericFHIRClient(d.get("url") or "", auth, label=label, base_path=a.get("base_path") or "",
                                               identifier_systems=a.get("identifier_systems") or [], transport=transport)
     if kind == "hl7v2_folder":

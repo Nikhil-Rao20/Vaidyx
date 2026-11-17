@@ -31,6 +31,11 @@ export interface NewCaseForm {
   manualLabel: string;
   manualAge: string;
   manualSex: string;
+  /** A hospital doctor's Case File made by hand (StepStaffManual, docs/new-case N5): the patient's name and the hospital number if
+   * known; age and sex go in manualAge / manualSex. Used only while staffManual is on; never for a guest reviewer. */
+  staffManual: boolean;
+  manualName: string;
+  manualUhid: string;
 }
 
 export const DEFAULT_FORM: NewCaseForm = {
@@ -51,6 +56,9 @@ export const DEFAULT_FORM: NewCaseForm = {
   manualLabel: "",
   manualAge: "",
   manualSex: "",
+  staffManual: false,
+  manualName: "",
+  manualUhid: "",
 };
 
 export const WINDOW_CHOICES: Array<{ value: number | "all"; label: string }> = [
@@ -86,6 +94,31 @@ export function manualBody(form: NewCaseForm, notRecorded: string) {
   const generic = isGeneric(form.protocol);
   return {
     patient: { name: form.manualLabel.trim(), age: Number(form.manualAge), sex: form.manualSex, anonymized: true },
+    protocol: form.protocol || "",
+    setting: generic ? GENERIC_SETTING : form.setting && form.setting !== notRecorded ? form.setting : "",
+    board_date: form.boardDate || "",
+    department: form.department || undefined,
+    cancer_name: cleanCancerName(form.cancerName) || undefined,
+  };
+}
+
+/** The body of POST /cases for a hospital doctor's Case File made by hand (N5): the patient's real name, the hospital number when
+ * given (as the UHID, so the one-Case-File-per-patient-and-cancer check still runs on it), age and sex. Not linked to the hospital
+ * system: the reports are added in Records. The server picks the id. */
+export function staffManualBody(form: NewCaseForm, notRecorded: string) {
+  const generic = isGeneric(form.protocol);
+  const name = form.manualName.trim().replace(/\s+/g, " ");
+  const uhid = form.manualUhid.trim();
+  const age = Number(form.manualAge);
+  return {
+    patient: {
+      name,
+      ...(uhid ? { mrn: uhid, ids: [{ kind: "uhid", value: uhid, from: "manual" }] } : {}),
+      age,
+      sex: form.manualSex,
+      agesex: `${age} Y / ${form.manualSex}`,
+      source: "manual",
+    },
     protocol: form.protocol || "",
     setting: generic ? GENERIC_SETTING : form.setting && form.setting !== notRecorded ? form.setting : "",
     board_date: form.boardDate || "",

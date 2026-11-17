@@ -30,6 +30,7 @@ import type { ProtocolSetting, ProtocolSummary } from "@/lib/types";
 import { useSession } from "@/lib/session";
 import { cn } from "@/lib/utils";
 import type { NewCaseForm } from "@/features/newcase/form";
+import { AiFilled, PrefillStatus } from "@/features/newcase/AiFilled";
 
 const GROUPS: CancerGroup[] = ["men", "women", "children", "general"];
 /** A list entry that is not a cancer's name ("Others" in the children's list): picking it opens the typed name. */
@@ -55,6 +56,7 @@ export function StepCancer({ form, onChange }: { form: NewCaseForm; onChange: (p
   const [group, setGroup] = useState<CancerGroup>(suggested);
   const [search, setSearch] = useState("");
   const [typing, setTyping] = useState(form.cancerId === "custom");
+  useEffect(() => { if (form.cancerId === "custom") setTyping(true); }, [form.cancerId]);  // a typed name filled by the AI pre-fill shows its box
   const picked = form.cancerId && form.cancerId !== "custom" ? cancerById(form.cancerId) : undefined;
   const variant = picked ? variantOf(picked, form.variant) : undefined;
   const generic = isGeneric(form.protocol);
@@ -89,10 +91,8 @@ export function StepCancer({ form, onChange }: { form: NewCaseForm; onChange: (p
   };
   const choose = (c: CancerEntry) => {
     if (TYPE_INSTEAD.has(c.id)) { startTyping(search.trim()); return; }
-    const v = defaultVariant(c, p?.age);  // Kidney: Wilms tumour for a child under 15, renal cell carcinoma otherwise; Colorectal: none
-    const protocol = protocolFor(c, known, v?.id);
     setTyping(false);
-    onChange({ cancerId: c.id, cancerName: nameFor(c, v), variant: v?.id ?? "", protocol, setting: protocol && isGeneric(protocol) ? GENERIC_SETTING : "" });
+    onChange(cancerPatch(c, known, p?.age));
   };
   const chooseVariant = (v: CancerVariant) => {
     if (!picked) return;
@@ -105,6 +105,7 @@ export function StepCancer({ form, onChange }: { form: NewCaseForm; onChange: (p
 
   return (
     <div className="grid gap-5">
+      <PrefillStatus />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Tabs value={search.trim() ? "" : group} onValueChange={(v) => { setGroup(v as CancerGroup); setSearch(""); }}>
           <TabsList aria-label="Group">
@@ -194,6 +195,7 @@ export function StepCancer({ form, onChange }: { form: NewCaseForm; onChange: (p
 
       {form.cancerId ? (
         <motion.section initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="surface-inner grid gap-4 p-4" aria-label="Checklist and setting">
+          <AiFilled field="cancer" />
           {picked?.variants?.length ? (
             <fieldset className="grid gap-2" data-testid="cancer-variant">
               <legend className="mb-1 text-sm font-medium">{picked.question ?? "Which one?"} <span className="text-xs font-normal text-bad">required</span></legend>
@@ -257,6 +259,7 @@ export function StepCancer({ form, onChange }: { form: NewCaseForm; onChange: (p
             <fieldset className="grid gap-2">
               <legend className="mb-1 text-sm font-medium">NCG setting, as recorded <span className="text-xs font-normal text-bad">required</span></legend>
               <p className="-mt-1 mb-1 text-xs text-muted-foreground">Pick what the records say. Vaidyx never works out a stage; it uses your choice to know which records the board needs.</p>
+              <AiFilled field="setting" />
               {detail.isLoading && !settings.length ? (
                 <div className="space-y-2" aria-busy="true"><div className="skeleton-line h-10" /><div className="skeleton-line h-10" /></div>
               ) : (
@@ -284,6 +287,14 @@ export function StepCancer({ form, onChange }: { form: NewCaseForm; onChange: (p
       ) : null}
     </div>
   );
+}
+
+/** The form change of picking a cancer from the list (a click, or the AI pre-fill doing what that click would do): the entry's
+ * variant (the one given, else Kidney / Liver by age, else none), its checklist (protocolFor) and the generic rule's one setting. */
+export function cancerPatch(c: CancerEntry, known: { has(id: string): boolean } | null, age?: number | string | null, variantId?: string): Partial<NewCaseForm> {
+  const v = variantId ? variantOf(c, variantId) : defaultVariant(c, age);  // Kidney: Wilms tumour for a child under 15, renal cell carcinoma otherwise; Colorectal: none
+  const protocol = protocolFor(c, known, v?.id);
+  return { cancerId: c.id, cancerName: nameFor(c, v), variant: v?.id ?? "", protocol, setting: protocol && isGeneric(protocol) ? GENERIC_SETTING : "" };
 }
 
 /** Step 2 is complete when a cancer is picked (a typed name of 2 to 80 characters counts, marked solid or blood), the entry's

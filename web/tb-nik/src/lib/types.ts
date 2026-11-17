@@ -286,7 +286,75 @@ export interface HisLookup {
   note?: string;
 }
 
-// ---- Protocols (GET /protocols) -------------------------------------------------------------------------------------
+// ---- Find a patient by name or words (GET /his/find; tumour_board/patient_finder.py, docs/new-case N1 to N4) -------------------
+/** A Case File this person may not open comes as {department, can_open: false} only: no id, cancer or status ("A Case File exists"). */
+export interface HisFindCaseFile {
+  case_id?: string;
+  /** The owning department's name. */
+  department: string;
+  department_id?: string;
+  cancer?: string;
+  status?: string;
+  can_open?: boolean;
+}
+
+export interface HisFindRow {
+  /** "" for a Case File made by hand without a hospital number. */
+  uhid: string;
+  name: string;
+  age?: number | null;
+  sex?: string;
+  last_visit?: { department: string; date: string } | null;
+  case_files: HisFindCaseFile[];
+  /** on: identifier | name | words. For words: at most 120 characters around the matched words, the words to mark and where they are. */
+  matched: { on: "identifier" | "name" | "words"; snippet: string; terms?: string[]; source?: string };
+  score: number;
+  /** his (the index) | live (the hospital system's name search) | case_file */
+  from?: string;
+}
+
+export interface HisFind {
+  q: string;
+  results: HisFindRow[];
+  sources: { his_live: boolean; index: { patients: number; built_at: string | null; building: boolean } };
+}
+
+// ---- AI pre-fill of the New Case File (POST /his/prefill, GET /his/prefill/{job}; tumour_board/case_prefill.py) ----------------
+/** A report the AI read: R1..Rn newest first, as the model saw them. */
+export interface PrefillSource {
+  id: string;
+  title: string;
+  date?: string;
+  department?: string;
+}
+
+export interface PrefillResult {
+  uhid?: string;
+  /** protocol: a built checklist id or "generic" / "generic_haem"; entry + variant for Colorectal, Kidney, Liver (lib/cancers ids). */
+  cancer?: { name: string; protocol: string; label?: string; entry?: string; variant?: string; quote: string; report: PrefillSource };
+  setting?: { id: string; label?: string; quote: string; report: PrefillSource };
+  /** A draft: no quote, the reports it rests on instead. */
+  board_question?: { text: string; basis: PrefillSource[]; draft?: boolean };
+  /** A suggestion only: never pre-selected (the consultant's own call). */
+  urgency?: { level: number; reason: string; quote: string; report: PrefillSource };
+  /** Chosen without the model: the doctor's own treating department seen in the patient's visits. */
+  department?: { id: string; name?: string; why: string };
+  model?: { label: string; origin?: string; medical?: boolean | null };
+  reports_in_window?: number;
+  reports_read?: number;
+  reports_skipped?: number;
+  reports?: PrefillSource[];
+  dropped?: Array<{ field: string; reason: string }>;
+}
+
+export interface PrefillJob {
+  job: string;
+  state: "running" | "done" | "failed";
+  result?: PrefillResult;
+  error?: string;
+}
+
+// ---- Protocols (GET /protocols)-------------------------------------------------------------------------------------
 export interface ProtocolSetting {
   id: string;
   label: string;
@@ -802,3 +870,101 @@ export interface AccountCreated {
   mailto?: string;
   must_change_password?: boolean;
 }
+
+// ---- Choose your hospital system (docs/new-case/DESIGN.md N7; GET /his/kinds, POST /his/try) ------------------------------------
+// Never a secret: a saved secret comes back only as "set" / "not set".
+
+export interface HisKindField {
+  name: string;
+  label: string;
+  type: "text" | "url" | "secret" | "folder" | "select";
+  required: boolean;
+  help: string;
+  options?: Array<{ value: string; label: string }>;
+  /** Shown only when another field has one of these values (for example {auth: ["basic"]}). */
+  when?: Record<string, string[]>;
+}
+
+export interface HisKind {
+  kind: string;
+  label: string;
+  description: string;
+  tested: boolean;
+  fields: HisKindField[];
+  /** What this connection method cannot do, in plain words. */
+  cannot: string[];
+}
+
+export interface HisPreset {
+  id: string;
+  name: string;
+  vendor?: string;
+  sector?: string;
+  kind: string;
+  defaults?: Record<string, unknown>;
+  /** "tested with the demo hospital" or "by standard, not tested with the product". */
+  status: string;
+  /** documented, by standard, vendor claim only, no public API found, interface not known. */
+  interface?: string;
+  notes?: string;
+}
+
+export interface HisPublicSettings {
+  kind?: string;
+  label?: string;
+  url?: string;
+  enabled?: boolean;
+  has_token?: boolean;
+  adapter?: {
+    preset?: string;
+    base_path?: string;
+    identifier_systems?: string[];
+    auth?: string;
+    username?: string;
+    api_key_header?: string;
+    token_url?: string;
+    client_id?: string;
+    scope?: string;
+    folder?: string | boolean;
+    secrets?: Record<string, "set" | "not set">;
+  };
+}
+
+export interface HisKinds {
+  kinds: HisKind[];
+  presets: HisPreset[];
+  current: { kind?: string; preset?: string; enabled?: boolean; settings?: HisPublicSettings };
+  folder_roots: string[];
+  /** A Vaidyx admin (or a host list on the server) may name a hospital system on another machine. */
+  remote_allowed: boolean;
+}
+
+/** One UHID tried: counts only, never a name or other patient detail (neither the hospital admin nor the Vaidyx admin has clinical
+ * access; the identifier is what was typed). */
+export interface HisTrySample {
+  found: boolean;
+  identifier: string;
+  visits?: number;
+  reports?: number;
+  /** YYYY-MM-DD, "" when the patient has no report. */
+  newest_report_date?: string;
+  error?: string;
+}
+
+export interface HisTry {
+  ok: boolean;
+  checked_at: string;
+  kind: string;
+  label: string;
+  preset?: string;
+  ping: { ok?: boolean; name?: string; fhir_version?: string; token_ok?: boolean | null; latency_ms?: number };
+  counts?: { patients?: number | null; reports?: number | null; skipped?: Record<string, number> } | null;
+  sample?: HisTrySample;
+  error: string;
+  /** What to check, in one line, when the test failed. */
+  hint?: string;
+  /** Empty unless the test passed; sent back as tested_fingerprint when saving. */
+  fingerprint: string;
+  latency_ms?: number;
+}
+

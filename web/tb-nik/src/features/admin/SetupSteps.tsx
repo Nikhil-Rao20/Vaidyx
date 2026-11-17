@@ -2,6 +2,7 @@
 // the step when the admin presses Continue. People and the hospital system also act inside the step (create logins,
 // test the connection), because their result is something to look at before moving on.
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { CheckCircle2, Mail, Plus, PlugZap, Trash2, UserPlus, XCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -240,7 +241,7 @@ export function PeopleStep({ rows, onChange, departments, accounts, onCreate }: 
 }
 
 // ---- 4 Hospital system --------------------------------------------------------------------------------------------------
-export function HisStep({ value, onChange, setup, result, onTest, onRetest }: { value: HisState; onChange: (v: HisState) => void; setup: SetupResponse; result: HisTestResult | null; onTest: () => Promise<void>; onRetest: () => Promise<void> }) {
+export function HisStep({ value, onChange, setup, result, onTest, onRetest, chooserLink = true }: { value: HisState; onChange: (v: HisState) => void; setup: SetupResponse; result: HisTestResult | null; onTest: () => Promise<void>; onRetest: () => Promise<void>; chooserLink?: boolean }) {
   const test = useAsyncAction(onTest);
   const retest = useAsyncAction(onRetest);
   const saved = Boolean(setup.his?.url) && value.url.trim() === setup.his?.url && !value.token;
@@ -248,6 +249,7 @@ export function HisStep({ value, onChange, setup, result, onTest, onRetest }: { 
   return (
     <div className="grid gap-5">
       <p className="text-sm text-muted-foreground">Vaidyx reads the reports from the hospital system (FHIR R4, read only). The test must pass before Case Files can be made from a UHID.</p>
+      {chooserLink ? <p className="text-sm text-muted-foreground">Another kind of hospital system (a plain FHIR server, HL7 v2 files, a report folder, ABDM bundles)? <Link to="/hospital/system?choose=1" className="text-link hover:underline">Choose your hospital system</Link>.</p> : null}
       <div className="grid gap-4 sm:grid-cols-[1fr_260px]">
         <Field id="his-url" label="Hospital system address (URL)" required hint="This server's hospital system is on the same machine.">
           <Input value={value.url} onChange={(e) => onChange({ ...value, url: e.target.value })} placeholder="http://127.0.0.1:7130" className="mono" inputMode="url" />

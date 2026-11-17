@@ -597,6 +597,11 @@ class HISClient:
     async def find_patient(self, identifier: str) -> dict | None:
         raise NotImplementedError
 
+    async def search_patients(self, name: str, limit: int = 50) -> list[dict]:
+        """Registrations whose name contains `name` (the patient finder, docs/new-case/DESIGN.md N2). [] for a transport that cannot
+        search by name: the finder then answers from its own index and the Case Files."""
+        return []
+
     async def similar(self, patient_id: str) -> list[dict]:
         return []
 
@@ -793,6 +798,22 @@ class FHIRClient(HISClient):
             out["matched_on"] = {"kind": matched_kind, "value": value}
             out["similar"] = await self._similar(c, out["id"])
         return out
+
+    async def search_patients(self, name: str, limit: int = 50) -> list[dict]:
+        """Patient?name=<name> (the standard FHIR string search, which any FHIR system answers: the name starts with or contains the
+        text), ONE page of at most `limit` registrations as patient dicts; next pages are never followed (a short word may name
+        hundreds). The patient finder calls this once per typed word (patient_finder.py, docs/new-case/DESIGN.md N2)."""
+        value = " ".join(str(name or "").split())[:60]
+        if len(value) < 2:
+            return []
+        n = max(1, min(int(limit or 50), 100))
+        async with self._client() as c:
+            b = await self._get_json(c, "Patient", [("name", value), ("_count", str(n))])
+        if b.get("resourceType") != "Bundle":
+            raise HISError("the HIS answer for Patient is not a Bundle")
+        conv = getattr(self, "_patient", None)  # a subclass that finds the UHID its own way (his_adapters.fhir_generic)
+        pats = [e.get("resource") for e in b.get("entry") or [] if isinstance(e.get("resource"), dict)]
+        return [conv(p) if callable(conv) else patient_dict(p) for p in pats if p.get("resourceType") == "Patient"][:n]
 
     async def _similar(self, c, patient_id: str) -> list[dict]:
         try:
@@ -1230,9 +1251,9 @@ def validate_settings(d: dict, existing: dict | None = None, allow_remote: bool 
             "enabled": bool(d.get("enabled", True)), "pacs_url": pacs_url}
 
 
-def save_settings(d: dict, by: str = "", allow_remote: bool = False) -> dict:
-    """Validate, write his.json atomically (owner-only), audit `his_settings_saved` without the token, return public()."""
-    from . import org
+def _saved_settings() -> dict:
+    """What save_settings validates a change against: his.json as written, else the defaults (the saved state of a fresh server).
+    No environment override here: a token or url from TB_HIS_* is never taken as the saved one."""
     p = settings_path()
     existing = {}
     if p.exists():
@@ -1240,8 +1261,16 @@ def save_settings(d: dict, by: str = "", allow_remote: bool = False) -> dict:
             existing = json.loads(p.read_text())
         except (OSError, ValueError):
             existing = {}
-    if not existing:
+    if not isinstance(existing, dict) or not existing:
         existing = {k: v for k, v in _default_settings().items()}  # the demo defaults are the saved state of a fresh server
+    return existing
+
+
+def save_settings(d: dict, by: str = "", allow_remote: bool = False) -> dict:
+    """Validate, write his.json atomically (owner-only), audit `his_settings_saved` without the token, return public()."""
+    from . import org
+    p = settings_path()
+    existing = _saved_settings()
     clean = validate_settings(d, existing, allow_remote=allow_remote)
     from .his_adapters import registry
     clean = registry.finalize(clean)  # his_adapters: new secrets to their owner-only files, left-over ones removed (nothing else for fhir / mcp / none)
@@ -1273,3 +1302,45 @@ def client(d: dict | None = None, transport=None) -> HISClient | None:
         if registry.is_adapter_kind(d.get("kind")):
             return registry.make(d, transport=transport)
     return FHIRClient(d.get("url") or DEFAULT_URL, token(d), label=d.get("label") or "", transport=transport)
+
+
+# ---------------------------------------------------------------------------------------------------- trying settings before saving
+# "Choose your hospital system" (docs/new-case/DESIGN.md N7): POST /his/try tests settings WITHOUT saving them, and POST /setup/his
+# may carry the fingerprint of the test so the save is refused when the values differ from what passed. The fingerprint is an HMAC of
+# the cleaned settings and the secrets they resolve to, under a key that lives only in this process: no secret can be read back from
+# it, and a restart (or another process) simply asks for the test again.
+_TRY_KEY = os.urandom(32)
+
+
+def trial_settings(d: dict, allow_remote: bool = False) -> dict:
+    """The cleaned settings save_settings would write for `d` (the same validation, the same rules: the host rule, the folder roots,
+    a secret left empty keeps the saved one only while the kind and the server stay the same), with nothing written: no his.json, no
+    secret file, no audit line. New secrets of the his_adapters kinds stay in memory under "_secrets". ValueError with a plain message."""
+    return validate_settings(d, _saved_settings(), allow_remote=allow_remote)
+
+
+def _trial_secrets(clean: dict) -> dict:
+    """The secrets these settings would sign in with (typed now or kept from the saved ones): only for the fingerprint, never returned."""
+    from .his_adapters import registry
+    a = clean.get("adapter") if isinstance(clean.get("adapter"), dict) else {}
+    new = clean.get("_secrets") if isinstance(clean.get("_secrets"), dict) else {}
+    return {"token": token(clean)} | {n: str(new.get(n) or "") or registry._secret(a, n) for n in registry.SECRETS}
+
+
+def fingerprint(clean: dict) -> str:
+    """A short proof of exactly which settings were tested (trial_settings output): an HMAC over every value and every secret they
+    resolve to, so a changed field or a changed secret gives another fingerprint. Holds no secret in clear."""
+    import hmac
+    plain = {k: v for k, v in clean.items() if k != "_secrets"}
+    material = json.dumps({"settings": plain, "secrets": _trial_secrets(clean)}, sort_keys=True, default=str)
+    return "fp1-" + hmac.new(_TRY_KEY, material.encode("utf-8"), hashlib.sha256).hexdigest()[:40]
+
+
+def trial_client(clean: dict, transport=None, timeout: float = 10) -> HISClient | None:
+    """The HIS client for trial_settings output, built in memory exactly as client() builds it after a save (new secrets taken from
+    memory instead of their files); a FHIR client gets a short timeout so a test never hangs the screen. None for kind none."""
+    c = client({**clean, "enabled": True}, transport=transport)
+    if c is not None and hasattr(c, "_timeout"):
+        c._timeout = min(float(getattr(c, "_timeout") or timeout), float(timeout))
+    return c
+

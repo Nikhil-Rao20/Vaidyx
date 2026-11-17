@@ -22,6 +22,7 @@ from tumour_board import home  # a home per role (V2 item 7.1)
 from tumour_board import metrics  # agenda readiness, chase list, quality dashboard (12 Oct)
 from tumour_board import accounts  # department admins create / disable / remove doctor logins; root admin accounts (V2 item 2.2)
 from tumour_board import his_case, his_client  # HIS-connected Case Files: create from a UHID, re-fetch, link registrations, outside reports (V2 items 3.1 to 3.6)
+from tumour_board import case_prefill  # AI pre-fill of the New Case File after a lookup, every value quote-checked (docs/new-case N6)
 from tumour_board import access  # who may open a Case File and act on it: owner, participants, the departments asked (V2 item 5.1)
 from tumour_board import referral  # refer a Case File to another treating department: request, accept (ownership moves, new protocol), decline (V2 item 5.2)
 from tumour_board import decision_record  # the decision record fields, choices and limits (night-v3 item 3.1)
@@ -1042,11 +1043,35 @@ def setup_tumour_board_routes():
     @r.get("/his/lookup")
     async def his_lookup(request: Request, identifier: str = "", months: str = "", all: int = 0, from_date: str = ""):
         """Before creating: the registration a UHID, IP No. or OP No. resolves to, its encounters, how many records fall inside the
-        window, and the registrations that may be the same person (for a person to link, never merged)."""
-        rl = _roles(request); _need(rl, "create_case")
+        window, and the registrations that may be the same person (for a person to link, never merged). Never for the Vaidyx admin
+        (admin consoles D5: no patient name or UHID without break-glass); single-user mode (no login) works as before."""
+        rl = _roles(request)
+        from tumour_board import patient_finder
+        if rl.get("vaidyx_admin"):
+            raise HTTPException(403, patient_finder.NO_ADMIN_SEARCH)
+        _need(rl, "create_case")
         window = {"all": True} if all else ({"from": from_date} if from_date else ({"months": months} if months else None))
         out = await _his_call(his_case.lookup(identifier, window))
         org.audit("his_lookup", rl["user"], identifier=str(identifier or "")[:60], found=bool(out.get("found")), uhid=(out.get("patient") or {}).get("uhid"))  # a patient lookup is a user action (review M11)
+        return out
+
+    @r.get("/his/find")
+    async def his_find(request: Request, q: str = ""):
+        """New Case File (docs/new-case/DESIGN.md N1 to N4): at most 8 patients whose name, number or report words match `q`, for the
+        drop-down under the lookup box; picking one runs the lookup above with its UHID. From the hospital system (live name search and
+        this hospital's patient index) and this hospital's Case Files (tumour_board/patient_finder.py). The same gate as the lookup; a
+        guest reviewer and the Vaidyx admin are refused (D5); at most 120 searches per login per hospital in 10 minutes (429); every
+        search is audited (the words up to 60 characters, how many rows)."""
+        rl = _roles(request)
+        from tumour_board import patient_finder
+        if rl.get("vaidyx_admin"):
+            raise HTTPException(403, patient_finder.NO_ADMIN_SEARCH)
+        _need(rl, "create_case")
+        if rl.get("real_data"):
+            raise HTTPException(403, "A guest reviewer creates a Case File from their own files, without the hospital system.")
+        patient_finder.check_rate(rl["user"])
+        out = await patient_finder.find(q, rl)
+        org.audit("patient_find", rl["user"], q=str(q or "")[:60], results=len(out.get("results") or []))
         return out
 
     @r.post("/cases/from-his")
@@ -1104,6 +1129,41 @@ def setup_tumour_board_routes():
         job = await _his_call(his_case.fetch_older(case_id, b if isinstance(b, dict) else {}, u))
         return {"job": job["id"], "total": job["total"], "his": job.get("his"), "case": _reader_case(request, store.get_case(case_id))}
 
+    @r.post("/his/prefill")
+    async def his_prefill(request: Request):
+        """AI pre-fill of the New Case File after a lookup (docs/new-case/DESIGN.md N6): {"identifier", "months"? | "all"? | "from"?}
+        starts a short job that reads the patient's reports and suggests the cancer, setting, board question and urgency, each with its
+        quote checked against the report text (tumour_board/case_prefill.py). Same gate as the lookup; a guest reviewer has no hospital
+        system. The Vaidyx admin has no clinical access (admin consoles D5): 403, as for reading the job. At most 30 starts per 10 minutes
+        per login (case_prefill.START_LIMIT, 429). Answers {job, state} at once; nothing is created and nothing is written to the
+        hospital system."""
+        rl = _roles(request); _need(rl, "create_case")
+        if rl.get("vaidyx_admin"):
+            raise HTTPException(403, case_prefill.NO_CLINICAL_ACCESS)
+        if rl.get("real_data"):
+            raise HTTPException(403, "A guest reviewer works without the hospital system.")
+        case_prefill.START_LIMIT.check(rl["user"], case_prefill.BUSY)
+        b = await request.json() if (await request.body()) else {}
+        b = b if isinstance(b, dict) else {}
+        window = {"all": True} if b.get("all") else ({"from": b["from"]} if b.get("from") else ({"months": b["months"]} if b.get("months") else None))
+        try:
+            job = case_prefill.start(str(b.get("identifier") or ""), window, rl["user"], rl)
+        except his_case.HISCaseError as e:
+            raise HTTPException(e.status, str(e))
+        return {"job": job["id"], "state": job["state"]}
+
+    @r.get("/his/prefill/{job_id}")
+    async def his_prefill_job(job_id: str, request: Request):
+        """The pre-fill job: {job, state: running | done | failed, result?, error?}; only the user who started it reads it (else 404).
+        Never for the Vaidyx admin (403): the result quotes the patient's reports."""
+        rl = _roles(request); _need(rl, "create_case")
+        if rl.get("vaidyx_admin"):
+            raise HTTPException(403, case_prefill.NO_CLINICAL_ACCESS)
+        out = case_prefill.view(job_id, rl["user"])
+        if out is None:
+            raise HTTPException(404, "No such suggestion job (it may have expired).")
+        return out
+
     @r.post("/cases")
     async def create(request: Request):
         u = _user(request); rl = _roles(request); _need(rl, "create_case"); b = await request.json()
@@ -1112,6 +1172,8 @@ def setup_tumour_board_routes():
         private = bool(rl.get("real_data"))  # a guest reviewer: always a new private Case File with an id the server picks
         if private:
             b["case_id"] = "PRV-" + __import__("secrets").token_hex(4).upper()
+        elif not str(b.get("case_id") or "").strip():  # a hospital doctor's Case File made by hand (New Case File, N5): the next TB-<year>-<nnnn>
+            b["case_id"] = intake.next_case_id()
         prot = b.get("protocol") or ""
         owner_dept = None  # the owning treating department (V2 item 5.1): named in the request, else the creator's own; the coordinator may leave it open (V1 path)
         if b.get("department") or (rl.get("treating") and not rl.get("admin") and not rl.get("coordinator")):

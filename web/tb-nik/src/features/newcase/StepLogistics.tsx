@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { NO_CHECKLIST_WORDS, cleanCancerName, genericRecords, genericRule, isGeneric } from "@/lib/cancers";
 import { WINDOW_CHOICES, type NewCaseForm } from "@/features/newcase/form";
 import { NOT_RECORDED } from "@/features/newcase/StepCancer";
+import { AiFilled, AiUrgency } from "@/features/newcase/AiFilled";
 
 const URGENCY: Array<{ level: number; word: string }> = [
   { level: 1, word: "Least urgent" },
@@ -132,6 +133,7 @@ export function StepLogistics({ form, onChange, settingLabel, protocolLabel }: {
             );
           })}
         </div>
+        <AiUrgency current={form.urgency} onUse={(level) => onChange({ urgency: level })} />
       </fieldset>
 
       <Field id="board-question" label="The question for the board"
@@ -139,6 +141,7 @@ export function StepLogistics({ form, onChange, settingLabel, protocolLabel }: {
         trailing={<div className="flex justify-end"><MicButton target={questionRef} screen="board-question" context="question" label="Dictate the question" onInsert={(next) => { if (next.length > 600) onChange({ boardQuestion: next.slice(0, 600) }); }} /></div>}>
         <Textarea ref={questionRef} rows={3} value={form.boardQuestion} onChange={(e) => onChange({ boardQuestion: e.target.value })} placeholder="e.g. Upfront surgery or neoadjuvant therapy?" maxLength={600} />
       </Field>
+      <AiFilled field="boardQuestion" className="-mt-3" />
 
       {needOwner ? (
         <Field id="owner" label="Responsible Department" required hint="The treating department that owns this Case File.">
@@ -148,6 +151,7 @@ export function StepLogistics({ form, onChange, settingLabel, protocolLabel }: {
           </Select>
         </Field>
       ) : null}
+      {needOwner ? <AiFilled field="department" className="-mt-3" /> : null}
 
       <div className="surface-inner grid gap-1 p-4">
         <p className="flex items-center gap-2 text-sm"><UserRound className="size-4 text-muted-foreground" aria-hidden /> Presenter: <span className="font-medium text-foreground">{meName} (you)</span></p>
