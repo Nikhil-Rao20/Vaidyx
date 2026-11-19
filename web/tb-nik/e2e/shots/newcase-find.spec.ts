@@ -126,6 +126,16 @@ test.describe("new case file: find by name or words", () => {
     await expect(page.getByRole("heading", { name: "Patient, by hand" })).toBeVisible();
   });
 
+  test("on a site where only guests upload (the public site), making it by hand is not offered", async ({ page }) => {
+    await visit(page, "/cases/new?identifier=VXH%2F2026%2F000140", { overrides: {
+      "GET /api/tb/me": { body: { ...fx.me("treating"), upload_policy: "private_only" } },
+      "GET /api/tb/his/lookup": { status: 502, body: { detail: "The hospital system did not answer: timeout" } },
+    } });
+    await expect(page.getByText("The server could not answer").first()).toBeVisible();
+    await expect(page.getByTestId("make-by-hand")).toHaveCount(0);
+    await expect(page.getByText("Not in the hospital system? Make it by hand")).toHaveCount(0);
+  });
+
   test("a hospital doctor makes the Case File by hand", async ({ page }) => {
     await visit(page, "/cases/new?identifier=VXH%2F2026%2F000140", { overrides: {
       "GET /api/tb/his/lookup": { status: 502, body: { detail: "The hospital system did not answer: timeout" } },

@@ -158,6 +158,8 @@ def test_website_at_the_root(gate):
     assert gate.site_upstream("/meetings/S1/room") == "/tb-nik/meetings/S1/room"
     assert gate.site_upstream("/api/tb/cases") is None and gate.site_upstream("/static/x.js") is None
     assert gate.site_upstream("/casesX") is None and gate.site_upstream("/openapi.json") is None
+    assert gate.site_upstream("/platform/hospitals/h1") == "/tb-nik/platform/hospitals/h1"
+    assert gate.site_upstream("/hospital/system") == "/tb-nik/hospital/system" and gate.site_upstream("/hospitals") is None
 
 
 @pytest.mark.parametrize("old,new", [("/tb-nik", "/"), ("/tb-nik/", "/"), ("/tb-nik/cases/TB-002", "/cases/TB-002"),

@@ -71,8 +71,9 @@ def upload_paused(method: str, path: str) -> bool:
     return method == "POST" and bool(UPLOAD_PATHS.match(path)) and not UPLOAD_SWITCH.exists()
 # The website's own pages, at the root of the public address (no /tb-nik in anyone's address bar). The app serves the website
 # under /tb-nik, so the gate adds the prefix on the way in; old /tb-nik/... links are redirected to the plain form.
-SITE_PAGES = re.compile(r"^/(about|activity|admin|cases|contact|docs|first-login|home|meetings|messages|people|pubmed|requests"
-                        r"|research|settings|sign-in|welcome)(/.*)?$")
+# platform (the Vaidyx console) and hospital (the Hospital console): the admin consoles of 16 Nov 2026.
+SITE_PAGES = re.compile(r"^/(about|activity|admin|cases|contact|docs|first-login|home|hospital|meetings|messages|people|platform"
+                        r"|pubmed|requests|research|settings|sign-in|welcome)(/.*)?$")
 SITE_PREFIX = "/tb-nik"
 
 

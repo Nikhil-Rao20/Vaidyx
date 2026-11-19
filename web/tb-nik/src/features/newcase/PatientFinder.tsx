@@ -208,7 +208,7 @@ export function PatientFinder({ value, onValueChange, onPick, onManual, off, id,
           </p>
         ) : find.data && !rows.length ? (
           <div className="grid gap-2 px-3.5 pb-3 text-sm" role="status">
-            <p className="text-muted-foreground">No patient matches '{q}'. Try the UHID, or make it by hand.</p>
+            <p className="text-muted-foreground">No patient matches '{q}'. Try the UHID{onManual ? ", or make it by hand" : ""}.</p>
             {onManual ? (
               <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setOpen(false); onManual(); }} className="inline-flex w-fit items-center gap-1.5 font-medium text-primary underline-offset-4 hover:underline">
                 <PenLine className="size-4" aria-hidden /> Make it by hand

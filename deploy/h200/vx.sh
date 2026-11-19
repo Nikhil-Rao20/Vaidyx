@@ -60,7 +60,7 @@ start_app() {
   # LOCALHOST_BYPASS=false: set here so a stray .env file higher up the folder tree can never switch it on.
   # TB_REAL_DATA_2FA=0: guest reviewers sign in with the password only during the test period (Eswar, 5 Nov 2026); 1 brings two-step back.
   ( cd "$APP" || exit 1; APP_BIND=127.0.0.1 APP_PORT=$APP_PORT VAIDYX_DATA_DIR=$ROOT/vaidyx_data TB_DATA_ROOT=$ROOT/tumour_board \
-      TB_GUIDELINE_DIR=$ROOT/guidelines TB_PROTECTED_CASES=TB-2026-bharath TB_STAGING=off CLEANUP_ENABLED=false LOCALHOST_BYPASS=false \
+      TB_HOSPITALS_ROOT=$ROOT/hospitals TB_GUIDELINE_DIR=$ROOT/guidelines TB_PROTECTED_CASES=TB-2026-bharath TB_STAGING=off CLEANUP_ENABLED=false LOCALHOST_BYPASS=false \
       TB_UPLOAD_POLICY=private_only TB_PRIVATE_RETENTION_DAYS=90 TB_REAL_DATA_2FA=0 \
       TB_AUDIO_URL=http://127.0.0.1:$AUDIO_PORT TB_AUDIO_TOKEN_FILE=$AUDIO_TOKEN \
       exec setsid nohup "$PY" app.py ) >> "$LOG/app.log" 2>&1 < /dev/null &

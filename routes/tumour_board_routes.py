@@ -1173,6 +1173,8 @@ def setup_tumour_board_routes():
         if private:
             b["case_id"] = "PRV-" + __import__("secrets").token_hex(4).upper()
         elif not str(b.get("case_id") or "").strip():  # a hospital doctor's Case File made by hand (New Case File, N5): the next TB-<year>-<nnnn>
+            if __import__("os").getenv("TB_UPLOAD_POLICY", "all").strip().lower() == "private_only":  # only guests may upload here: the reports could never be added
+                raise HTTPException(403, "On this site a Case File starts from the hospital system. Making one by hand is off, because only guest reviewers can add files here.")
             b["case_id"] = intake.next_case_id()
         prot = b.get("protocol") or ""
         owner_dept = None  # the owning treating department (V2 item 5.1): named in the request, else the creator's own; the coordinator may leave it open (V1 path)

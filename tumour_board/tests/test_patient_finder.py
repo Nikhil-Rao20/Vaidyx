@@ -490,6 +490,16 @@ def test_a_doctor_makes_a_case_file_by_hand_and_the_number_is_checked(app):
     assert any(f["case_id"] == c["case_id"] for row in b["results"] for f in row["case_files"])
 
 
+def test_by_hand_is_refused_where_only_guests_upload(app, monkeypatch):
+    """The public site (TB_UPLOAD_POLICY=private_only): a hospital doctor could never add the reports, so no Case File by hand;
+    a guest reviewer's private Case File is unchanged."""
+    monkeypatch.setenv("TB_UPLOAD_POLICY", "private_only")
+    body = {"patient": {"name": "Rukmini Bai (SYNTHETIC)", "age": 61, "sex": "F"}, "protocol": "breast", "setting": "early", "board_date": ""}
+    r = app.as_(RAO).post("/cases", json=body)
+    assert r.status_code == 403 and "Making one by hand is off" in r.text
+    assert not store.list_cases()
+
+
 # ---- review fixes (17 Nov): the Vaidyx admin, badges, the rate limit, the event loop, the text cap, a changed hospital system ------
 
 def test_the_vaidyx_admin_does_not_search_or_look_up_patients_and_single_user_mode_still_does(app, monkeypatch):

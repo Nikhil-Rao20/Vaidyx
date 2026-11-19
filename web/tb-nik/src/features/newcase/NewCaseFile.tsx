@@ -59,6 +59,9 @@ export default function NewCaseFile() {
   const [params] = useSearchParams();
   const initialId = params.get("identifier") || "";
   const guest = Boolean(me?.real_data);  // a guest reviewer: private Case File from their own files, no hospital system
+  // Making a Case File by hand needs uploads for the reports; on a site where only guests upload (TB_UPLOAD_POLICY=private_only, the
+  // public site) it is a dead end, so it is not offered there.
+  const byHandAllowed = me?.upload_policy !== "private_only";
   const [form, setForm] = useState<NewCaseForm>({ ...DEFAULT_FORM, identifier: initialId, ...(me?.real_data ? { joinCode: false, outsideConsent: false } : {}) });
   const [step, setStep] = useState(1);
   const [creating, setCreating] = useState(false);
@@ -187,7 +190,7 @@ export default function NewCaseFile() {
               ) : (
                 <>
                   <StepTitle title="Find the patient" text="The hospital system is asked; you see the registration before anything is made." />
-                  <StepPatient form={form} onChange={onChange} autoLookup={Boolean(initialId)} onManual={() => setForm((f) => ({ ...f, staffManual: true, lookup: null }))} />
+                  <StepPatient form={form} onChange={onChange} autoLookup={Boolean(initialId)} onManual={byHandAllowed ? () => setForm((f) => ({ ...f, staffManual: true, lookup: null })) : undefined} />
                 </>
               )}
             </Step>
